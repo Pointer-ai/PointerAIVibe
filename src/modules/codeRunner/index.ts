@@ -44,4 +44,8 @@ export const cleanup = (): void => {
     pyodideWorker = null
     log('[codeRunner] Pyodide worker terminated')
   }
-} 
+}
+
+export { CodeRunnerView } from './view'
+export * from './types'
+export * from './service' 

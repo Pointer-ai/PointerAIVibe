@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard'
 import Layout from './components/Layout'
 import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
+import { CodeRunnerView } from './modules/codeRunner'
 import { getCurrentProfileId } from './utils/profile'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings'
@@ -71,16 +72,21 @@ const App = () => {
         </Layout>
       )
     
+    case 'code-runner':
+      return (
+        <Layout title="代码运行器" onBack={handleBackToDashboard}>
+          <CodeRunnerView />
+        </Layout>
+      )
+    
     // 其他模块的占位符
     case 'goal-setting':
     case 'path-plan':
     case 'course-content':
-    case 'code-runner':
       const titles = {
         'goal-setting': '目标设定',
         'path-plan': '路径规划',
-        'course-content': '课程内容',
-        'code-runner': '代码运行'
+        'course-content': '课程内容'
       }
       
       return (

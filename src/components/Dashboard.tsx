@@ -88,8 +88,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
         </svg>
       ),
       color: 'from-indigo-500 to-purple-500',
-      status: '开发中',
-      available: false
+      status: '已开发',
+      available: true
     }
   ]
 

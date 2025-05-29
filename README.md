@@ -18,7 +18,7 @@
 | goalSetting   | ⏳ 待开发 | @ai | 0%   | 解析目标，生成差距 |
 | pathPlan      | ⏳ 待开发 | @ai | 0%   | 生成学习路径 |
 | courseContent | ⏳ 待开发 | @ai | 0%   | 生成并展示课程 |
-| codeRunner    | 🚧 开发中 | @ai | 0%   | Pyodide WASM 环境 |
+| codeRunner    | 🚧 开发中 | @ai | 60%  | Pyodide WASM 环境 |
 
 > 状态：✅ 已完成｜🚧 开发中｜⏳ 待开发
 
@@ -161,10 +161,20 @@ interface LocalState {
 - [ ] 添加学习笔记功能
 
 ### codeRunner
-- [ ] 完成 Pyodide 的完整集成
-- [ ] 实现代码编辑器（Monaco/CodeMirror）
-- [ ] 支持代码运行结果展示
-- [ ] 添加常用 Python 包的预加载
+- [x] 完成 Pyodide 的完整集成
+- [x] 实现代码编辑器（支持 Tab 缩进、快捷键运行）
+- [x] 支持代码运行结果展示
+- [x] 实现执行历史记录
+- [x] 支持实时输出显示
+- [x] 错误处理和状态管理
+- [x] 预置代码示例（5个不同难度）
+- [x] 与 Dashboard 集成
+- [x] 单元测试覆盖
+- [ ] 添加常用 Python 包的预加载（numpy、pandas 等）
+- [ ] 支持代码保存和分享
+- [ ] 添加更多代码示例
+- [ ] 支持多文件编辑
+- [ ] 代码格式化功能
 
 ## 8. 迭代工作流规定  🚦
 以下规则确保 *README + TODO* 始终是单一真理源，便于 AI 与人工协同。

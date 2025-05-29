@@ -1,16 +1,52 @@
 import React, { useState, useEffect } from 'react'
 import { getCurrentProfile } from '../utils/profile'
+import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface LandingPageProps {
   onGetStarted: () => void
   onLogin: () => void
   onDashboard?: () => void
+  onProfileSwitch?: () => void
+  onLogout?: () => void
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDashboard }) => {
-  const currentProfile = getCurrentProfile()
-  const isLoggedIn = !!currentProfile
+const LandingPage: React.FC<LandingPageProps> = ({ 
+  onGetStarted, 
+  onLogin, 
+  onDashboard, 
+  onProfileSwitch,
+  onLogout 
+}) => {
+  const [currentProfile, setCurrentProfile] = useState(getCurrentProfile())
+  const [isLoggedIn, setIsLoggedIn] = useState(!!currentProfile)
   const [currentSlide, setCurrentSlide] = useState(0)
+
+  // 监听 profile 状态变化
+  useEffect(() => {
+    const profile = getCurrentProfile()
+    setCurrentProfile(profile)
+    setIsLoggedIn(!!profile)
+  }, []) // 仅在组件挂载时执行
+
+  // 创建一个刷新 profile 状态的函数
+  const refreshProfile = () => {
+    const profile = getCurrentProfile()
+    setCurrentProfile(profile)
+    setIsLoggedIn(!!profile)
+  }
+
+  // 包装原有的回调函数，在执行后刷新 profile 状态
+  const handleProfileSwitch = () => {
+    onProfileSwitch?.()
+    // 延迟一下再刷新，确保 localStorage 已经更新
+    setTimeout(refreshProfile, 0)
+  }
+
+  const handleLogout = () => {
+    onLogout?.()
+    // 延迟一下再刷新，确保 localStorage 已经更新
+    setTimeout(refreshProfile, 0)
+  }
 
   // 滑动数据
   const slides = [
@@ -105,10 +141,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
             {/* 登录/用户信息 */}
             {isLoggedIn ? (
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span className="text-xl">{currentProfile.avatar || '👤'}</span>
-                  <span>{currentProfile.name}</span>
-                </div>
+                <AppleProfileSwitcher 
+                  onProfileSwitch={handleProfileSwitch}
+                  onLogout={handleLogout}
+                />
                 {onDashboard && (
                   <button
                     onClick={onDashboard}

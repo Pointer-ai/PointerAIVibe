@@ -103,6 +103,14 @@ interface LocalState {
 - [x] 产品特性介绍
 - [x] 目标用户说明
 - [x] CTA 按钮引导
+- [x] 苹果风格 Profile 切换器（支持头像悬停缩放动画）
+- [x] 登录状态下的 Profile 切换功能
+- [x] 退出登录功能集成
+- [x] 多 Profile 快速切换下拉菜单
+- [x] 密码保护状态显示
+- [x] 在线状态指示器
+- [x] 点击外部关闭下拉菜单
+- [x] 与 Dashboard 跳转集成
 
 ### dashboard ✅
 - [x] 登录后主界面
@@ -190,133 +198,24 @@ interface LocalState {
 以下规则确保 *README + TODO* 始终是单一真理源，便于 AI 与人工协同。
 
 ### 8.1 迭代节奏
-1. **拉分支**：每次开发前从 `main` 派生 `feat/<module>-<task>`。  
-2. **编写 Prompt**：把 **完整 README** + **待办任务块**（见 8.2）  
-   一并发送给 Claude 4 Sonnet，要求：  
-   - 仅修改目标模块目录；  
-   - 更新测试；  
-   - **必须** 同步 README 中状态表 & TODO。  
-3. **本地验证**：运行 `pnpm dev && pnpm test`。全部通过后提交 PR。  
-4. **CI 验收**：GitHub Actions 复跑 `pnpm test` 与 Playwright。通过即 Merge。  
-5. **回到 1**：下一轮迭代再次以最新 `main` 为基线。
-
-### 8.2 TODO 写法约定
-- 每个模块在 README 下拥有独立二级标题：  
-  ```md
-  ### abilityAssess
-  - [ ] 任务 1
-  - [ ] 任务 2
-  ```
-- **AI 生成代码后** 必须：  
-  1. 对已完成的任务改成 `[x]`；  
-  2. 若拆出新子任务，直接在同块追加；  
-  3. 调整状态表 `状态` 列：✅ / 🚧 / ⏳；  
-  4. 如新文件单测覆盖率 ≥ 60%，更新 `覆盖率`。
-
-### 8.3 Prompt 模板（复用）
-```md
-<README 最新全文>
-
-【本轮任务】
-目标模块：{{module}}
-TODO 列表：
-{{markdown_task_block}}
-
-生成要求：
-1. 仅修改 src/modules/{{module}}/** 与相关测试。
-2. 每文件 ≤ 200 行、TS 无 any，保留中文注释。
-3. 更新 README：状态表 + TODO 勾选 / 新增。
-4. Vitest & Playwright 必须通过。
-```
-
-### 8.4 提交信息规范
-- **feat**: 完成功能 `feat(abilityAssess): 支持上传 PDF 简历`
-- **fix**: 修复缺陷 `fix(goalSetting): 修正模板下拉空值`
-- **chore**: 构建/依赖 `chore: bump vite@5.3.1`
-- **docs**: 文档更新 `docs(README): 更新测试覆盖率`
-
-### 8.5 版本与里程碑
-- 每合并 5 个 feature PR 打一个 `v0.x` Tag。  
-- 当 README 的状态表首次全部 ✅ 时标记 `v1.0.0-alpha`。  
-- 发布静态站到 `gh-pages` 分支，版本号映射路径 `/v1.0.0-alpha/`。
-
-### 8.6 常见问题
-| 症状 | 解决方案 |
-|------|----------|
-| AI 忘记更新 TODO | 在下一轮 Prompt 的「任务」里显式要求修补 README。 |
-| 冲突频发 | 限制同时只开一个目标模块的 PR；其余分支等待合并。 |
-| 上下文过长 | 如 README > 12k 行，把"测试日志/长列表"挪到 `docs/`，Prompt 里只留链接。 |
-
----
-
-> 将本节保存后，下一轮开始即严格按 **8.3 Prompt 模板** 与 **8.1–8.2 规则** 执行。  
-> 这样就能确保 **README / TODO / 代码 / 测试** 始终同步，  
-> 且每次只需在 Cursor 中放入 *一个 README + 一个任务块*，  
-> Claude 4 Sonnet 就能在小上下文里连续迭代，整个项目永不脱轨。 🚀
-
-## 9. 技术架构
-
-### 前端技术栈
-- **框架**: React 19 (最新版本)
-- **构建**: Vite 5 (快速的 HMR 和构建)
-- **语言**: TypeScript 5 (类型安全)
-- **样式**: TailwindCSS 3 (原子化 CSS)
-- **测试**: Vitest (快速的单元测试)
-
-### AI 集成
-- 支持多种 AI 服务商：OpenAI、Claude、通义千问
-- 用户自带 API Key，保护隐私
-- 智能 Prompt 工程，生成高质量教育内容
-- 置信度评估系统：区分直接证据与推理得出的评分
-- PDF 解析能力：使用 pdfjs-dist 库智能提取简历文本
-
-### 代码执行
-- Pyodide: Python 解释器运行在浏览器中
-- Web Worker: 隔离的执行环境，不阻塞主线程
-- 支持常用 Python 科学计算库
-
-### 数据存储
-- 纯 localStorage 方案，无需后端
-- 支持多 Profile 管理，数据隔离
-- 数据导出/导入功能（规划中）
-- 离线可用，数据永不丢失
-
-## 10. 贡献指南
-
-欢迎贡献！请遵循以下步骤：
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feat/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送到分支 (`git push origin feat/amazing-feature`)
-5. 开启 Pull Request
+1. **拉分支**：每次开发前从 `main`
 
 ## 11. 更新日志
 
-### v0.3.0 (最新)
+### v0.4.0 (最新)
+- ✨ **苹果风格 Profile 切换器**: 新增首页登录后的 profile 切换功能
+- 🎨 **头像悬停动画**: 实现苹果风格的头像缩放和阴影效果
+- 🔄 **快速切换**: 支持在下拉菜单中快速切换不同 profile
+- 🔐 **密码保护指示**: 显示受密码保护的 profile 状态
+- 🟢 **在线状态**: 添加绿色在线状态指示器
+- 🎯 **点击外部关闭**: 优化用户体验，点击外部自动关闭下拉菜单
+- 🔧 **状态刷新修复**: 修复退出登录后页面状态不刷新的问题
+- 🧪 **完整测试覆盖**: 新增 AppleProfileSwitcher 和 LandingPage 组件的全面单元测试
+
+### v0.3.0
 - ✨ **PDF 简历支持**: 新增 PDF 文件上传解析功能，使用 pdfjs-dist 库
 - ✨ **置信度评估系统**: AI 评分现在包含置信度信息，区分直接证据与推理
 - 🎨 **视觉置信度指示器**: 低置信度分数使用虚线显示，带推理标记
 - 🔧 **类型系统增强**: 扩展 SkillScore 接口，支持向后兼容
 - 📄 **评估报告优化**: 导出报告中标注推理得出的分数
 - 🧪 **测试覆盖**: 维持 95% 测试覆盖率，确保功能稳定性
-
-### v0.2.0
-- ✅ 完成 profileSettings 模块的高级 AI 配置
-- ✅ 实现 abilityAssess 核心评估功能
-- ✅ 添加 codeRunner 基础代码执行能力
-
-### v0.1.0
-- 🎉 项目初始化，完成基础架构
-- ✅ 实现 profile 多档案管理
-- ✅ 完成 landingPage 和 dashboard
-
-## 12. 许可证
-
-MIT License - 详见 [LICENSE](LICENSE) 文件
-
----
-
-**联系方式**: [项目 Issue](https://github.com/your-repo/pointer-ai/issues)
-
-**特别感谢**: 本项目由 Claude 4 Sonnet AI 助手协助开发，采用 Vibe Coding 开发范式 

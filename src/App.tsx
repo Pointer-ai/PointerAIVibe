@@ -34,7 +34,26 @@ const App = () => {
   }
 
   const handleLogout = () => {
+    // 强制跳转到首页
     setCurrentView('landing')
+  }
+
+  const handleProfileSwitch = () => {
+    // 刷新当前视图以反映 profile 切换
+    // 如果在首页，保持在首页但会重新渲染以显示新的 profile 信息
+    // 如果在其他页面，返回到 dashboard
+    const profileId = getCurrentProfileId()
+    if (profileId) {
+      if (currentView === 'landing') {
+        // 触发重新渲染 - 这里可以用强制更新的方式
+        setCurrentView('landing')
+      } else {
+        setCurrentView('dashboard')
+      }
+    } else {
+      // 如果没有 profile，跳转到首页
+      setCurrentView('landing')
+    }
   }
 
   const handleNavigate = (view: AppView) => {
@@ -63,6 +82,8 @@ const App = () => {
         onGetStarted={handleGetStarted} 
         onLogin={handleProfileLogin} 
         onDashboard={handleBackToDashboard}
+        onProfileSwitch={handleProfileSwitch}
+        onLogout={handleLogout}
       />
     
     case 'profile':
@@ -120,6 +141,8 @@ const App = () => {
         onGetStarted={handleGetStarted} 
         onLogin={handleProfileLogin}
         onDashboard={handleBackToDashboard}
+        onProfileSwitch={handleProfileSwitch}
+        onLogout={handleLogout}
       />
   }
 }

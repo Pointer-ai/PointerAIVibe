@@ -2,6 +2,7 @@
  * Vitest 测试环境配置
  */
 import { vi, afterEach } from 'vitest'
+import '@testing-library/jest-dom'
 
 // 创建一个具有实际存储功能的 localStorage mock
 class LocalStorageMock {

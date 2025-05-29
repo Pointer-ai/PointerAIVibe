@@ -17,14 +17,6 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin'
-    },
-    // 配置代理来处理 PDF.js worker
-    proxy: {
-      '/pdf.worker.min.js': {
-        target: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js',
-        changeOrigin: true,
-        rewrite: () => ''
-      }
     }
   }
 }) 

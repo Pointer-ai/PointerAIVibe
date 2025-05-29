@@ -9,17 +9,14 @@ import { log, error } from './logger'
 let workerInitialized = false
 
 /**
- * 初始化 PDF.js worker（使用简化方式）
+ * 初始化 PDF.js worker（使用可靠的CDN）
  */
 function initializeWorker(): void {
   if (workerInitialized) return
   
   try {
-    // 在开发模式下使用本地代理，生产模式使用 jsdelivr CDN
-    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    const workerUrl = isDev 
-      ? '/pdf.worker.min.js'  // 使用 Vite 代理
-      : `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
+    // 使用正确的 .mjs 扩展名（新版本pdfjs-dist使用.mjs而不是.min.js）
+    const workerUrl = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
     
     pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
     log(`[pdfParser] Worker initialized with: ${workerUrl}`)

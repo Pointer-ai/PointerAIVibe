@@ -1,4 +1,4 @@
-import { AbilityAssessment, DEFAULT_WEIGHTS } from './types'
+import { DEFAULT_WEIGHTS } from './types'
 
 /**
  * 生成能力评估的 AI Prompt

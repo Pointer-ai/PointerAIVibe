@@ -32,7 +32,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ onLogin }) => {
       return
     }
 
-    const profile = createProfile(
+    createProfile(
       newProfileName.trim(),
       newProfilePassword || undefined,
       newProfileAvatar

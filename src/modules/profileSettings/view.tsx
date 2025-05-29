@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { getCurrentProfile } from '../../utils/profile'
 import { APIConfigForm } from './components/APIConfigForm'
 import { ActivityHistory } from './components/ActivityHistory'
 import { ProfileInfo } from './components/ProfileInfo'
-import { getAPIConfig, getActivityHistory } from './service'
 
 export const ProfileSettingsView: React.FC = () => {
   const profile = getCurrentProfile()

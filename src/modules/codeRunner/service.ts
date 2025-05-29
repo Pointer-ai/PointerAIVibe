@@ -137,7 +137,7 @@ export const runPython = async (code: string): Promise<CodeExecution> => {
   
   executionHistory.unshift(execution)
   
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     workerResolvers['run'] = { 
       resolve: (result) => {
         execution.status = 'success'

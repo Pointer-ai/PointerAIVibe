@@ -8,9 +8,6 @@ import {
   cleanup 
 } from '../service'
 
-// 保存 Worker 实例的引用
-let workerInstance: MockWorker | null = null
-
 // Mock Worker
 class MockWorker {
   url: string
@@ -19,7 +16,6 @@ class MockWorker {
   
   constructor(url: string) {
     this.url = url
-    workerInstance = this
     
     // 自动发送 ready 消息
     setTimeout(() => {
@@ -63,7 +59,7 @@ class MockWorker {
   }
   
   terminate() {
-    workerInstance = null
+    // Worker terminated
   }
 }
 
@@ -82,12 +78,10 @@ describe('codeRunner', () => {
     
     // 清理之前的状态
     cleanup()
-    workerInstance = null
   })
   
   afterEach(() => {
     cleanup()
-    workerInstance = null
     vi.restoreAllMocks()
   })
   

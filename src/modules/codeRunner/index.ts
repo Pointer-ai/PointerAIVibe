@@ -24,7 +24,7 @@ export const initPyodide = async (): Promise<void> => {
 /**
  * 运行 Python 代码
  */
-export const runPython = async (code: string): Promise<string> => {
+export const runPython = async (_code: string): Promise<string> => {
   log('[codeRunner] Running Python code')
   
   if (!pyodideWorker) {

@@ -5,8 +5,7 @@ import {
   ScoreLevel,
   getSkillScoreValue,
   getSkillConfidence,
-  isSkillInferred,
-  SkillScore
+  isSkillInferred
 } from '../types'
 
 interface AssessmentResultProps {

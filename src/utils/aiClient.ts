@@ -56,7 +56,7 @@ export const callAI = async (request: AIRequest): Promise<AIResponse> => {
 /**
  * OpenAI API 调用
  */
-const callOpenAI = async (request: AIRequest, apiKey: string): Promise<AIResponse> => {
+const callOpenAI = async (_request: AIRequest, _apiKey: string): Promise<AIResponse> => {
   // TODO: 实现 OpenAI API 调用
   log('[aiClient] OpenAI API call - placeholder')
   return {
@@ -68,7 +68,7 @@ const callOpenAI = async (request: AIRequest, apiKey: string): Promise<AIRespons
 /**
  * Claude API 调用
  */
-const callClaude = async (request: AIRequest, apiKey: string): Promise<AIResponse> => {
+const callClaude = async (_request: AIRequest, _apiKey: string): Promise<AIResponse> => {
   // TODO: 实现 Claude API 调用
   log('[aiClient] Claude API call - placeholder')
   return {
@@ -80,7 +80,7 @@ const callClaude = async (request: AIRequest, apiKey: string): Promise<AIRespons
 /**
  * Qwen API 调用
  */
-const callQwen = async (request: AIRequest, apiKey: string): Promise<AIResponse> => {
+const callQwen = async (_request: AIRequest, _apiKey: string): Promise<AIResponse> => {
   // TODO: 实现 Qwen API 调用
   log('[aiClient] Qwen API call - placeholder')
   return {

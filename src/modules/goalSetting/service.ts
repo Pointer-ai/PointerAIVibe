@@ -3,7 +3,7 @@ import { log } from '../../utils/logger'
 /**
  * 解析用户目标
  */
-export const parseGoal = async (goalDescription: string): Promise<void> => {
+export const parseGoal = async (_goalDescription: string): Promise<void> => {
   log('[goalSetting] Parsing user goal')
   // TODO: 实现目标解析逻辑
 }

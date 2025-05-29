@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { getCurrentProfile } from '../utils/profile'
+import AvatarMenu from './AvatarMenu'
 
 interface LandingPageProps {
   onGetStarted: () => void
   onLogin: () => void
   onDashboard?: () => void
+  onSwitchProfile: () => void
+  onLogout: () => void
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDashboard }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDashboard, onSwitchProfile, onLogout }) => {
   const currentProfile = getCurrentProfile()
   const isLoggedIn = !!currentProfile
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -105,10 +108,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
             {/* 登录/用户信息 */}
             {isLoggedIn ? (
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span className="text-xl">{currentProfile.avatar || '👤'}</span>
-                  <span>{currentProfile.name}</span>
-                </div>
+                <AvatarMenu
+                  avatar={currentProfile.avatar || '👤'}
+                  name={currentProfile.name}
+                  onSwitch={onSwitchProfile}
+                  onLogout={onLogout}
+                />
                 {onDashboard && (
                   <button
                     onClick={onDashboard}

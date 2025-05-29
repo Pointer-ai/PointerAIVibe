@@ -35,6 +35,7 @@ pnpm build    # 生成 dist/ 目录
 
 # 运行测试
 pnpm test     # Vitest 单元测试
+pnpm test --run  # 单次运行测试（CI 环境）
 pnpm test:ui  # 可视化测试界面
 ```
 
@@ -300,6 +301,7 @@ TODO 列表：
 - 🔧 **类型系统增强**: 扩展 SkillScore 接口，支持向后兼容
 - 📄 **评估报告优化**: 导出报告中标注推理得出的分数
 - 🧪 **测试覆盖**: 维持 95% 测试覆盖率，确保功能稳定性
+- 👤 **头像菜单**: 首页点击头像可切换 Profile 或退出登录
 
 ### v0.2.0
 - ✅ 完成 profileSettings 模块的高级 AI 配置

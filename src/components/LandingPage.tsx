@@ -64,6 +64,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
     return () => clearInterval(timer)
   }, [slides.length])
 
+  // 平滑滚动到指定section
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      element.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'start'
+      })
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 固定导航栏 */}
@@ -171,7 +182,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
                       开始学习之旅
                     </button>
                   )}
-                  <button className="px-8 py-4 border border-gray-300 rounded-xl text-lg font-medium text-gray-700 hover:bg-gray-50 transition-all">
+                  <button 
+                    onClick={() => scrollToSection(`section-${slide.id}`)}
+                    className="px-8 py-4 border border-gray-300 rounded-xl text-lg font-medium text-gray-700 hover:bg-gray-50 transition-all"
+                  >
                     了解更多
                   </button>
                 </div>
@@ -209,6 +223,377 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
           </div>
         </div>
       </div>
+
+      {/* 详细内容区域 - 随AI进化 */}
+      <section id="section-evolution" className="py-24 bg-gradient-to-br from-purple-50 to-pink-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <div className="text-6xl mb-6">🧠✨</div>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+                随AI进化，永不过时的学习平台
+              </h2>
+              <p className="text-xl text-gray-600 mb-8">
+                我们的平台连接最新的大语言模型API，随着AI技术的快速进化自动升级教学能力。
+                不需要等待版本更新，每一次AI模型的改进都会直接反映在你的学习体验中。
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">智能更新</h3>
+                    <p className="text-gray-600">模型更新时，平台教学质量自动提升，无需手动升级</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">前沿技术</h3>
+                    <p className="text-gray-600">始终基于最新AI技术，学习内容与时俱进</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">持续优化</h3>
+                    <p className="text-gray-600">解释方式越来越好，难懂的概念变得简单易懂</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <div className="flex items-center space-x-3 mb-6">
+                  <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                  <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                </div>
+                <div className="space-y-4">
+                  <div className="text-sm text-gray-500">AI模型版本更新：</div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <span className="text-green-700 font-medium">GPT-4 Turbo</span>
+                      <span className="text-green-600 text-sm">✅ 已连接</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <span className="text-blue-700 font-medium">Claude 3.5 Sonnet</span>
+                      <span className="text-blue-600 text-sm">✅ 已连接</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                      <span className="text-purple-700 font-medium">通义千问 Max</span>
+                      <span className="text-purple-600 text-sm">✅ 已连接</span>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500 text-center pt-4">
+                    教学能力自动升级中...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 详细内容区域 - 千人千面 */}
+      <section id="section-personalized" className="py-24 bg-gradient-to-br from-blue-50 to-purple-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div className="order-2 lg:order-1">
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <h3 className="text-lg font-semibold mb-6 text-gray-900">个性化学习路径示例</h3>
+                <div className="space-y-4">
+                  <div className="p-4 border-l-4 border-blue-500 bg-blue-50">
+                    <div className="text-sm text-blue-600 font-medium">初学者 - 文科背景</div>
+                    <div className="text-gray-700 mt-1">从基础概念开始，循序渐进，注重实践应用</div>
+                  </div>
+                  <div className="p-4 border-l-4 border-green-500 bg-green-50">
+                    <div className="text-sm text-green-600 font-medium">有经验 - 理工背景</div>
+                    <div className="text-gray-700 mt-1">快速跳过基础，专注高级技能和架构设计</div>
+                  </div>
+                  <div className="p-4 border-l-4 border-purple-500 bg-purple-50">
+                    <div className="text-sm text-purple-600 font-medium">转行者 - 其他技术栈</div>
+                    <div className="text-gray-700 mt-1">基于已有经验，快速迁移到新技术领域</div>
+                  </div>
+                </div>
+                <div className="mt-6 text-center">
+                  <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-full text-sm">
+                    👤 基于你的简历智能生成
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <div className="text-6xl mb-6">👤🎯</div>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+                千人千面，专属定制学习
+              </h2>
+              <p className="text-xl text-gray-600 mb-8">
+                上传简历，AI分析你的技能背景、工作经验和学习目标，
+                为你量身定制独一无二的学习路径。每个人的编程之旅都不相同。
+              </p>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">简历智能分析</h3>
+                    <p className="text-gray-600">AI深度解析你的简历，准确评估当前技能水平</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">目标导向设计</h3>
+                    <p className="text-gray-600">根据你的职业目标，设计最高效的学习路径</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center mt-1">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-2">动态调整</h3>
+                    <p className="text-gray-600">根据学习反馈实时调整难度和节奏</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 详细内容区域 - 动态生成 */}
+      <section id="section-dynamic" className="py-24 bg-gradient-to-br from-green-50 to-teal-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <div className="text-6xl mb-6">⚡🔮</div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+              动态生成，永远新鲜的内容
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              告别预制课程的局限，AI根据最新技术趋势和你的实际需求，
+              实时生成新鲜、前沿的学习内容。永远保持技术前沿。
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">实时生成</h3>
+              <p className="text-gray-600">根据你的需求，AI实时创建个性化课程内容</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-teal-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">前沿技术</h3>
+              <p className="text-gray-600">涵盖最新技术栈，紧跟行业发展趋势</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">智能适配</h3>
+              <p className="text-gray-600">内容难度和风格自动适配你的水平</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            <h3 className="text-xl font-semibold mb-6 text-gray-900 text-center">动态生成示例</h3>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div>
+                <div className="text-sm text-gray-500 mb-2">传统预制课程</div>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="text-gray-700">
+                    📚 React 基础教程 (2022版)<br/>
+                    🔒 固定内容，无法更新<br/>
+                    📅 可能包含过时信息<br/>
+                    👥 千篇一律，缺乏针对性
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-green-600 font-medium mb-2">AI动态生成</div>
+                <div className="p-4 bg-green-50 rounded-lg">
+                  <div className="text-gray-700">
+                    🚀 React 19 + Next.js 15 实战<br/>
+                    ⚡ 基于你的Vue经验定制<br/>
+                    🔄 包含最新Hooks和特性<br/>
+                    🎯 针对你的项目需求优化
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 详细内容区域 - AI 平方 */}
+      <section id="section-ai-squared" className="py-24 bg-gradient-to-br from-indigo-50 to-purple-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <div className="text-6xl mb-6">🤖²</div>
+              <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+                AI 平方：连网站都是AI生成的
+              </h2>
+              <p className="text-xl text-gray-600 mb-8">
+                这不只是一个使用AI的平台，连平台本身都是由AI编写的。
+                体验AI²的产品力量：从学习内容到平台架构，全程AI驱动开发。
+              </p>
+              <div className="space-y-6">
+                <div className="bg-white rounded-lg p-6 shadow-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3">🎨 UI/UX 设计</h3>
+                  <p className="text-gray-600">界面设计、用户体验流程全部由AI规划和实现</p>
+                </div>
+                <div className="bg-white rounded-lg p-6 shadow-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3">⚙️ 核心架构</h3>
+                  <p className="text-gray-600">React组件、状态管理、路由设计等核心代码由AI编写</p>
+                </div>
+                <div className="bg-white rounded-lg p-6 shadow-sm">
+                  <h3 className="font-semibold text-gray-900 mb-3">🧠 智能逻辑</h3>
+                  <p className="text-gray-600">学习路径规划、能力评估算法等智能功能由AI实现</p>
+                </div>
+              </div>
+            </div>
+            <div className="relative">
+              <div className="bg-gray-900 rounded-2xl shadow-xl p-6 text-green-400 font-mono">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                  <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                  <span className="text-gray-400 text-sm ml-2">AI Coding Terminal</span>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div>$ claude: 设计一个现代化的学习平台</div>
+                  <div className="text-blue-400">✓ 生成 React 组件架构</div>
+                  <div className="text-blue-400">✓ 实现响应式 UI 界面</div>
+                  <div className="text-blue-400">✓ 集成 AI 学习算法</div>
+                  <div className="text-blue-400">✓ 配置测试和构建流程</div>
+                  <div>$ 平台完成! 100% AI 生成 🚀</div>
+                  <div className="animate-pulse">▌</div>
+                </div>
+              </div>
+              <div className="absolute -bottom-4 -right-4 bg-indigo-500 text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg">
+                AI Powered Development
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 详细内容区域 - 一键启动 */}
+      <section id="section-apikey" className="py-24 bg-gradient-to-br from-orange-50 to-red-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <div className="text-6xl mb-6">🔑🚀</div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+              一键启动，30秒开始学习
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              无需复杂配置，只要提供大语言模型的API Key，
+              就能立即享受最智能的编程教育体验。数据本地存储，隐私安全。
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <div className="bg-white rounded-2xl shadow-xl p-8">
+                <h3 className="text-xl font-semibold mb-6 text-gray-900">简单三步，立即开始</h3>
+                <div className="space-y-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">1</div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">获取 API Key</h4>
+                      <p className="text-gray-600">从 OpenAI、Claude 或通义千问获取API密钥</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-4">
+                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">2</div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">配置平台</h4>
+                      <p className="text-gray-600">在设置中输入API Key，选择偏好的AI模型</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start space-x-4">
+                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">3</div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-2">开始学习</h4>
+                      <p className="text-gray-600">上传简历，设定目标，AI为你生成专属学习路径</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="space-y-6">
+                <div className="bg-white rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-gray-900">零后端架构</h3>
+                  </div>
+                  <p className="text-gray-600">纯前端设计，无需服务器，数据本地存储，隐私安全</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-gray-900">数据安全</h3>
+                  </div>
+                  <p className="text-gray-600">API Key和学习数据仅存储在你的浏览器本地，绝不上传到服务器</p>
+                </div>
+                <div className="bg-white rounded-xl p-6 shadow-sm">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold text-gray-900">即时启动</h3>
+                  </div>
+                  <p className="text-gray-600">无需等待安装或下载，打开浏览器即可使用</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* 特性展示区 */}
       <section className="py-24 bg-white">

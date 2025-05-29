@@ -65,7 +65,7 @@ const App = () => {
       return <ProfileManager onLogin={handleLogin} />
     
     case 'dashboard':
-      return <Dashboard onLogout={handleLogout} onNavigate={handleNavigate} />
+      return <Dashboard onLogout={handleLogout} onNavigate={handleNavigate} onHome={handleGoHome} />
     
     case 'ability-assess':
       return (

@@ -13,7 +13,7 @@
 | profile       | ✅ 已完成 | @ai | 100% | 多 Profile 管理，支持密码保护 |
 | landingPage   | ✅ 已完成 | @ai | 100% | 苹果风格首页，展示产品特性 |
 | dashboard     | ✅ 已完成 | @ai | 100% | 登录后主界面，功能模块入口 |
-| profileSettings | 🚧 开发中 | @ai | 70%  | API 配置、模型选择、活动记录 |
+| profileSettings | ✅ 已完成 | @ai | 95%  | API 配置、模型选择、参数调节、活动记录 |
 | abilityAssess | 🚧 开发中 | @ai | 80%  | 多维度能力评估系统 |
 | goalSetting   | ⏳ 待开发 | @ai | 0%   | 解析目标，生成差距 |
 | pathPlan      | ⏳ 待开发 | @ai | 0%   | 生成学习路径 |
@@ -121,6 +121,13 @@ interface LocalState {
 - [x] 与 Dashboard 集成
 - [x] 基于 Profile 的配置隔离
 - [x] 修改密码功能（支持设置/修改/移除密码）
+- [x] 支持最新 AI 模型（GPT-4o、Claude 3.5 Sonnet、Qwen Max 等）
+- [x] 具体模型选择界面（支持多个版本）
+- [x] 高级参数配置（temperature、maxTokens、topP、topK 等）
+- [x] 参数预设模板（创意/平衡/精确模式）
+- [x] 参数重置到默认值功能
+- [x] 不同服务商的专用参数支持（如 Claude 的 systemPrompt）
+- [x] 向后兼容性处理（自动升级旧配置格式）
 - [ ] 用户偏好设置（主题/语言/通知）
 - [ ] 活动数据统计图表
 - [ ] API 使用量统计

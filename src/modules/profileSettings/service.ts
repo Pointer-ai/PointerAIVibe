@@ -1,6 +1,34 @@
 import { getProfileData, setProfileData } from '../../utils/profile'
 import { log } from '../../utils/logger'
-import { APIConfig, ActivityRecord, ProfileSettings } from './types'
+import { APIConfig, ActivityRecord, ProfileSettings, AI_MODEL_INFO, PARAM_DEFINITIONS } from './types'
+
+/**
+ * 获取默认的模型参数
+ */
+const getDefaultParams = (model: string) => {
+  const supportedParams = AI_MODEL_INFO[model as keyof typeof AI_MODEL_INFO]?.supportedParams || []
+  const params: any = {}
+  
+  supportedParams.forEach(paramKey => {
+    if (PARAM_DEFINITIONS[paramKey as keyof typeof PARAM_DEFINITIONS]) {
+      params[paramKey] = PARAM_DEFINITIONS[paramKey as keyof typeof PARAM_DEFINITIONS].default
+    }
+  })
+  
+  return params
+}
+
+/**
+ * 获取默认的 API 配置
+ */
+const getDefaultAPIConfig = (): APIConfig => {
+  return {
+    model: 'openai',
+    key: '',
+    specificModel: 'gpt-4o',
+    params: getDefaultParams('openai')
+  }
+}
 
 /**
  * 获取当前用户的设置
@@ -8,7 +36,7 @@ import { APIConfig, ActivityRecord, ProfileSettings } from './types'
 const getSettings = (): ProfileSettings => {
   const settings = getProfileData('settings') as ProfileSettings
   return settings || {
-    apiConfig: { model: 'openai', key: '' },
+    apiConfig: getDefaultAPIConfig(),
     preferences: {},
     activityHistory: []
   }
@@ -26,7 +54,17 @@ const saveSettings = (settings: ProfileSettings): void => {
  */
 export const getAPIConfig = (): APIConfig => {
   const settings = getSettings()
-  return settings.apiConfig
+  const config = settings.apiConfig
+  
+  // 向后兼容：如果缺少新字段，添加默认值
+  if (!config.specificModel) {
+    config.specificModel = AI_MODEL_INFO[config.model].models[0].id
+  }
+  if (!config.params) {
+    config.params = getDefaultParams(config.model)
+  }
+  
+  return config
 }
 
 /**
@@ -43,7 +81,11 @@ export const saveAPIConfig = (config: APIConfig): void => {
     timestamp: new Date().toISOString(),
     type: 'profile_update',
     action: 'API 配置更新',
-    details: { model: config.model }
+    details: { 
+      model: config.model, 
+      specificModel: config.specificModel,
+      paramsCount: Object.keys(config.params || {}).length
+    }
   }
   
   const newSettings: ProfileSettings = {
@@ -142,4 +184,25 @@ export const validateAPIKey = (model: APIConfig['model'], key: string): boolean 
     default:
       return false
   }
+}
+
+/**
+ * 获取支持的模型列表
+ */
+export const getSupportedModels = (provider: APIConfig['model']) => {
+  return AI_MODEL_INFO[provider]?.models || []
+}
+
+/**
+ * 获取模型支持的参数
+ */
+export const getSupportedParams = (provider: APIConfig['model']) => {
+  return AI_MODEL_INFO[provider]?.supportedParams || []
+}
+
+/**
+ * 重置模型参数到默认值
+ */
+export const resetParamsToDefault = (provider: APIConfig['model']) => {
+  return getDefaultParams(provider)
 } 

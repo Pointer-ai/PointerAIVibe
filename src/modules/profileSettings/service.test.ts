@@ -5,7 +5,10 @@ import {
   validateAPIKey,
   addActivityRecord,
   getActivityHistory,
-  clearActivityHistory
+  clearActivityHistory,
+  getSupportedModels,
+  getSupportedParams,
+  resetParamsToDefault
 } from './service'
 import { createProfile, setCurrentProfile, getCurrentProfile } from '../../utils/profile'
 
@@ -26,32 +29,45 @@ describe('ProfileSettings Service', () => {
       const config = getAPIConfig()
       expect(config).toEqual({
         model: 'openai',
-        key: ''
+        key: '',
+        specificModel: 'gpt-4o',
+        params: expect.objectContaining({
+          temperature: 0.7,
+          maxTokens: 1000,
+          topP: 0.9
+        })
       })
     })
 
-    it('should save and retrieve API config', () => {
+    it('should save and retrieve complete API config', () => {
       const testConfig = {
         model: 'claude' as const,
-        key: 'sk-ant-test-key'
+        key: 'sk-ant-test-key',
+        specificModel: 'claude-3-5-sonnet-20241022',
+        params: {
+          temperature: 0.8,
+          maxTokens: 2000,
+          topP: 0.95,
+          topK: 50,
+          systemPrompt: 'You are a helpful assistant.'
+        }
       }
       
       saveAPIConfig(testConfig)
       
-      // 调试：查看保存后的 profile 数据
-      const currentProfile = getCurrentProfile()
-      console.log('Profile data after save:', currentProfile?.data)
-      
       const retrieved = getAPIConfig()
-      console.log('Retrieved config:', retrieved)
-      
       expect(retrieved).toEqual(testConfig)
     })
 
     it('should add activity record when saving API config', () => {
       const testConfig = {
         model: 'openai' as const,
-        key: 'sk-test-key'
+        key: 'sk-test-key',
+        specificModel: 'gpt-4o',
+        params: {
+          temperature: 0.7,
+          maxTokens: 1000
+        }
       }
       
       saveAPIConfig(testConfig)
@@ -61,6 +77,86 @@ describe('ProfileSettings Service', () => {
       expect(history[0].type).toBe('profile_update')
       expect(history[0].action).toBe('API 配置更新')
       expect(history[0].details?.model).toBe('openai')
+      expect(history[0].details?.specificModel).toBe('gpt-4o')
+      expect(history[0].details?.paramsCount).toBe(2)
+    })
+
+    it('should handle backward compatibility for old config format', () => {
+      // 模拟旧格式的配置
+      const oldConfig = {
+        model: 'openai' as const,
+        key: 'sk-test-key'
+        // 缺少 specificModel 和 params
+      }
+      
+      // 直接设置到 localStorage 模拟旧数据
+      const currentProfile = getCurrentProfile()
+      if (currentProfile) {
+        currentProfile.data.settings = {
+          apiConfig: oldConfig,
+          preferences: {},
+          activityHistory: []
+        }
+        localStorage.setItem('profiles', JSON.stringify([currentProfile]))
+      }
+      
+      const config = getAPIConfig()
+      
+      // 应该自动添加缺失的字段
+      expect(config.specificModel).toBe('gpt-4o')
+      expect(config.params).toBeDefined()
+      expect(config.params.temperature).toBe(0.7)
+    })
+  })
+
+  describe('Model Management', () => {
+    it('should return supported models for each provider', () => {
+      const openaiModels = getSupportedModels('openai')
+      expect(openaiModels).toHaveLength(7)
+      expect(openaiModels[0]).toEqual({
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        description: '最新多模态模型，支持图像和文本'
+      })
+
+      const claudeModels = getSupportedModels('claude')
+      expect(claudeModels).toHaveLength(6)
+      expect(claudeModels[0].id).toBe('claude-3-5-sonnet-20241022')
+
+      const qwenModels = getSupportedModels('qwen')
+      expect(qwenModels).toHaveLength(6)
+      expect(qwenModels[0].id).toBe('qwen-max')
+    })
+
+    it('should return supported parameters for each provider', () => {
+      const openaiParams = getSupportedParams('openai')
+      expect(openaiParams).toContain('temperature')
+      expect(openaiParams).toContain('maxTokens')
+      expect(openaiParams).toContain('topP')
+
+      const claudeParams = getSupportedParams('claude')
+      expect(claudeParams).toContain('temperature')
+      expect(claudeParams).toContain('topK')
+      expect(claudeParams).toContain('systemPrompt')
+
+      const qwenParams = getSupportedParams('qwen')
+      expect(qwenParams).toContain('temperature')
+      expect(qwenParams).toContain('topK')
+    })
+
+    it('should reset parameters to default values', () => {
+      const openaiDefaults = resetParamsToDefault('openai')
+      expect(openaiDefaults.temperature).toBe(0.7)
+      expect(openaiDefaults.maxTokens).toBe(1000)
+      expect(openaiDefaults.topP).toBe(0.9)
+
+      const claudeDefaults = resetParamsToDefault('claude')
+      expect(claudeDefaults.temperature).toBe(0.7)
+      expect(claudeDefaults.topK).toBe(40)
+
+      const qwenDefaults = resetParamsToDefault('qwen')
+      expect(qwenDefaults.temperature).toBe(0.7)
+      expect(qwenDefaults.topK).toBe(40)
     })
   })
 

@@ -1,11 +1,16 @@
 import React from 'react'
+import { getCurrentProfile } from '../utils/profile'
 
 interface LandingPageProps {
   onGetStarted: () => void
   onLogin: () => void
+  onDashboard?: () => void
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDashboard }) => {
+  const currentProfile = getCurrentProfile()
+  const isLoggedIn = !!currentProfile
+
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
@@ -18,7 +23,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
               <h2 className="text-2xl font-bold text-gray-900">Pointer.ai</h2>
             </div>
             
-            {/* Right side: AI Badges and Login */}
+            {/* Right side: AI Badges and Login/User Info */}
             <div className="flex items-center space-x-4">
               {/* AI Native Badges */}
               <div className="flex items-center space-x-2">
@@ -36,13 +41,30 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
                 </div>
               </div>
               
-              {/* Login Button */}
-              <button
-                onClick={onLogin}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                登录
-              </button>
+              {/* Login/Dashboard Button */}
+              {isLoggedIn ? (
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <span className="text-xl">{currentProfile.avatar || '👤'}</span>
+                    <span className="font-medium">{currentProfile.name}</span>
+                  </div>
+                  {onDashboard && (
+                    <button
+                      onClick={onDashboard}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      进入控制台
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={onLogin}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  登录
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -63,12 +85,21 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin }) => {
               无需服务器，所有数据本地存储，支持离线学习
             </p>
             <div className="mt-10 flex items-center justify-center gap-x-6">
-              <button 
-                onClick={onGetStarted}
-                className="rounded-full bg-black px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-all duration-200"
-              >
-                开始学习之旅
-              </button>
+              {isLoggedIn && onDashboard ? (
+                <button 
+                  onClick={onDashboard}
+                  className="rounded-full bg-black px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-all duration-200"
+                >
+                  继续学习
+                </button>
+              ) : (
+                <button 
+                  onClick={onGetStarted}
+                  className="rounded-full bg-black px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-all duration-200"
+                >
+                  开始学习之旅
+                </button>
+              )}
               <button className="text-sm font-semibold leading-6 text-gray-900 hover:text-gray-600 transition-colors">
                 了解更多 <span aria-hidden="true">→</span>
               </button>

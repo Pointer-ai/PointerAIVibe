@@ -59,7 +59,11 @@ const App = () => {
 
   switch (currentView) {
     case 'landing':
-      return <LandingPage onGetStarted={handleGetStarted} onLogin={handleProfileLogin} />
+      return <LandingPage 
+        onGetStarted={handleGetStarted} 
+        onLogin={handleProfileLogin} 
+        onDashboard={handleBackToDashboard}
+      />
     
     case 'profile':
       return <ProfileManager onLogin={handleLogin} />
@@ -112,7 +116,11 @@ const App = () => {
       )
     
     default:
-      return <LandingPage onGetStarted={handleGetStarted} onLogin={handleProfileLogin} />
+      return <LandingPage 
+        onGetStarted={handleGetStarted} 
+        onLogin={handleProfileLogin}
+        onDashboard={handleBackToDashboard}
+      />
   }
 }
 

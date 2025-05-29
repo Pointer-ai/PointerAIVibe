@@ -6,7 +6,7 @@ import Layout from './components/Layout'
 import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
-import { getCurrentProfileId } from './utils/profile'
+import { getCurrentProfileId, logout } from './utils/profile'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings'
 
@@ -37,6 +37,16 @@ const App = () => {
     setCurrentView('landing')
   }
 
+  const handleLandingLogout = () => {
+    logout()
+    setCurrentView('landing')
+  }
+
+  const handleSwitchProfile = () => {
+    logout()
+    setCurrentView('profile')
+  }
+
   const handleNavigate = (view: AppView) => {
     // 确保用户已登录才能访问其他模块
     const profileId = getCurrentProfileId()
@@ -59,10 +69,12 @@ const App = () => {
 
   switch (currentView) {
     case 'landing':
-      return <LandingPage 
-        onGetStarted={handleGetStarted} 
-        onLogin={handleProfileLogin} 
+      return <LandingPage
+        onGetStarted={handleGetStarted}
+        onLogin={handleProfileLogin}
         onDashboard={handleBackToDashboard}
+        onSwitchProfile={handleSwitchProfile}
+        onLogout={handleLandingLogout}
       />
     
     case 'profile':
@@ -116,10 +128,12 @@ const App = () => {
       )
     
     default:
-      return <LandingPage 
-        onGetStarted={handleGetStarted} 
+      return <LandingPage
+        onGetStarted={handleGetStarted}
         onLogin={handleProfileLogin}
         onDashboard={handleBackToDashboard}
+        onSwitchProfile={handleSwitchProfile}
+        onLogout={handleLandingLogout}
       />
   }
 }

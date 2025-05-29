@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Profile, updateProfile } from '../../../utils/profile'
+import React, { useState, useEffect } from 'react'
+import { Profile, updateProfile, getCurrentProfile } from '../../../utils/profile'
 import { addActivityRecord } from '../service'
 import { PasswordChange } from './PasswordChange'
 
@@ -7,13 +7,19 @@ interface ProfileInfoProps {
   profile: Profile
 }
 
-export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
+export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile: initialProfile }) => {
+  const [profile, setProfile] = useState(initialProfile)
   const [isEditing, setIsEditing] = useState(false)
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [name, setName] = useState(profile.name)
   const [avatar, setAvatar] = useState(profile.avatar || '👤')
 
   const avatarOptions = ['👤', '👨‍💻', '👩‍💻', '🦸', '🦹', '🧑‍🎓', '🧑‍💼', '🤖', '🦊', '🐱']
+
+  // 当 props 中的 profile 更新时，更新 state
+  useEffect(() => {
+    setProfile(initialProfile)
+  }, [initialProfile])
 
   const handleSave = () => {
     updateProfile(profile.id, { name, avatar })
@@ -23,12 +29,23 @@ export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
       details: { name, avatar }
     })
     setIsEditing(false)
+    // 更新本地 profile 状态
+    setProfile({ ...profile, name, avatar })
   }
 
   const handleCancel = () => {
     setName(profile.name)
     setAvatar(profile.avatar || '👤')
     setIsEditing(false)
+  }
+
+  const handlePasswordChangeClose = () => {
+    setShowPasswordChange(false)
+    // 重新获取最新的 profile 数据
+    const updatedProfile = getCurrentProfile()
+    if (updatedProfile) {
+      setProfile(updatedProfile)
+    }
   }
 
   return (
@@ -151,7 +168,7 @@ export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
       {showPasswordChange && (
         <PasswordChange
           profile={profile}
-          onClose={() => setShowPasswordChange(false)}
+          onClose={handlePasswordChangeClose}
         />
       )}
     </div>

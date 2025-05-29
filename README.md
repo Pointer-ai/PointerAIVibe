@@ -13,6 +13,7 @@
 | profile       | ✅ 已完成 | @ai | 100% | 多 Profile 管理，支持密码保护 |
 | landingPage   | ✅ 已完成 | @ai | 100% | 苹果风格首页，展示产品特性 |
 | dashboard     | ✅ 已完成 | @ai | 100% | 登录后主界面，功能模块入口 |
+| profileSettings | 🚧 开发中 | @ai | 70%  | API 配置、模型选择、活动记录 |
 | abilityAssess | 🚧 开发中 | @ai | 80%  | 多维度能力评估系统 |
 | goalSetting   | ⏳ 待开发 | @ai | 0%   | 解析目标，生成差距 |
 | pathPlan      | ⏳ 待开发 | @ai | 0%   | 生成学习路径 |
@@ -108,6 +109,21 @@ interface LocalState {
 - [x] 功能模块展示
 - [x] Profile 信息显示
 - [x] 退出登录功能
+
+### profileSettings
+- [x] 个人信息展示和编辑（用户名、头像）
+- [x] API Key 配置界面
+- [x] AI 模型选择（OpenAI/Claude/通义千问）
+- [x] API Key 格式验证
+- [x] 活动历史记录展示
+- [x] 活动记录筛选功能
+- [x] 活动记录清除功能
+- [x] 与 Dashboard 集成
+- [x] 基于 Profile 的配置隔离
+- [ ] 用户偏好设置（主题/语言/通知）
+- [ ] 活动数据统计图表
+- [ ] API 使用量统计
+- [ ] 配置导入/导出功能
 
 ### abilityAssess
 - [x] 设计能力评估表单界面

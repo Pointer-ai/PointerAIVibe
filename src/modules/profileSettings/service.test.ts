@@ -7,7 +7,7 @@ import {
   getActivityHistory,
   clearActivityHistory
 } from './service'
-import { createProfile, setCurrentProfile } from '../../utils/profile'
+import { createProfile, setCurrentProfile, getCurrentProfile } from '../../utils/profile'
 
 describe('ProfileSettings Service', () => {
   beforeEach(() => {
@@ -15,6 +15,10 @@ describe('ProfileSettings Service', () => {
     // 创建测试用户
     const profile = createProfile('test-user', '123456')
     setCurrentProfile(profile.id)
+    
+    // 验证当前 profile 是否设置成功
+    const currentProfile = getCurrentProfile()
+    console.log('Current profile after setup:', currentProfile)
   })
 
   describe('API Configuration', () => {
@@ -33,7 +37,13 @@ describe('ProfileSettings Service', () => {
       }
       
       saveAPIConfig(testConfig)
+      
+      // 调试：查看保存后的 profile 数据
+      const currentProfile = getCurrentProfile()
+      console.log('Profile data after save:', currentProfile?.data)
+      
       const retrieved = getAPIConfig()
+      console.log('Retrieved config:', retrieved)
       
       expect(retrieved).toEqual(testConfig)
     })

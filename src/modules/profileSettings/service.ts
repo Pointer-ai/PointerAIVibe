@@ -3,14 +3,30 @@ import { log } from '../../utils/logger'
 import { APIConfig, ActivityRecord, ProfileSettings } from './types'
 
 /**
+ * 获取当前用户的设置
+ */
+const getSettings = (): ProfileSettings => {
+  const settings = getProfileData('settings') as ProfileSettings
+  return settings || {
+    apiConfig: { model: 'openai', key: '' },
+    preferences: {},
+    activityHistory: []
+  }
+}
+
+/**
+ * 保存设置
+ */
+const saveSettings = (settings: ProfileSettings): void => {
+  setProfileData('settings', settings)
+}
+
+/**
  * 获取当前用户的 API 配置
  */
 export const getAPIConfig = (): APIConfig => {
-  const settings = getProfileData('settings') as ProfileSettings
-  return settings?.apiConfig || {
-    model: 'openai',
-    key: ''
-  }
+  const settings = getSettings()
+  return settings.apiConfig
 }
 
 /**
@@ -19,33 +35,32 @@ export const getAPIConfig = (): APIConfig => {
 export const saveAPIConfig = (config: APIConfig): void => {
   log('[profileSettings] Saving API config')
   
-  const currentSettings = getProfileData('settings') as ProfileSettings || {
-    apiConfig: { model: 'openai', key: '' },
-    preferences: {},
-    activityHistory: []
+  const currentSettings = getSettings()
+  
+  // 先添加活动记录
+  const newRecord: ActivityRecord = {
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+    timestamp: new Date().toISOString(),
+    type: 'profile_update',
+    action: 'API 配置更新',
+    details: { model: config.model }
   }
   
   const newSettings: ProfileSettings = {
     ...currentSettings,
-    apiConfig: config
+    apiConfig: config,
+    activityHistory: [newRecord, ...currentSettings.activityHistory].slice(0, 100)
   }
   
-  setProfileData('settings', newSettings)
-  
-  // 记录配置更新活动
-  addActivityRecord({
-    type: 'profile_update',
-    action: 'API 配置更新',
-    details: { model: config.model }
-  })
+  saveSettings(newSettings)
 }
 
 /**
  * 获取用户偏好设置
  */
 export const getPreferences = () => {
-  const settings = getProfileData('settings') as ProfileSettings
-  return settings?.preferences || {}
+  const settings = getSettings()
+  return settings.preferences
 }
 
 /**
@@ -54,29 +69,21 @@ export const getPreferences = () => {
 export const savePreferences = (preferences: ProfileSettings['preferences']): void => {
   log('[profileSettings] Saving preferences')
   
-  const currentSettings = getProfileData('settings') as ProfileSettings || {
-    apiConfig: { model: 'openai', key: '' },
-    preferences: {},
-    activityHistory: []
-  }
+  const currentSettings = getSettings()
   
   const newSettings: ProfileSettings = {
     ...currentSettings,
     preferences
   }
   
-  setProfileData('settings', newSettings)
+  saveSettings(newSettings)
 }
 
 /**
  * 添加活动记录
  */
 export const addActivityRecord = (record: Omit<ActivityRecord, 'id' | 'timestamp'>): void => {
-  const currentSettings = getProfileData('settings') as ProfileSettings || {
-    apiConfig: { model: 'openai', key: '' },
-    preferences: {},
-    activityHistory: []
-  }
+  const currentSettings = getSettings()
   
   const newRecord: ActivityRecord = {
     id: Date.now().toString(36) + Math.random().toString(36).substr(2),
@@ -92,15 +99,15 @@ export const addActivityRecord = (record: Omit<ActivityRecord, 'id' | 'timestamp
     activityHistory: updatedHistory
   }
   
-  setProfileData('settings', newSettings)
+  saveSettings(newSettings)
 }
 
 /**
  * 获取活动历史
  */
 export const getActivityHistory = (): ActivityRecord[] => {
-  const settings = getProfileData('settings') as ProfileSettings
-  return settings?.activityHistory || []
+  const settings = getSettings()
+  return settings.activityHistory
 }
 
 /**
@@ -109,18 +116,14 @@ export const getActivityHistory = (): ActivityRecord[] => {
 export const clearActivityHistory = (): void => {
   log('[profileSettings] Clearing activity history')
   
-  const currentSettings = getProfileData('settings') as ProfileSettings || {
-    apiConfig: { model: 'openai', key: '' },
-    preferences: {},
-    activityHistory: []
-  }
+  const currentSettings = getSettings()
   
   const newSettings: ProfileSettings = {
     ...currentSettings,
     activityHistory: []
   }
   
-  setProfileData('settings', newSettings)
+  saveSettings(newSettings)
 }
 
 /**

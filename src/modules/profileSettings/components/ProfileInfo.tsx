@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Profile, updateProfile } from '../../../utils/profile'
 import { addActivityRecord } from '../service'
+import { PasswordChange } from './PasswordChange'
 
 interface ProfileInfoProps {
   profile: Profile
@@ -8,6 +9,7 @@ interface ProfileInfoProps {
 
 export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
   const [isEditing, setIsEditing] = useState(false)
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [name, setName] = useState(profile.name)
   const [avatar, setAvatar] = useState(profile.avatar || '👤')
 
@@ -110,11 +112,19 @@ export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
               </span>
             </div>
           )}
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between items-center text-sm">
             <span className="text-gray-600">密码保护</span>
-            <span className="text-gray-800">
-              {profile.hasPassword ? '已启用' : '未启用'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-800">
+                {profile.hasPassword ? '已启用' : '未启用'}
+              </span>
+              <button
+                onClick={() => setShowPasswordChange(true)}
+                className="text-blue-600 hover:text-blue-700 text-xs font-medium"
+              >
+                {profile.hasPassword ? '修改密码' : '设置密码'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -136,6 +146,14 @@ export const ProfileInfo: React.FC<ProfileInfoProps> = ({ profile }) => {
           </div>
         )}
       </div>
+
+      {/* 修改密码弹窗 */}
+      {showPasswordChange && (
+        <PasswordChange
+          profile={profile}
+          onClose={() => setShowPasswordChange(false)}
+        />
+      )}
     </div>
   )
 } 

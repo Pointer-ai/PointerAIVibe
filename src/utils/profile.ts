@@ -145,6 +145,30 @@ export const updateProfile = (profileId: string, updates: Partial<Profile>): voi
   saveProfiles(profiles)
 }
 
+// 修改密码
+export const changePassword = (profileId: string, oldPassword: string, newPassword: string): boolean => {
+  const profiles = getProfiles()
+  const profile = profiles.find(p => p.id === profileId)
+  
+  if (!profile) return false
+  
+  // 如果有旧密码，验证旧密码
+  if (profile.hasPassword && profile.passwordHash !== simpleHash(oldPassword)) {
+    return false
+  }
+  
+  // 更新密码
+  const profileIndex = profiles.findIndex(p => p.id === profileId)
+  profiles[profileIndex] = {
+    ...profile,
+    hasPassword: !!newPassword,
+    passwordHash: newPassword ? simpleHash(newPassword) : undefined
+  }
+  
+  saveProfiles(profiles)
+  return true
+}
+
 // 退出登录
 export const logout = (): void => {
   setCurrentProfile(null)

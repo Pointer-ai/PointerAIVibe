@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { getCurrentProfile } from '../utils/profile'
 
 interface LandingPageProps {
@@ -10,289 +10,293 @@ interface LandingPageProps {
 const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDashboard }) => {
   const currentProfile = getCurrentProfile()
   const isLoggedIn = !!currentProfile
+  const [currentSlide, setCurrentSlide] = useState(0)
+
+  // 滑动数据
+  const slides = [
+    {
+      id: 'evolution',
+      title: '随AI进化',
+      subtitle: '自动升级的学习平台',
+      description: '随着大语言模型的不断进化，我们的平台自动获得更强的教学能力。今天学不懂的概念，明天可能就有更好的解释方式。',
+      visual: '🧠✨',
+      gradient: 'from-purple-500 to-pink-500'
+    },
+    {
+      id: 'personalized',
+      title: '千人千面',
+      subtitle: '专属定制的学习体验',
+      description: '基于你的简历、目标和学习反馈，AI动态生成完全个性化的学习内容。每个人的学习路径都是独一无二的。',
+      visual: '👤🎯',
+      gradient: 'from-blue-500 to-purple-500'
+    },
+    {
+      id: 'dynamic',
+      title: '动态生成',
+      subtitle: '实时创建的学习内容',
+      description: '不是预制的课程，而是根据最新技术趋势和你的实际需求，AI实时生成的新鲜内容。永远保持前沿。',
+      visual: '⚡🔮',
+      gradient: 'from-green-500 to-teal-500'
+    },
+    {
+      id: 'ai-squared',
+      title: 'AI 平方',
+      subtitle: '连网站都是AI生成的',
+      description: '本网站完全基于AI Coding生成，体验AI²的产品力量。从学习平台到平台本身，全程AI驱动开发。',
+      visual: '🤖²',
+      gradient: 'from-indigo-500 to-purple-500'
+    },
+    {
+      id: 'apikey',
+      title: '一键启动',
+      subtitle: '只需API Key即可开始',
+      description: '无需复杂配置，只要提供大语言模型的API Key，就能立即享受最智能的编程教育体验。',
+      visual: '🔑🚀',
+      gradient: 'from-orange-500 to-red-500'
+    }
+  ]
+
+  // 自动切换轮播
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length)
+    }, 4500)
+    return () => clearInterval(timer)
+  }, [slides.length])
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden px-6 py-24 sm:py-32 lg:px-8">
-        {/* Header with Login Button */}
-        <div className="absolute top-0 left-0 right-0 px-8 py-6">
+    <div className="min-h-screen bg-gray-50">
+      {/* 固定导航栏 */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Pointer.ai</h2>
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-md">
+                <span className="text-white font-bold text-sm">P</span>
+              </div>
+              <span className="text-xl font-semibold text-gray-900">Pointer.ai</span>
             </div>
             
-            {/* Right side: AI Badges and Login/User Info */}
-            <div className="flex items-center space-x-4">
-              {/* AI Native Badges */}
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1 text-xs font-semibold text-white">
-                  <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  AI Generated
-                </div>
-                <div className="flex items-center rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 px-3 py-1 text-xs font-semibold text-white">
-                  <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  AI Native
-                </div>
+            {/* AI Badges */}
+            <div className="hidden md:flex items-center space-x-3">
+              <div className="px-3 py-1 bg-purple-100 border border-purple-200 rounded-full text-xs font-medium text-purple-700">
+                🤖 AI Native
               </div>
-              
-              {/* Login/Dashboard Button */}
-              {isLoggedIn ? (
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <span className="text-xl">{currentProfile.avatar || '👤'}</span>
-                    <span className="font-medium">{currentProfile.name}</span>
-                  </div>
-                  {onDashboard && (
+              <div className="px-3 py-1 bg-blue-100 border border-blue-200 rounded-full text-xs font-medium text-blue-700">
+                ⚡ Auto Evolving
+              </div>
+              <div className="px-3 py-1 bg-indigo-100 border border-indigo-200 rounded-full text-xs font-medium text-indigo-700">
+                🔥 AI Coded
+              </div>
+            </div>
+
+            {/* 登录/用户信息 */}
+            {isLoggedIn ? (
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <span className="text-xl">{currentProfile.avatar || '👤'}</span>
+                  <span>{currentProfile.name}</span>
+                </div>
+                {onDashboard && (
+                  <button
+                    onClick={onDashboard}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:from-purple-600 hover:to-pink-600 transition-all shadow-md"
+                  >
+                    进入控制台
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={onLogin}
+                className="px-4 py-2 bg-gray-100 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-200 transition-all"
+              >
+                登录
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      {/* 主滑动展示区域 */}
+      <div className="relative h-screen flex items-center justify-center bg-white">
+        {slides.map((slide, index) => (
+          <div
+            key={slide.id}
+            className={`absolute inset-0 transition-all duration-1000 ease-in-out ${
+              index === currentSlide ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'
+            }`}
+          >
+            {/* 背景渐变 */}
+            <div className={`absolute inset-0 bg-gradient-to-br ${slide.gradient} opacity-5`} />
+            
+            {/* 内容 */}
+            <div className="relative z-10 max-w-7xl mx-auto px-6 h-full flex items-center">
+              <div className="max-w-4xl">
+                {/* 视觉元素 */}
+                <div className="text-8xl mb-8 animate-pulse">
+                  {slide.visual}
+                </div>
+                
+                {/* 标题 */}
+                <h1 className="text-7xl md:text-8xl lg:text-9xl font-bold mb-4 tracking-tight text-gray-900">
+                  {slide.title}
+                </h1>
+                
+                {/* 副标题 */}
+                <h2 className="text-2xl md:text-3xl lg:text-4xl font-light mb-8 text-gray-700">
+                  {slide.subtitle}
+                </h2>
+                
+                {/* 描述 */}
+                <p className="text-lg md:text-xl lg:text-2xl font-light leading-relaxed mb-12 text-gray-600 max-w-3xl">
+                  {slide.description}
+                </p>
+
+                {/* CTA 按钮 */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {isLoggedIn && onDashboard ? (
                     <button
                       onClick={onDashboard}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                      className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all transform hover:scale-105 shadow-xl"
                     >
-                      进入控制台
+                      继续学习
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onGetStarted}
+                      className="px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all transform hover:scale-105 shadow-xl"
+                    >
+                      开始学习之旅
                     </button>
                   )}
+                  <button className="px-8 py-4 border border-gray-300 rounded-xl text-lg font-medium text-gray-700 hover:bg-gray-50 transition-all">
+                    了解更多
+                  </button>
                 </div>
-              ) : (
-                <button
-                  onClick={onLogin}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  登录
-                </button>
-              )}
+              </div>
+            </div>
+
+            {/* 装饰性几何图形 */}
+            <div className="absolute top-1/4 right-1/4 w-32 h-32 bg-gradient-to-r from-gray-100 to-transparent rounded-full blur-xl opacity-60" />
+            <div className="absolute bottom-1/3 left-1/3 w-24 h-24 bg-gradient-to-r from-gray-200 to-transparent rounded-full blur-2xl opacity-40" />
+          </div>
+        ))}
+
+        {/* 进度指示器 */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex space-x-3 z-20">
+          {slides.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentSlide(index)}
+              className={`w-12 h-1 rounded-full transition-all duration-300 ${
+                index === currentSlide 
+                  ? 'bg-gray-800 shadow-lg' 
+                  : 'bg-gray-300 hover:bg-gray-500'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* 滑动指示 */}
+        <div className="absolute bottom-20 right-8 text-sm text-gray-500 animate-bounce">
+          <div className="flex items-center space-x-2">
+            <span>滑动浏览</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* 特性展示区 */}
+      <section className="py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900">
+              为什么选择 Pointer.ai
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              我们不只是一个学习平台，而是一个随着AI进化而不断升级的智能教育生态
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* 特性卡片 */}
+            <div className="p-8 bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-gray-300 transition-all">
+              <div className="text-4xl mb-4">🚀</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">零配置启动</h3>
+              <p className="text-gray-600">
+                纯前端架构，无需服务器。输入API Key即可开始，数据本地存储，隐私安全。
+              </p>
+            </div>
+
+            <div className="p-8 bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-gray-300 transition-all">
+              <div className="text-4xl mb-4">🎯</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">精准个性化</h3>
+              <p className="text-gray-600">
+                AI分析你的简历和目标，生成专属学习路径。每个人的编程之旅都独一无二。
+              </p>
+            </div>
+
+            <div className="p-8 bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-gray-300 transition-all">
+              <div className="text-4xl mb-4">⚡</div>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">实时代码执行</h3>
+              <p className="text-gray-600">
+                基于Pyodide的浏览器Python环境，无需安装即可运行代码，学习效果立竿见影。
+              </p>
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Hero Content */}
-        <div className="mx-auto max-w-7xl">
-          <div className="mx-auto max-w-4xl text-center">
-            <h1 className="text-5xl font-bold tracking-tight text-gray-900 sm:text-7xl lg:text-8xl">
-              Pointer.ai
-              <span className="block bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                智能编程教育
-              </span>
-            </h1>
-            <p className="mt-8 text-xl leading-8 text-gray-600 sm:text-2xl">
-              零后端 · 纯前端 · AI 驱动的个性化编程学习平台
-            </p>
-            <p className="mt-4 text-lg text-gray-500">
-              无需服务器，所有数据本地存储，支持离线学习
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
-              {isLoggedIn && onDashboard ? (
-                <button 
-                  onClick={onDashboard}
-                  className="rounded-full bg-black px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-all duration-200"
-                >
-                  继续学习
-                </button>
-              ) : (
-                <button 
-                  onClick={onGetStarted}
-                  className="rounded-full bg-black px-8 py-4 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-all duration-200"
-                >
-                  开始学习之旅
-                </button>
-              )}
-              <button className="text-sm font-semibold leading-6 text-gray-900 hover:text-gray-600 transition-colors">
-                了解更多 <span aria-hidden="true">→</span>
+      {/* CTA 区域 */}
+      <section className="py-24 bg-gradient-to-r from-purple-500 to-pink-500">
+        <div className="max-w-4xl mx-auto text-center px-6">
+          <h2 className="text-5xl md:text-6xl font-bold mb-6 text-white">
+            你的编程未来
+            <br />
+            从这里开始
+          </h2>
+          <p className="text-xl mb-12 text-white/90">
+            加入数千名学习者，体验随AI进化的智能编程教育
+          </p>
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+            {isLoggedIn && onDashboard ? (
+              <button
+                onClick={onDashboard}
+                className="px-12 py-4 bg-white text-purple-600 rounded-xl text-xl font-bold hover:bg-gray-100 transition-all transform hover:scale-105 shadow-2xl"
+              >
+                继续学习
               </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Background Gradient */}
-        <div className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80">
-          <div className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-purple-200 to-pink-200 opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]"></div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-              AI 与人类协作的开发模式
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-gray-600">
-              本项目由 Claude 4 Sonnet AI 助手协助开发，展示了 AI Native 产品的开发新范式
-            </p>
-          </div>
-
-          <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-            <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
-              <div className="flex flex-col">
-                <dt className="text-xl font-semibold leading-7 text-gray-900">
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
-                    <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                    </svg>
-                  </div>
-                  纯前端架构
-                </dt>
-                <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                  <p className="flex-auto">
-                    基于 React 19 + Vite 5 + TypeScript，所有功能运行在浏览器中，无需后端服务器
-                  </p>
-                </dd>
-              </div>
-
-              <div className="flex flex-col">
-                <dt className="text-xl font-semibold leading-7 text-gray-900">
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-blue-500 to-cyan-500">
-                    <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  AI 驱动学习
-                </dt>
-                <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                  <p className="flex-auto">
-                    通过 AI 评估能力、设定目标、规划路径、生成课程，实现千人千面的个性化学习体验
-                  </p>
-                </dd>
-              </div>
-
-              <div className="flex flex-col">
-                <dt className="text-xl font-semibold leading-7 text-gray-900">
-                  <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-green-500 to-teal-500">
-                    <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                  </div>
-                  隐私优先
-                </dt>
-                <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                  <p className="flex-auto">
-                    所有数据存储在本地浏览器，用户自带 API Key，保护隐私同时支持离线学习
-                  </p>
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      {/* Target Users Section */}
-      <section className="bg-gray-50 py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-              为每一个学习者而设计
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-gray-600">
-              无论你是零基础小白还是想要提升的开发者，我们都能为你定制学习路径
-            </p>
-          </div>
-
-          <div className="mx-auto mt-16 grid max-w-2xl grid-cols-1 gap-8 sm:mt-20 lg:max-w-none lg:grid-cols-3">
-            <div className="relative overflow-hidden rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex items-center gap-x-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-50">
-                  <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold leading-8 text-gray-900">编程小白</h3>
-              </div>
-              <p className="mt-4 text-base leading-7 text-gray-600">
-                从零开始，循序渐进。AI 会根据你的学习速度和理解能力，动态调整课程难度
-              </p>
-            </div>
-
-            <div className="relative overflow-hidden rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex items-center gap-x-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50">
-                  <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold leading-8 text-gray-900">转行开发者</h3>
-              </div>
-              <p className="mt-4 text-base leading-7 text-gray-600">
-                快速补齐技能短板，聚焦实战项目。让你在最短时间内达到工作要求
-              </p>
-            </div>
-
-            <div className="relative overflow-hidden rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg transition-shadow">
-              <div className="flex items-center gap-x-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-50">
-                  <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold leading-8 text-gray-900">进阶工程师</h3>
-              </div>
-              <p className="mt-4 text-base leading-7 text-gray-600">
-                深度学习新技术栈，掌握架构设计。AI 帮你规划从初级到高级的成长路径
-              </p>
+            ) : (
+              <button
+                onClick={onGetStarted}
+                className="px-12 py-4 bg-white text-purple-600 rounded-xl text-xl font-bold hover:bg-gray-100 transition-all transform hover:scale-105 shadow-2xl"
+              >
+                立即开始
+              </button>
+            )}
+            <div className="text-sm text-white/80">
+              只需 30 秒设置 · 终身受益
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative isolate overflow-hidden bg-gray-900 py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl lg:mx-0">
-            <h2 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
-              开启你的编程学习之旅
-            </h2>
-            <p className="mt-6 text-lg leading-8 text-gray-300">
-              由 AI 与人类协作开发，为你提供最智能的学习体验
-            </p>
-          </div>
-          <div className="mx-auto mt-10 max-w-2xl lg:mx-0 lg:max-w-none">
-            <div className="grid grid-cols-1 gap-x-8 gap-y-6 text-base font-semibold leading-7 text-white sm:grid-cols-2 md:flex lg:gap-x-10">
-              <a href="#" className="hover:text-gray-300 transition-colors">
-                能力评估 <span aria-hidden="true">→</span>
-              </a>
-              <a href="#" className="hover:text-gray-300 transition-colors">
-                目标设定 <span aria-hidden="true">→</span>
-              </a>
-              <a href="#" className="hover:text-gray-300 transition-colors">
-                路径规划 <span aria-hidden="true">→</span>
-              </a>
-              <a href="#" className="hover:text-gray-300 transition-colors">
-                开始学习 <span aria-hidden="true">→</span>
-              </a>
+      {/* 页脚 */}
+      <footer className="bg-white border-t border-gray-200 py-12">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center space-x-3 mb-4 md:mb-0">
+              <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded shadow-md"></div>
+              <span className="font-semibold text-gray-900">Pointer.ai</span>
             </div>
-          </div>
-        </div>
-        {/* Background Pattern */}
-        <svg
-          viewBox="0 0 1024 1024"
-          className="absolute left-1/2 top-1/2 -z-10 h-[64rem] w-[64rem] -translate-x-1/2 -translate-y-1/2 [mask-image:radial-gradient(closest-side,white,transparent)]"
-          aria-hidden="true"
-        >
-          <circle cx={512} cy={512} r={512} fill="url(#gradient)" fillOpacity="0.7" />
-          <defs>
-            <radialGradient id="gradient">
-              <stop stopColor="#7c3aed" />
-              <stop offset={1} stopColor="#a855f7" />
-            </radialGradient>
-          </defs>
-        </svg>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 md:flex md:items-center md:justify-between lg:px-8">
-          <div className="flex justify-center space-x-6 md:order-2">
-            <p className="text-xs leading-5 text-gray-500">
-              Powered by Claude 4 Sonnet AI · Vibe Coding 开发范式
-            </p>
-          </div>
-          <div className="mt-8 md:order-1 md:mt-0">
-            <p className="text-center text-xs leading-5 text-gray-500">
-              &copy; 2024 Pointer.ai. MIT License.
-            </p>
+            <div className="text-sm text-gray-500 text-center md:text-right">
+              <p>Powered by Claude 4 Sonnet AI · 100% AI Generated Website</p>
+              <p className="mt-1">© 2024 Pointer.ai · MIT License</p>
+            </div>
           </div>
         </div>
       </footer>
@@ -300,4 +304,4 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin, onDash
   )
 }
 
-export default LandingPage 
+export default LandingPage

@@ -29,6 +29,10 @@ const App = () => {
     setCurrentView('dashboard')
   }
 
+  const handleProfileLogin = () => {
+    setCurrentView('profile')
+  }
+
   const handleLogout = () => {
     setCurrentView('landing')
   }
@@ -48,9 +52,14 @@ const App = () => {
     setCurrentView('dashboard')
   }
 
+  // 创建返回首页的函数
+  const handleGoHome = () => {
+    setCurrentView('landing')
+  }
+
   switch (currentView) {
     case 'landing':
-      return <LandingPage onGetStarted={handleGetStarted} />
+      return <LandingPage onGetStarted={handleGetStarted} onLogin={handleProfileLogin} />
     
     case 'profile':
       return <ProfileManager onLogin={handleLogin} />
@@ -60,21 +69,21 @@ const App = () => {
     
     case 'ability-assess':
       return (
-        <Layout title="能力评估" onBack={handleBackToDashboard}>
+        <Layout title="能力评估" onBack={handleBackToDashboard} onHome={handleGoHome}>
           <AbilityAssessView />
         </Layout>
       )
     
     case 'profile-settings':
       return (
-        <Layout title="Profile 设置" onBack={handleBackToDashboard}>
+        <Layout title="Profile 设置" onBack={handleBackToDashboard} onHome={handleGoHome}>
           <ProfileSettingsView />
         </Layout>
       )
     
     case 'code-runner':
       return (
-        <Layout title="代码运行器" onBack={handleBackToDashboard}>
+        <Layout title="代码运行器" onBack={handleBackToDashboard} onHome={handleGoHome}>
           <CodeRunnerView />
         </Layout>
       )
@@ -90,7 +99,7 @@ const App = () => {
       }
       
       return (
-        <Layout title={titles[currentView]} onBack={handleBackToDashboard}>
+        <Layout title={titles[currentView]} onBack={handleBackToDashboard} onHome={handleGoHome}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <div className="text-center">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
@@ -103,7 +112,7 @@ const App = () => {
       )
     
     default:
-      return <LandingPage onGetStarted={handleGetStarted} />
+      return <LandingPage onGetStarted={handleGetStarted} onLogin={handleProfileLogin} />
   }
 }
 

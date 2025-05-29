@@ -5,7 +5,7 @@
 ## 1. 项目使命
 打造一个纯前端的智能编程教育平台，通过 AI 驱动的个性化学习路径，帮助学习者从零基础到独立开发者的成长之旅。无需服务器，所有数据本地存储，支持离线学习。
 
-演示地址：[pointer.ai](https://pointer.ai) （待部署）
+演示地址：[https://pointer-ai.github.io/PointerAIVibe/](https://pointer-ai.github.io/PointerAIVibe/)
 
 ## 2. 功能模块概览
 | 模块 | 状态 | 负责人 | 覆盖率 | 简述 |

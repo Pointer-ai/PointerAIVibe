@@ -9,6 +9,7 @@ import {
 } from './service'
 import { AssessmentInput, AbilityAssessment } from './types'
 import { log, error } from '../../utils/logger'
+import { addActivityRecord } from '../profileSettings/service'
 
 export const AbilityAssessView: React.FC = () => {
   const [loading, setLoading] = useState(false)
@@ -27,6 +28,18 @@ export const AbilityAssessView: React.FC = () => {
       log('[AbilityAssessView] Starting assessment')
       const result = await analyzeAbility(input)
       setAssessment(result)
+      
+      // 记录活动
+      addActivityRecord({
+        type: 'assessment',
+        action: '完成能力评估',
+        details: {
+          overallScore: result.overallScore,
+          assessmentDate: result.metadata.assessmentDate,
+          assessmentMethod: result.metadata.assessmentMethod
+        }
+      })
+      
       log('[AbilityAssessView] Assessment completed')
     } catch (err) {
       error('[AbilityAssessView] Assessment failed:', err)

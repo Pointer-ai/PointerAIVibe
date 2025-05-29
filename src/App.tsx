@@ -4,9 +4,10 @@ import ProfileManager from './components/ProfileManager'
 import Dashboard from './components/Dashboard'
 import Layout from './components/Layout'
 import { AbilityAssessView } from './modules/abilityAssess'
+import { ProfileSettingsView } from './modules/profileSettings'
 import { getCurrentProfileId } from './utils/profile'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -60,6 +61,13 @@ const App = () => {
       return (
         <Layout title="能力评估" onBack={handleBackToDashboard}>
           <AbilityAssessView />
+        </Layout>
+      )
+    
+    case 'profile-settings':
+      return (
+        <Layout title="Profile 设置" onBack={handleBackToDashboard}>
+          <ProfileSettingsView />
         </Layout>
       )
     

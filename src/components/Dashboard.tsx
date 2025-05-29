@@ -4,7 +4,7 @@ import { getCurrentAssessment } from '../modules/abilityAssess'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner') => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings') => void
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
@@ -106,12 +106,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate }) => {
                 <span>{profile.name}</span>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
-            >
-              退出登录
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => onNavigate('profile-settings')}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-2"
+              >
+                <span>⚙️</span>
+                设置
+              </button>
+              <button
+                onClick={handleLogout}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+              >
+                退出登录
+              </button>
+            </div>
           </div>
         </div>
       </header>

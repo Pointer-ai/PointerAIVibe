@@ -1,5 +1,5 @@
 import { log, error } from './logger'
-import { getState } from './storage'
+import { getAPIConfig } from '../modules/profileSettings/service'
 
 export type AIModel = 'claude' | 'openai' | 'qwen'
 
@@ -20,13 +20,13 @@ export interface AIResponse {
  * 根据配置中的模型类型调用相应的 API
  */
 export const callAI = async (request: AIRequest): Promise<AIResponse> => {
-  const { apiConfig } = getState()
+  const apiConfig = getAPIConfig()
   
   if (!apiConfig.key) {
     return {
       content: '',
       model: apiConfig.model,
-      error: '请先在设置中配置 API Key'
+      error: '请先在 Profile 设置中配置 API Key'
     }
   }
 

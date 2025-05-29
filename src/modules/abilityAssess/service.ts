@@ -1,12 +1,15 @@
 import { log, error } from '../../utils/logger'
-import { callAI } from '../../utils/aiClient'
+import { callAI } from '../../utils/ai'
 import { getProfileData, setProfileData } from '../../utils/profile'
+import { addActivityRecord } from '../profileSettings/service'
 import { generateAssessmentPrompt } from './prompt'
 import { 
   AbilityAssessment, 
   AssessmentInput,
   DEFAULT_WEIGHTS,
-  getScoreLevel 
+  getScoreLevel,
+  getSkillScoreValue,
+  SkillScore
 } from './types'
 
 /**
@@ -23,14 +26,10 @@ export const analyzeAbility = async (input: AssessmentInput): Promise<AbilityAss
     
     // 调用 AI 进行评估
     const prompt = generateAssessmentPrompt(assessmentContent, input.type)
-    const result = await callAI({ prompt })
-    
-    if (result.error) {
-      throw new Error(result.error)
-    }
+    const result = await callAI(prompt)
     
     // 解析 AI 返回的 JSON 结果
-    const jsonMatch = result.content.match(/```json\n([\s\S]*?)\n```/)
+    const jsonMatch = result.match(/```json\n([\s\S]*?)\n```/)
     if (!jsonMatch) {
       throw new Error('AI 返回格式错误，无法解析评估结果')
     }
@@ -42,6 +41,17 @@ export const analyzeAbility = async (input: AssessmentInput): Promise<AbilityAss
     
     // 保存评估结果到本地存储
     await saveAssessment(assessment)
+    
+    // 记录活动
+    addActivityRecord({
+      type: 'assessment',
+      action: '完成能力评估',
+      details: {
+        method: input.type,
+        overallScore: assessment.overallScore,
+        level: getScoreLevel(assessment.overallScore)
+      }
+    })
     
     log('[abilityAssess] Assessment completed successfully')
     return assessment
@@ -61,7 +71,8 @@ const calculateOverallScore = (assessment: AbilityAssessment): number => {
   // 计算各维度的维度总分（如果 AI 没有正确计算）
   Object.values(dimensions).forEach(dimension => {
     const skills = Object.values(dimension.skills)
-    dimension.score = Math.round(skills.reduce((sum, score) => sum + score, 0) / skills.length)
+    const scores = skills.map(skill => getSkillScoreValue(skill))
+    dimension.score = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
   })
   
   // 计算加权总分
@@ -125,13 +136,9 @@ ${assessment.report.summary}
 3. 实践项目建议
 4. 进度检查点`
   
-  const result = await callAI({ prompt })
+  const result = await callAI(prompt)
   
-  if (result.error) {
-    throw new Error(result.error)
-  }
-  
-  return result.content
+  return result
 }
 
 /**
@@ -141,7 +148,8 @@ const findWeakAreas = (assessment: AbilityAssessment) => {
   const weakAreas: { name: string; score: number }[] = []
   
   Object.entries(assessment.dimensions).forEach(([dimName, dimension]) => {
-    Object.entries(dimension.skills).forEach(([skillName, score]) => {
+    Object.entries(dimension.skills).forEach(([skillName, skillData]) => {
+      const score = getSkillScoreValue(skillData)
       if (score < 60) {
         weakAreas.push({
           name: `${dimName}.${skillName}`,
@@ -160,6 +168,48 @@ const findWeakAreas = (assessment: AbilityAssessment) => {
 export const exportAssessmentReport = (assessment: AbilityAssessment): string => {
   const level = getScoreLevel(assessment.overallScore)
   
+  // 获取技能名称的中文映射
+  const skillNameMap: Record<string, string> = {
+    syntax: '基础语法',
+    dataStructures: '数据结构',
+    errorHandling: '错误处理',
+    codeQuality: '代码质量',
+    tooling: '开发工具',
+    stringProcessing: '字符串处理',
+    recursion: '递归',
+    dynamicProgramming: '动态规划',
+    graph: '图算法',
+    tree: '树算法',
+    sorting: '排序算法',
+    searching: '搜索算法',
+    greedy: '贪心算法',
+    planning: '项目规划',
+    architecture: '架构设计',
+    implementation: '实现能力',
+    testing: '测试能力',
+    deployment: '部署运维',
+    documentation: '文档能力',
+    scalability: '可扩展性',
+    reliability: '可靠性',
+    performance: '性能优化',
+    security: '安全设计',
+    databaseDesign: '数据库设计',
+    codeReview: '代码评审',
+    technicalWriting: '技术写作',
+    teamCollaboration: '团队协作',
+    mentoring: '指导他人',
+    presentation: '演讲展示'
+  }
+  
+  const formatSkillScore = (skill: string, skillData: SkillScore | number): string => {
+    const score = getSkillScoreValue(skillData)
+    const name = skillNameMap[skill] || skill
+    if (typeof skillData === 'object' && skillData.isInferred) {
+      return `- ${name}: ${score}分 *（基于整体信息推理）*`
+    }
+    return `- ${name}: ${score}分`
+  }
+  
   return `# 能力评估报告
 
 ## 基本信息
@@ -175,27 +225,27 @@ export const exportAssessmentReport = (assessment: AbilityAssessment): string =>
 
 ### 1. 编程基本功 (${assessment.dimensions.programming.score}分)
 ${Object.entries(assessment.dimensions.programming.skills)
-  .map(([skill, score]) => `- ${skill}: ${score}分`)
+  .map(([skill, skillData]) => formatSkillScore(skill, skillData))
   .join('\n')}
 
 ### 2. 算法能力 (${assessment.dimensions.algorithm.score}分)
 ${Object.entries(assessment.dimensions.algorithm.skills)
-  .map(([skill, score]) => `- ${skill}: ${score}分`)
+  .map(([skill, skillData]) => formatSkillScore(skill, skillData))
   .join('\n')}
 
 ### 3. 项目能力 (${assessment.dimensions.project.score}分)
 ${Object.entries(assessment.dimensions.project.skills)
-  .map(([skill, score]) => `- ${skill}: ${score}分`)
+  .map(([skill, skillData]) => formatSkillScore(skill, skillData))
   .join('\n')}
 
 ### 4. 系统设计 (${assessment.dimensions.systemDesign.score}分)
 ${Object.entries(assessment.dimensions.systemDesign.skills)
-  .map(([skill, score]) => `- ${skill}: ${score}分`)
+  .map(([skill, skillData]) => formatSkillScore(skill, skillData))
   .join('\n')}
 
 ### 5. 沟通协作 (${assessment.dimensions.communication.score}分)
 ${Object.entries(assessment.dimensions.communication.skills)
-  .map(([skill, score]) => `- ${skill}: ${score}分`)
+  .map(([skill, skillData]) => formatSkillScore(skill, skillData))
   .join('\n')}
 
 ## 评估总结
@@ -209,5 +259,8 @@ ${assessment.report.improvements.map(i => `- ${i}`).join('\n')}
 
 ## 发展建议
 ${assessment.report.recommendations.map(r => `- ${r}`).join('\n')}
+
+---
+*注：标有"基于整体信息推理"的分数是 AI 根据您的整体背景推测得出，可能与实际情况有偏差。*
 `
 } 

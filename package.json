@@ -12,8 +12,13 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "clsx": "^2.1.1",
+    "nanoid": "^5.0.7",
+    "pdfjs-dist": "^4.0.379",
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "react-router-dom": "^6.23.1",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",

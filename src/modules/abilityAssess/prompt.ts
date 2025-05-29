@@ -53,6 +53,15 @@ export const generateAssessmentPrompt = (input: string, type: 'resume' | 'questi
 - 61-80: 高级 (Advanced) - 熟练掌握，能解决复杂问题
 - 81-100: 专家 (Expert) - 精通领域，能指导他人
 
+重要说明：
+1. 对于每个技能，请返回一个对象，包含：
+   - score: 分数 (0-100)
+   - confidence: 置信度 (0-1)，表示基于简历信息得出该分数的把握程度
+   - isInferred: 布尔值，如果是基于整体信息推理而非直接证据，设为 true
+2. 如果简历中有明确的证据（如具体项目经验、技能描述），置信度应该高（0.8-1.0）
+3. 如果只能通过推理得出（如从整体经验推断），置信度应该低（0.3-0.7），并设置 isInferred 为 true
+4. 不要给出没有依据的高分，宁可保守评估
+
 请根据以下内容进行评估：
 ${input}
 
@@ -65,59 +74,59 @@ ${input}
       "score": 0,
       "weight": ${DEFAULT_WEIGHTS.programming},
       "skills": {
-        "syntax": 0,
-        "dataStructures": 0,
-        "errorHandling": 0,
-        "codeQuality": 0,
-        "tooling": 0
+        "syntax": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "dataStructures": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "errorHandling": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "codeQuality": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "tooling": { "score": 0, "confidence": 0.0, "isInferred": false }
       }
     },
     "algorithm": {
       "score": 0,
       "weight": ${DEFAULT_WEIGHTS.algorithm},
       "skills": {
-        "stringProcessing": 0,
-        "recursion": 0,
-        "dynamicProgramming": 0,
-        "graph": 0,
-        "tree": 0,
-        "sorting": 0,
-        "searching": 0,
-        "greedy": 0
+        "stringProcessing": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "recursion": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "dynamicProgramming": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "graph": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "tree": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "sorting": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "searching": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "greedy": { "score": 0, "confidence": 0.0, "isInferred": false }
       }
     },
     "project": {
       "score": 0,
       "weight": ${DEFAULT_WEIGHTS.project},
       "skills": {
-        "planning": 0,
-        "architecture": 0,
-        "implementation": 0,
-        "testing": 0,
-        "deployment": 0,
-        "documentation": 0
+        "planning": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "architecture": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "implementation": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "testing": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "deployment": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "documentation": { "score": 0, "confidence": 0.0, "isInferred": false }
       }
     },
     "systemDesign": {
       "score": 0,
       "weight": ${DEFAULT_WEIGHTS.systemDesign},
       "skills": {
-        "scalability": 0,
-        "reliability": 0,
-        "performance": 0,
-        "security": 0,
-        "databaseDesign": 0
+        "scalability": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "reliability": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "performance": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "security": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "databaseDesign": { "score": 0, "confidence": 0.0, "isInferred": false }
       }
     },
     "communication": {
       "score": 0,
       "weight": ${DEFAULT_WEIGHTS.communication},
       "skills": {
-        "codeReview": 0,
-        "technicalWriting": 0,
-        "teamCollaboration": 0,
-        "mentoring": 0,
-        "presentation": 0
+        "codeReview": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "technicalWriting": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "teamCollaboration": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "mentoring": { "score": 0, "confidence": 0.0, "isInferred": false },
+        "presentation": { "score": 0, "confidence": 0.0, "isInferred": false }
       }
     }
   },
@@ -136,12 +145,11 @@ ${input}
 \`\`\`
 
 注意事项：
-1. 每个技能评分必须是 0-100 的整数
-2. 维度总分是其下所有技能的平均分
-3. 总体评分是各维度加权平均分
-4. confidence 表示评估置信度 (0-1)，基于信息完整度
-5. 如果某些技能无法从材料中评估，给出保守估计
-6. report 部分用中文，简洁明了，具有建设性`
+1. 维度总分是其下所有技能的平均分
+2. 总体评分是各维度加权平均分
+3. metadata.confidence 表示整体评估置信度 (0-1)，基于信息完整度
+4. 如果某些技能无法从材料中评估，给出保守估计，并标记低置信度和 isInferred
+5. report 部分用中文，简洁明了，具有建设性`
 
   return basePrompt
 }

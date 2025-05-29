@@ -1,139 +1,130 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { analyzeAbility, getCurrentAssessment, generateImprovementPlan } from './service'
-import * as aiClient from '../../utils/aiClient'
-import * as profile from '../../utils/profile'
-import { AssessmentInput, AbilityAssessment } from './types'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { analyzeAbility, getCurrentAssessment } from './service'
+import { createProfile, setCurrentProfile } from '../../utils/profile'
+import * as ai from '../../utils/ai'
 
-// Mock dependencies
-vi.mock('../../utils/aiClient')
-vi.mock('../../utils/profile')
-vi.mock('../../utils/logger')
+// Mock AI service
+vi.mock('../../utils/ai', () => ({
+  callAI: vi.fn()
+}))
 
-describe('abilityAssess/service', () => {
-  const mockAssessment: AbilityAssessment = {
-    overallScore: 65,
-    dimensions: {
-      programming: {
-        score: 70,
-        weight: 0.25,
-        skills: {
-          syntax: 80,
-          dataStructures: 70,
-          errorHandling: 65,
-          codeQuality: 70,
-          tooling: 65
-        }
-      },
-      algorithm: {
-        score: 60,
-        weight: 0.25,
-        skills: {
-          stringProcessing: 70,
-          recursion: 55,
-          dynamicProgramming: 40,
-          graph: 45,
-          tree: 60,
-          sorting: 75,
-          searching: 70,
-          greedy: 65
-        }
-      },
-      project: {
-        score: 65,
-        weight: 0.20,
-        skills: {
-          planning: 70,
-          architecture: 60,
-          implementation: 70,
-          testing: 60,
-          deployment: 55,
-          documentation: 70
-        }
-      },
-      systemDesign: {
-        score: 60,
-        weight: 0.15,
-        skills: {
-          scalability: 55,
-          reliability: 60,
-          performance: 65,
-          security: 55,
-          databaseDesign: 65
-        }
-      },
-      communication: {
-        score: 70,
-        weight: 0.15,
-        skills: {
-          codeReview: 70,
-          technicalWriting: 75,
-          teamCollaboration: 75,
-          mentoring: 60,
-          presentation: 70
-        }
-      }
-    },
-    metadata: {
-      assessmentDate: new Date().toISOString(),
-      assessmentMethod: 'resume',
-      confidence: 0.85
-    },
-    report: {
-      summary: '候选人具有中级开发者水平，基础扎实但算法能力需要加强',
-      strengths: ['编程基础扎实', '团队协作能力强'],
-      improvements: ['算法能力需要提升', '系统设计经验不足'],
-      recommendations: ['多刷算法题', '参与开源项目']
-    }
-  }
+// Mock profileSettings service
+vi.mock('../profileSettings/service', () => ({
+  addActivityRecord: vi.fn()
+}))
 
+describe('AbilityAssess Service', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.clearAllMocks()
     
-    // Setup default mocks
-    vi.mocked(profile.getProfileData).mockReturnValue(null)
-    vi.mocked(profile.setProfileData).mockImplementation(() => {})
+    // 创建测试用户
+    const profile = createProfile('test-user', '123456')
+    setCurrentProfile(profile.id)
   })
 
   describe('analyzeAbility', () => {
-    it('should analyze ability from resume text', async () => {
-      const input: AssessmentInput = {
-        type: 'resume',
-        content: '我是一名有3年经验的前端开发工程师...'
+    it('should analyze resume and return assessment', async () => {
+      const mockAssessment = {
+        overallScore: 75,
+        dimensions: {
+          programming: {
+            score: 80,
+            weight: 0.25,
+            skills: {
+              syntax: 85,
+              dataStructures: 80,
+              errorHandling: 75,
+              codeQuality: 80,
+              tooling: 80
+            }
+          },
+          algorithm: {
+            score: 70,
+            weight: 0.25,
+            skills: {
+              stringProcessing: 75,
+              recursion: 70,
+              dynamicProgramming: 65,
+              graph: 60,
+              tree: 70,
+              sorting: 80,
+              searching: 75,
+              greedy: 65
+            }
+          },
+          project: {
+            score: 75,
+            weight: 0.20,
+            skills: {
+              planning: 80,
+              architecture: 70,
+              implementation: 80,
+              testing: 70,
+              deployment: 75,
+              documentation: 75
+            }
+          },
+          systemDesign: {
+            score: 70,
+            weight: 0.15,
+            skills: {
+              scalability: 70,
+              reliability: 75,
+              performance: 70,
+              security: 65,
+              databaseDesign: 70
+            }
+          },
+          communication: {
+            score: 80,
+            weight: 0.15,
+            skills: {
+              codeReview: 80,
+              technicalWriting: 85,
+              teamCollaboration: 80,
+              mentoring: 75,
+              presentation: 80
+            }
+          }
+        },
+        metadata: {
+          assessmentDate: new Date().toISOString(),
+          assessmentMethod: 'resume',
+          confidence: 0.85
+        },
+        report: {
+          summary: '候选人展现出良好的编程能力和项目经验',
+          strengths: ['编程基本功扎实', '沟通能力出色'],
+          improvements: ['算法能力有待提升', '系统设计经验不足'],
+          recommendations: ['多练习算法题', '学习系统设计']
+        }
       }
 
-      const mockAIResponse = {
-        content: `分析结果：
-\`\`\`json
-${JSON.stringify(mockAssessment, null, 2)}
-\`\`\``,
-        model: 'openai' as const,
-        error: undefined
-      }
+      // Mock AI response
+      vi.mocked(ai.callAI).mockResolvedValue(
+        '```json\n' + JSON.stringify(mockAssessment) + '\n```'
+      )
 
-      vi.mocked(aiClient.callAI).mockResolvedValueOnce(mockAIResponse)
+      const input = {
+        type: 'resume' as const,
+        content: '测试简历内容'
+      }
 
       const result = await analyzeAbility(input)
 
-      expect(result).toMatchObject({
-        overallScore: expect.any(Number),
-        dimensions: expect.any(Object),
-        metadata: expect.any(Object),
-        report: expect.any(Object)
-      })
-      expect(vi.mocked(profile.setProfileData)).toHaveBeenCalledWith('abilityAssessment', expect.any(Object))
+      expect(result).toBeDefined()
+      expect(result.overallScore).toBe(75)
+      expect(ai.callAI).toHaveBeenCalledWith(expect.stringContaining('测试简历内容'))
     })
 
-    it('should throw error when AI returns invalid JSON', async () => {
-      const input: AssessmentInput = {
-        type: 'resume',
-        content: 'test resume'
-      }
+    it('should handle AI response parsing error', async () => {
+      vi.mocked(ai.callAI).mockResolvedValue('Invalid JSON response')
 
-      vi.mocked(aiClient.callAI).mockResolvedValueOnce({
-        content: 'Invalid response without JSON',
-        model: 'openai' as const,
-        error: undefined
-      })
+      const input = {
+        type: 'resume' as const,
+        content: '测试简历内容'
+      }
 
       await expect(analyzeAbility(input)).rejects.toThrow('AI 返回格式错误')
     })
@@ -141,38 +132,56 @@ ${JSON.stringify(mockAssessment, null, 2)}
 
   describe('getCurrentAssessment', () => {
     it('should return null when no assessment exists', () => {
-      vi.mocked(profile.getProfileData).mockReturnValueOnce(null)
-      
       const result = getCurrentAssessment()
-      
       expect(result).toBeNull()
     })
 
-    it('should return existing assessment', () => {
-      vi.mocked(profile.getProfileData).mockReturnValueOnce(mockAssessment)
-      
-      const result = getCurrentAssessment()
-      
-      expect(result).toEqual(mockAssessment)
-    })
-  })
+    it('should return saved assessment', async () => {
+      // 先进行一次评估
+      const mockAssessment = {
+        overallScore: 70,
+        dimensions: {
+          programming: { score: 70, weight: 0.25, skills: {
+            syntax: 70, dataStructures: 70, errorHandling: 70, codeQuality: 70, tooling: 70
+          }},
+          algorithm: { score: 70, weight: 0.25, skills: {
+            stringProcessing: 70, recursion: 70, dynamicProgramming: 70, graph: 70, tree: 70, sorting: 70, searching: 70, greedy: 70
+          }},
+          project: { score: 70, weight: 0.20, skills: {
+            planning: 70, architecture: 70, implementation: 70, testing: 70, deployment: 70, documentation: 70
+          }},
+          systemDesign: { score: 70, weight: 0.15, skills: {
+            scalability: 70, reliability: 70, performance: 70, security: 70, databaseDesign: 70
+          }},
+          communication: { score: 70, weight: 0.15, skills: {
+            codeReview: 70, technicalWriting: 70, teamCollaboration: 70, mentoring: 70, presentation: 70
+          }}
+        },
+        metadata: {
+          assessmentDate: new Date().toISOString(),
+          assessmentMethod: 'resume' as const,
+          confidence: 0.8
+        },
+        report: {
+          summary: 'Test',
+          strengths: [],
+          improvements: [],
+          recommendations: []
+        }
+      }
 
-  describe('generateImprovementPlan', () => {
-    it('should generate improvement plan based on assessment', async () => {
-      const mockPlan = '### 30天提升计划\n\n第一周：算法基础...'
-      
-      vi.mocked(aiClient.callAI).mockResolvedValueOnce({
-        content: mockPlan,
-        model: 'openai' as const,
-        error: undefined
+      vi.mocked(ai.callAI).mockResolvedValue(
+        '```json\n' + JSON.stringify(mockAssessment) + '\n```'
+      )
+
+      await analyzeAbility({
+        type: 'resume',
+        content: 'test'
       })
 
-      const result = await generateImprovementPlan(mockAssessment)
-
-      expect(result).toBe(mockPlan)
-      expect(vi.mocked(aiClient.callAI)).toHaveBeenCalledWith({
-        prompt: expect.stringContaining('30 天提升计划')
-      })
+      const saved = getCurrentAssessment()
+      expect(saved).toBeDefined()
+      expect(saved?.overallScore).toBe(70)
     })
   })
 }) 

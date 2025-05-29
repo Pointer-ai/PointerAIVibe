@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { AssessmentInput, QuestionnaireResponse } from '../types'
+import { parsePDF, isPDF } from '../../../utils/pdfParser'
+import { log } from '../../../utils/logger'
 
 interface AssessmentFormProps {
   onSubmit: (input: AssessmentInput) => void
@@ -9,6 +11,7 @@ interface AssessmentFormProps {
 export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loading }) => {
   const [mode, setMode] = useState<'resume' | 'questionnaire'>('resume')
   const [resumeText, setResumeText] = useState('')
+  const [uploadingPDF, setUploadingPDF] = useState(false)
   const [questionnaire, setQuestionnaire] = useState<Partial<QuestionnaireResponse>>({
     experience: {
       yearsOfCoding: 0,
@@ -19,17 +22,69 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
     skills: {}
   })
 
-  // 处理文件上传
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 处理文件上传（支持文本和 PDF）
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      setResumeText(event.target?.result as string)
+    // 处理 PDF 文件
+    if (isPDF(file)) {
+      setUploadingPDF(true)
+      try {
+        log('[AssessmentForm] Parsing PDF file')
+        const text = await parsePDF(file)
+        setResumeText(text)
+        log('[AssessmentForm] PDF parsed successfully')
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'PDF 解析失败')
+      } finally {
+        setUploadingPDF(false)
+      }
+      return
     }
-    reader.readAsText(file)
+
+    // 处理文本文件
+    if (file.type.startsWith('text/')) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setResumeText(event.target?.result as string)
+      }
+      reader.readAsText(file)
+    } else {
+      alert('请上传文本文件（.txt）或 PDF 文件（.pdf）')
+    }
   }
+
+  // 简历示例模板
+  const resumeTemplate = `姓名：张三
+联系方式：zhangsan@email.com | 186xxxx1234
+
+教育背景：
+2016-2020 北京大学 计算机科学与技术 本科
+
+工作经历：
+2020.07-至今 某某科技公司 前端工程师
+- 负责公司核心产品的前端开发，使用 React + TypeScript
+- 参与系统架构设计，优化前端性能，页面加载速度提升 40%
+- 带领 3 人小组完成新功能模块开发
+
+项目经验：
+1. 电商平台前端重构（2021.03-2021.08）
+   - 技术栈：React, Redux, Ant Design
+   - 负责内容：商品详情页、购物车模块
+   - 成果：用户转化率提升 15%
+
+2. 数据可视化平台（2020.09-2021.02）
+   - 技术栈：Vue 3, ECharts, TypeScript
+   - 负责内容：图表组件开发、数据处理
+   - 成果：支持 20+ 种图表类型
+
+技能：
+- 编程语言：JavaScript/TypeScript (精通), Python (熟练)
+- 前端框架：React, Vue, Angular
+- 后端了解：Node.js, Express
+- 数据库：MySQL, MongoDB
+- 其他：Git, Webpack, Docker`
 
   // 处理表单提交
   const handleSubmit = (e: React.FormEvent) => {
@@ -64,7 +119,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
         >
           <div className="text-3xl mb-2">📄</div>
           <div className="font-medium">简历分析</div>
-          <div className="text-sm text-gray-600 mt-1">上传简历或粘贴文本</div>
+          <div className="text-sm text-gray-600 mt-1">AI 智能分析您的简历</div>
         </button>
         
         <button
@@ -84,34 +139,67 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
       <form onSubmit={handleSubmit}>
         {mode === 'resume' ? (
           <div className="space-y-4">
-            {/* 文件上传 */}
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-              <div className="text-4xl mb-3">📤</div>
-              <label className="cursor-pointer">
-                <span className="text-blue-500 hover:text-blue-600">选择文件</span>
-                <input
-                  type="file"
-                  accept=".txt,.pdf,.doc,.docx"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </label>
-              <div className="text-sm text-gray-500 mt-2">
-                支持 TXT, PDF, DOC, DOCX 格式
-              </div>
+            {/* 说明文字 */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+              <p className="font-medium mb-1">📝 使用说明：</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>请在下方文本框中粘贴您的简历内容</li>
+                <li>支持上传 PDF 或文本文件</li>
+                <li>建议包含：教育背景、工作经历、项目经验、技能清单等</li>
+                <li>AI 将基于简历内容评估您的编程能力</li>
+                <li>评估结果仅供参考，帮助您了解自己的技能水平</li>
+              </ul>
             </div>
 
             {/* 文本输入 */}
             <div>
-              <label className="block text-sm font-medium mb-2">
-                或者直接粘贴简历内容
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium">
+                  简历内容
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setResumeText(resumeTemplate)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
+                >
+                  使用模板
+                </button>
+              </div>
               <textarea
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
-                className="w-full h-64 p-3 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="请输入您的简历内容，包括教育背景、工作经历、项目经验、技能等..."
+                className="w-full h-96 p-4 border rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                placeholder="请输入您的简历内容..."
+                disabled={uploadingPDF}
               />
+              <div className="mt-2 text-sm text-gray-500">
+                字数：{resumeText.length} 字
+              </div>
+            </div>
+
+            {/* 文件上传（支持 txt 和 pdf） */}
+            <div className="text-center text-sm text-gray-500">
+              {uploadingPDF ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                  正在解析 PDF...
+                </div>
+              ) : (
+                <>
+                  或者
+                  <label className="mx-2 text-blue-600 hover:text-blue-700 cursor-pointer">
+                    上传文件
+                    <input
+                      type="file"
+                      accept=".txt,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={loading}
+                    />
+                  </label>
+                  （支持 .txt 和 .pdf 格式）
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -225,13 +313,13 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
         {/* 提交按钮 */}
         <button
           type="submit"
-          disabled={loading || (mode === 'resume' && !resumeText.trim())}
+          disabled={loading || uploadingPDF || (mode === 'resume' && !resumeText.trim())}
           className="mt-6 w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
             <>
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-              正在分析...
+              AI 正在分析...
             </>
           ) : (
             <>

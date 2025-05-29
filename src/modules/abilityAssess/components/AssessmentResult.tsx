@@ -1,5 +1,13 @@
 import React from 'react'
-import { AbilityAssessment, getScoreLevel, ScoreLevel } from '../types'
+import { 
+  AbilityAssessment, 
+  getScoreLevel, 
+  ScoreLevel,
+  getSkillScoreValue,
+  getSkillConfidence,
+  isSkillInferred,
+  SkillScore
+} from '../types'
 
 interface AssessmentResultProps {
   assessment: AbilityAssessment
@@ -34,6 +42,39 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
     return 'bg-red-500'
   }
 
+  // 技能名称中文映射
+  const skillNameMap: Record<string, string> = {
+    syntax: '基础语法',
+    dataStructures: '数据结构',
+    errorHandling: '错误处理',
+    codeQuality: '代码质量',
+    tooling: '开发工具',
+    stringProcessing: '字符串处理',
+    recursion: '递归',
+    dynamicProgramming: '动态规划',
+    graph: '图算法',
+    tree: '树算法',
+    sorting: '排序算法',
+    searching: '搜索算法',
+    greedy: '贪心算法',
+    planning: '项目规划',
+    architecture: '架构设计',
+    implementation: '实现能力',
+    testing: '测试能力',
+    deployment: '部署运维',
+    documentation: '文档能力',
+    scalability: '可扩展性',
+    reliability: '可靠性',
+    performance: '性能优化',
+    security: '安全设计',
+    databaseDesign: '数据库设计',
+    codeReview: '代码评审',
+    technicalWriting: '技术写作',
+    teamCollaboration: '团队协作',
+    mentoring: '指导他人',
+    presentation: '演讲展示'
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       {/* 总体评分 */}
@@ -62,6 +103,21 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
         </div>
       </div>
 
+      {/* 说明信息 */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm">
+        <div className="flex items-start gap-2">
+          <span className="text-amber-600">ℹ️</span>
+          <div className="text-amber-800">
+            <p className="font-medium mb-1">评分说明：</p>
+            <ul className="list-disc list-inside space-y-1 text-amber-700">
+              <li>实线表示基于简历中明确信息得出的评分</li>
+              <li>虚线表示基于整体信息推理得出的评分，仅供参考</li>
+              <li>带 * 标记的技能表示 AI 推理得出，可能与实际有偏差</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* 各维度评分 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {Object.entries(assessment.dimensions).map(([key, dimension]) => (
@@ -86,15 +142,46 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
             </div>
             
             {/* 细分技能 */}
-            <div className="space-y-1">
-              {Object.entries(dimension.skills).map(([skill, score]) => (
-                <div key={skill} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{skill}</span>
-                  <span className={score < 60 ? 'text-red-600' : 'text-gray-800'}>
-                    {score}
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-2">
+              {Object.entries(dimension.skills).map(([skill, skillData]) => {
+                const score = getSkillScoreValue(skillData)
+                const confidence = getSkillConfidence(skillData)
+                const isInferred = isSkillInferred(skillData)
+                const skillName = skillNameMap[skill] || skill
+                
+                return (
+                  <div key={skill} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-sm text-gray-600">
+                        {skillName}
+                        {isInferred && <span className="text-amber-600 ml-1">*</span>}
+                      </span>
+                      {/* 进度条 */}
+                      <div className="flex-1 mx-2">
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div 
+                            className={`h-1.5 rounded-full transition-all ${
+                              score < 60 ? 'bg-red-400' : 'bg-gray-400'
+                            } ${isInferred ? 'opacity-50' : ''}`}
+                            style={{ 
+                              width: `${score}%`,
+                              backgroundImage: isInferred 
+                                ? 'repeating-linear-gradient(90deg, transparent, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 10px)' 
+                                : 'none'
+                            }}
+                            title={isInferred ? '基于整体信息推理' : `置信度: ${(confidence * 100).toFixed(0)}%`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`text-sm ${
+                      score < 60 ? 'text-red-600' : 'text-gray-800'
+                    } ${isInferred ? 'opacity-60' : ''}`}>
+                      {score}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         ))}

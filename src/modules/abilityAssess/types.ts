@@ -12,53 +12,60 @@ export enum AbilityDimension {
   Communication = 'communication'   // 沟通协作
 }
 
+// 技能评分详情
+export interface SkillScore {
+  score: number                // 分数（0-100）
+  confidence: number           // 置信度（0-1）
+  isInferred?: boolean        // 是否为推理得出
+}
+
 // 编程基本功细分维度
 export interface ProgrammingSkills {
-  syntax: number               // 基础语法（0-100）
-  dataStructures: number       // 数据结构基本使用（0-100）
-  errorHandling: number        // 错误处理（0-100）
-  codeQuality: number          // 代码质量（0-100）
-  tooling: number              // 开发工具使用（0-100）
+  syntax: SkillScore | number               // 基础语法（保持向后兼容）
+  dataStructures: SkillScore | number       // 数据结构基本使用
+  errorHandling: SkillScore | number        // 错误处理
+  codeQuality: SkillScore | number          // 代码质量
+  tooling: SkillScore | number              // 开发工具使用
 }
 
 // 算法能力细分维度
 export interface AlgorithmSkills {
-  stringProcessing: number     // 字符串处理（0-100）
-  recursion: number            // 递归（0-100）
-  dynamicProgramming: number   // 动态规划（0-100）
-  graph: number                // 图算法（0-100）
-  tree: number                 // 树相关（0-100）
-  sorting: number              // 排序算法（0-100）
-  searching: number            // 搜索算法（0-100）
-  greedy: number               // 贪心算法（0-100）
+  stringProcessing: SkillScore | number     // 字符串处理
+  recursion: SkillScore | number            // 递归
+  dynamicProgramming: SkillScore | number   // 动态规划
+  graph: SkillScore | number                // 图算法
+  tree: SkillScore | number                 // 树相关
+  sorting: SkillScore | number              // 排序算法
+  searching: SkillScore | number            // 搜索算法
+  greedy: SkillScore | number               // 贪心算法
 }
 
 // 项目能力细分维度
 export interface ProjectSkills {
-  planning: number             // 项目规划（0-100）
-  architecture: number         // 架构设计（0-100）
-  implementation: number       // 实现能力（0-100）
-  testing: number              // 测试能力（0-100）
-  deployment: number           // 部署运维（0-100）
-  documentation: number        // 文档能力（0-100）
+  planning: SkillScore | number             // 项目规划
+  architecture: SkillScore | number         // 架构设计
+  implementation: SkillScore | number       // 实现能力
+  testing: SkillScore | number              // 测试能力
+  deployment: SkillScore | number           // 部署运维
+  documentation: SkillScore | number        // 文档能力
 }
 
 // 系统设计细分维度
 export interface SystemDesignSkills {
-  scalability: number          // 可扩展性设计（0-100）
-  reliability: number          // 可靠性设计（0-100）
-  performance: number          // 性能优化（0-100）
-  security: number             // 安全设计（0-100）
-  databaseDesign: number       // 数据库设计（0-100）
+  scalability: SkillScore | number          // 可扩展性设计
+  reliability: SkillScore | number          // 可靠性设计
+  performance: SkillScore | number          // 性能优化
+  security: SkillScore | number             // 安全设计
+  databaseDesign: SkillScore | number       // 数据库设计
 }
 
 // 沟通协作细分维度
 export interface CommunicationSkills {
-  codeReview: number           // 代码评审（0-100）
-  technicalWriting: number     // 技术写作（0-100）
-  teamCollaboration: number    // 团队协作（0-100）
-  mentoring: number            // 指导他人（0-100）
-  presentation: number         // 演讲展示（0-100）
+  codeReview: SkillScore | number           // 代码评审
+  technicalWriting: SkillScore | number     // 技术写作
+  teamCollaboration: SkillScore | number    // 团队协作
+  mentoring: SkillScore | number            // 指导他人
+  presentation: SkillScore | number         // 演讲展示
 }
 
 // 完整的能力评估结果
@@ -165,4 +172,19 @@ export const getScoreLevel = (score: number): ScoreLevel => {
   if (score <= 60) return ScoreLevel.Intermediate
   if (score <= 80) return ScoreLevel.Advanced
   return ScoreLevel.Expert
+}
+
+// 辅助函数：获取技能分数值
+export const getSkillScoreValue = (skill: SkillScore | number): number => {
+  return typeof skill === 'number' ? skill : skill.score
+}
+
+// 辅助函数：获取技能置信度
+export const getSkillConfidence = (skill: SkillScore | number): number => {
+  return typeof skill === 'number' ? 1 : skill.confidence
+}
+
+// 辅助函数：判断技能是否为推理得出
+export const isSkillInferred = (skill: SkillScore | number): boolean => {
+  return typeof skill === 'object' && (skill.isInferred || skill.confidence < 0.7)
 } 

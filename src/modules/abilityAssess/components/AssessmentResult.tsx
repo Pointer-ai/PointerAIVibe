@@ -22,6 +22,14 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
 }) => {
   const level = getScoreLevel(assessment.overallScore)
   
+  // 为 report 添加默认值，防止 undefined 错误
+  const report = assessment.report || {
+    summary: '暂无评估总结',
+    strengths: [],
+    improvements: [],
+    recommendations: []
+  }
+  
   // 获取等级对应的颜色
   const getLevelColor = (level: ScoreLevel) => {
     const colors: Record<ScoreLevel, string> = {
@@ -194,13 +202,13 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
         <div className="space-y-4">
           <div>
             <h4 className="font-medium text-gray-700 mb-2">总结</h4>
-            <p className="text-gray-600">{assessment.report.summary}</p>
+            <p className="text-gray-600">{report.summary}</p>
           </div>
           
           <div>
             <h4 className="font-medium text-gray-700 mb-2">✨ 优势领域</h4>
             <ul className="list-disc list-inside space-y-1">
-              {assessment.report.strengths.map((strength, index) => (
+              {report.strengths.map((strength, index) => (
                 <li key={index} className="text-gray-600">{strength}</li>
               ))}
             </ul>
@@ -209,7 +217,7 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
           <div>
             <h4 className="font-medium text-gray-700 mb-2">📈 待改进项</h4>
             <ul className="list-disc list-inside space-y-1">
-              {assessment.report.improvements.map((improvement, index) => (
+              {report.improvements.map((improvement, index) => (
                 <li key={index} className="text-gray-600">{improvement}</li>
               ))}
             </ul>
@@ -218,7 +226,7 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
           <div>
             <h4 className="font-medium text-gray-700 mb-2">💡 发展建议</h4>
             <ul className="list-disc list-inside space-y-1">
-              {assessment.report.recommendations.map((recommendation, index) => (
+              {report.recommendations.map((recommendation, index) => (
                 <li key={index} className="text-gray-600">{recommendation}</li>
               ))}
             </ul>

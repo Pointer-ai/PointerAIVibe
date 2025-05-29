@@ -65,7 +65,8 @@ export const generateAssessmentPrompt = (input: string, type: 'resume' | 'questi
 请根据以下内容进行评估：
 ${input}
 
-请严格按照以下 JSON 格式返回评估结果：
+请严格按照以下 JSON 格式返回评估结果，必须用 \`\`\`json 和 \`\`\` 包围：
+
 \`\`\`json
 {
   "overallScore": 0,
@@ -144,12 +145,14 @@ ${input}
 }
 \`\`\`
 
-注意事项：
-1. 维度总分是其下所有技能的平均分
-2. 总体评分是各维度加权平均分
-3. metadata.confidence 表示整体评估置信度 (0-1)，基于信息完整度
-4. 如果某些技能无法从材料中评估，给出保守估计，并标记低置信度和 isInferred
-5. report 部分用中文，简洁明了，具有建设性`
+重要：
+1. 必须严格按照上述 JSON 格式返回
+2. 维度总分是其下所有技能的平均分
+3. 总体评分是各维度加权平均分
+4. metadata.confidence 表示整体评估置信度 (0-1)，基于信息完整度
+5. 如果某些技能无法从材料中评估，给出保守估计，并标记低置信度和 isInferred
+6. report 部分用中文，简洁明了，具有建设性
+7. 请确保返回的是有效的 JSON 格式`
 
   return basePrompt
 }

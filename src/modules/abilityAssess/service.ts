@@ -13,6 +13,109 @@ import {
 } from './types'
 
 /**
+ * 清理并修复常见的 JSON 格式错误
+ */
+const cleanupJSONString = (jsonStr: string): string => {
+  let cleaned = jsonStr.trim()
+  
+  // 移除可能的 markdown 代码块标记
+  cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+  
+  // 修复常见的不完整布尔值
+  cleaned = cleaned.replace(/"isInferred":\s*f(?![a-z])/g, '"isInferred": false')
+  cleaned = cleaned.replace(/"isInferred":\s*t(?![a-z])/g, '"isInferred": true')
+  
+  // 修复其他常见的不完整值
+  cleaned = cleaned.replace(/:\s*fals$/g, ': false')
+  cleaned = cleaned.replace(/:\s*tru$/g, ': true')
+  cleaned = cleaned.replace(/:\s*nul$/g, ': null')
+  
+  // 确保字符串末尾有正确的闭合括号
+  const openBraces = (cleaned.match(/\{/g) || []).length
+  const closeBraces = (cleaned.match(/\}/g) || []).length
+  
+  if (openBraces > closeBraces) {
+    // 如果是不完整的 report 部分，尝试添加默认的 report 结构
+    if (cleaned.includes('"report"') && !cleaned.includes('"recommendations"')) {
+      // 添加缺失的 report 字段
+      const reportIndex = cleaned.lastIndexOf('"report"')
+      if (reportIndex !== -1) {
+        const afterReport = cleaned.substring(reportIndex)
+        if (!afterReport.includes('"summary"')) {
+          cleaned = cleaned.replace(/"report":\s*\{[^}]*$/, '"report": {"summary": "评估已完成，但报告生成不完整","strengths": [],"improvements": [],"recommendations": []}')
+        }
+      }
+    }
+    
+    // 添加缺少的闭合括号
+    cleaned += '}'.repeat(openBraces - closeBraces)
+  }
+  
+  // 尝试修复缺少的逗号（简单的启发式方法）
+  cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"')
+  cleaned = cleaned.replace(/\}\s*\n\s*"/g, '},\n"')
+  cleaned = cleaned.replace(/\]\s*\n\s*"/g, '],\n"')
+  
+  return cleaned
+}
+
+/**
+ * 验证和修复评估数据结构
+ */
+const validateAndFixAssessment = (assessment: any): AbilityAssessment => {
+  // 确保 report 字段存在
+  if (!assessment.report) {
+    assessment.report = {
+      summary: '评估已完成',
+      strengths: [],
+      improvements: [],
+      recommendations: []
+    }
+  }
+  
+  // 确保 report 的所有必需字段存在
+  if (!assessment.report.summary) assessment.report.summary = '评估已完成'
+  if (!assessment.report.strengths) assessment.report.strengths = []
+  if (!assessment.report.improvements) assessment.report.improvements = []
+  if (!assessment.report.recommendations) assessment.report.recommendations = []
+  
+  // 确保 metadata 字段存在
+  if (!assessment.metadata) {
+    assessment.metadata = {
+      assessmentDate: new Date().toISOString(),
+      assessmentMethod: 'resume',
+      confidence: 0.5
+    }
+  }
+  
+  // 确保 dimensions 字段存在且完整
+  if (!assessment.dimensions) {
+    assessment.dimensions = {}
+  }
+  
+  // 验证每个维度的数据结构
+  const requiredDimensions = ['programming', 'algorithm', 'project', 'systemDesign', 'communication']
+  requiredDimensions.forEach(dimKey => {
+    if (!assessment.dimensions[dimKey]) {
+      assessment.dimensions[dimKey] = {
+        score: 0,
+        weight: DEFAULT_WEIGHTS[dimKey as keyof typeof DEFAULT_WEIGHTS] || 0.2,
+        skills: {}
+      }
+    }
+    
+    const dimension = assessment.dimensions[dimKey]
+    if (!dimension.skills) dimension.skills = {}
+    if (typeof dimension.score !== 'number') dimension.score = 0
+    if (typeof dimension.weight !== 'number') {
+      dimension.weight = DEFAULT_WEIGHTS[dimKey as keyof typeof DEFAULT_WEIGHTS] || 0.2
+    }
+  })
+  
+  return assessment as AbilityAssessment
+}
+
+/**
  * 分析用户能力 - 支持简历和问卷两种方式
  */
 export const analyzeAbility = async (input: AssessmentInput): Promise<AbilityAssessment> => {
@@ -28,33 +131,127 @@ export const analyzeAbility = async (input: AssessmentInput): Promise<AbilityAss
     const prompt = generateAssessmentPrompt(assessmentContent, input.type)
     const result = await callAI(prompt)
     
+    // 添加调试日志 - 显示 AI 返回的原始内容
+    log('[abilityAssess] AI raw response (first 500 chars):', result.substring(0, 500))
+    log('[abilityAssess] AI raw response (last 500 chars):', result.substring(Math.max(0, result.length - 500)))
+    
     // 解析 AI 返回的 JSON 结果
     const jsonMatch = result.match(/```json\n([\s\S]*?)\n```/)
     if (!jsonMatch) {
-      throw new Error('AI 返回格式错误，无法解析评估结果')
+      // 尝试其他格式的 JSON 提取
+      const altJsonMatch = result.match(/```json([\s\S]*?)```/) || 
+                          result.match(/```\s*\{[\s\S]*?\}\s*```/) ||
+                          result.match(/\{[\s\S]*\}/)
+      
+      if (altJsonMatch) {
+        log('[abilityAssess] Found JSON in alternative format')
+        try {
+          const rawJson = altJsonMatch[1] || altJsonMatch[0]
+          const cleanJson = cleanupJSONString(rawJson.trim())
+          log('[abilityAssess] Attempting to parse JSON (length: ' + cleanJson.length + ')')
+          
+          const assessment: AbilityAssessment = JSON.parse(cleanJson)
+          
+          // 验证和修复数据结构
+          const validatedAssessment = validateAndFixAssessment(assessment)
+          
+          // 计算并验证总分
+          validatedAssessment.overallScore = calculateOverallScore(validatedAssessment)
+          
+          // 保存评估结果到本地存储
+          await saveAssessment(validatedAssessment)
+          
+          // 记录活动
+          addActivityRecord({
+            type: 'assessment',
+            action: '完成能力评估',
+            details: {
+              method: input.type,
+              overallScore: validatedAssessment.overallScore,
+              level: getScoreLevel(validatedAssessment.overallScore)
+            }
+          })
+          
+          log('[abilityAssess] Assessment completed successfully (alternative format)')
+          return validatedAssessment
+        } catch (parseError) {
+          error('[abilityAssess] Failed to parse alternative JSON format:', parseError)
+          
+          // 显示 JSON 错误的具体位置
+          if (parseError instanceof SyntaxError && parseError.message.includes('position')) {
+            const match = parseError.message.match(/position (\d+)/)
+            if (match) {
+              const position = parseInt(match[1])
+              const rawJson = altJsonMatch[1] || altJsonMatch[0]
+              const cleanJson = cleanupJSONString(rawJson.trim())
+              const context = cleanJson.substring(Math.max(0, position - 100), position + 100)
+              error('[abilityAssess] JSON error context around position ' + position + ':', context)
+            }
+          }
+        }
+      }
+      
+      // 如果所有格式都失败，提供更详细的错误信息
+      error('[abilityAssess] AI response format analysis:', {
+        hasJsonCodeBlock: result.includes('```json'),
+        hasCodeBlock: result.includes('```'),
+        hasJsonObject: result.includes('{'),
+        contentLength: result.length,
+        firstLine: result.split('\n')[0],
+        lastLine: result.split('\n').slice(-1)[0]
+      })
+      
+      throw new Error(`AI 返回格式错误，无法解析评估结果。返回内容开头: "${result.substring(0, 200)}..."`)
     }
     
-    const assessment: AbilityAssessment = JSON.parse(jsonMatch[1])
-    
-    // 计算并验证总分
-    assessment.overallScore = calculateOverallScore(assessment)
-    
-    // 保存评估结果到本地存储
-    await saveAssessment(assessment)
-    
-    // 记录活动
-    addActivityRecord({
-      type: 'assessment',
-      action: '完成能力评估',
-      details: {
-        method: input.type,
-        overallScore: assessment.overallScore,
-        level: getScoreLevel(assessment.overallScore)
+    // 标准格式的 JSON 解析
+    try {
+      const rawJson = jsonMatch[1]
+      const cleanJson = cleanupJSONString(rawJson)
+      log('[abilityAssess] Attempting to parse standard JSON format (length: ' + cleanJson.length + ')')
+      
+      const assessment: AbilityAssessment = JSON.parse(cleanJson)
+      
+      // 验证和修复数据结构
+      const validatedAssessment = validateAndFixAssessment(assessment)
+      
+      // 计算并验证总分
+      validatedAssessment.overallScore = calculateOverallScore(validatedAssessment)
+      
+      // 保存评估结果到本地存储
+      await saveAssessment(validatedAssessment)
+      
+      // 记录活动
+      addActivityRecord({
+        type: 'assessment',
+        action: '完成能力评估',
+        details: {
+          method: input.type,
+          overallScore: validatedAssessment.overallScore,
+          level: getScoreLevel(validatedAssessment.overallScore)
+        }
+      })
+      
+      log('[abilityAssess] Assessment completed successfully')
+      return validatedAssessment
+      
+    } catch (parseError) {
+      error('[abilityAssess] Failed to parse standard JSON format:', parseError)
+      
+      // 显示 JSON 错误的具体位置
+      if (parseError instanceof SyntaxError && parseError.message.includes('position')) {
+        const match = parseError.message.match(/position (\d+)/)
+        if (match) {
+          const position = parseInt(match[1])
+          const rawJson = jsonMatch[1]
+          const cleanJson = cleanupJSONString(rawJson)
+          const context = cleanJson.substring(Math.max(0, position - 100), position + 100)
+          error('[abilityAssess] JSON error context around position ' + position + ':', context)
+        }
       }
-    })
-    
-    log('[abilityAssess] Assessment completed successfully')
-    return assessment
+      
+      throw parseError
+    }
     
   } catch (err) {
     error('[abilityAssess] Failed to analyze ability:', err)

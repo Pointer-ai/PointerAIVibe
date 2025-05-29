@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { AssessmentInput, QuestionnaireResponse } from '../types'
-import { parsePDF, isPDF } from '../../../utils/pdfParser'
+import { parsePDF, isPDF, validatePDFFile } from '../../../utils/pdfParser'
 import { log } from '../../../utils/logger'
 
 interface AssessmentFormProps {
@@ -29,14 +29,32 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
 
     // 处理 PDF 文件
     if (isPDF(file)) {
+      // 先验证文件
+      const validation = validatePDFFile(file)
+      if (!validation.valid) {
+        alert(validation.error)
+        e.target.value = '' // 清空文件选择
+        return
+      }
+
       setUploadingPDF(true)
       try {
         log('[AssessmentForm] Parsing PDF file')
         const text = await parsePDF(file)
+        
+        if (text.length < 50) {
+          alert('PDF 解析成功，但内容较少。请确保 PDF 包含完整的简历信息。')
+        }
+        
         setResumeText(text)
         log('[AssessmentForm] PDF parsed successfully')
+        alert(`PDF 解析成功！提取了 ${text.length} 个字符的文本内容。`)
+        
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'PDF 解析失败')
+        console.error('PDF parsing error:', error)
+        const errorMessage = error instanceof Error ? error.message : 'PDF 解析失败'
+        alert(errorMessage)
+        e.target.value = '' // 清空文件选择
       } finally {
         setUploadingPDF(false)
       }
@@ -44,14 +62,27 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
     }
 
     // 处理文本文件
-    if (file.type.startsWith('text/')) {
+    if (file.type.startsWith('text/') || file.name.toLowerCase().endsWith('.txt')) {
+      if (file.size > 1024 * 1024) { // 1MB limit for text files
+        alert('文本文件过大，请选择小于 1MB 的文件')
+        e.target.value = ''
+        return
+      }
+      
       const reader = new FileReader()
       reader.onload = (event) => {
-        setResumeText(event.target?.result as string)
+        const content = event.target?.result as string
+        setResumeText(content)
+        alert(`文本文件读取成功！内容长度：${content.length} 个字符。`)
       }
-      reader.readAsText(file)
+      reader.onerror = () => {
+        alert('文件读取失败，请重试')
+        e.target.value = ''
+      }
+      reader.readAsText(file, 'UTF-8')
     } else {
       alert('请上传文本文件（.txt）或 PDF 文件（.pdf）')
+      e.target.value = ''
     }
   }
 
@@ -182,7 +213,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
               {uploadingPDF ? (
                 <div className="flex items-center justify-center gap-2">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
-                  正在解析 PDF...
+                  正在解析 PDF，请稍候...
                 </div>
               ) : (
                 <>
@@ -197,7 +228,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
                       disabled={loading}
                     />
                   </label>
-                  （支持 .txt 和 .pdf 格式）
+                  （支持 .txt 和 .pdf 格式，PDF 限制 10MB）
                 </>
               )}
             </div>

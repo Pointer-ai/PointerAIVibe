@@ -199,8 +199,8 @@ const CodeRunnerContent: React.FC = () => {
 
   // 获取对应的组件
   const getLanguageRunner = () => {
+    const componentKey = `${selectedLanguage}-${selectedExample}` // 添加key确保正确重新渲染
     const commonProps = {
-      key: `${selectedLanguage}-${selectedExample}`, // 添加key确保正确重新渲染
       initialCode: code,
       onCodeChange: setCode,
       height: '500px',
@@ -215,11 +215,11 @@ const CodeRunnerContent: React.FC = () => {
 
     switch (selectedLanguage) {
       case 'javascript':
-        return <JavaScriptRunner {...commonProps} />
+        return <JavaScriptRunner key={componentKey} {...commonProps} />
       case 'python':
-        return <PythonRunner {...commonProps} />
+        return <PythonRunner key={componentKey} {...commonProps} />
       case 'cpp':
-        return <CppRunner {...commonProps} />
+        return <CppRunner key={componentKey} {...commonProps} />
     }
   }
 

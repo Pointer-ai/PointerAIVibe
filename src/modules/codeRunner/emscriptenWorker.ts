@@ -240,9 +240,15 @@ const runCppCode = async (code: string) => {
  */
 const compileAndRunOnline = async (code: string): Promise<{ output: string }> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+  let timeoutId: NodeJS.Timeout | null = null;
 
   try {
+    timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    }, 15000); // 15秒超时
+
     const response = await fetch('https://wandbox.org/api/compile.json', {
       method: 'POST',
       headers: {
@@ -259,7 +265,10 @@ const compileAndRunOnline = async (code: string): Promise<{ output: string }> =>
       signal: controller.signal
     });
 
-    clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
 
     if (!response.ok) {
       throw new Error(`编译服务响应错误: ${response.status}`);
@@ -277,7 +286,9 @@ const compileAndRunOnline = async (code: string): Promise<{ output: string }> =>
       output: result.program_output || result.program_message || '程序执行完成（无输出）'
     };
   } catch (error: any) {
-    clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     
     if (error.name === 'AbortError') {
       throw new Error('编译超时，请简化代码后重试');
@@ -327,13 +338,19 @@ const warmupCompiler = async (): Promise<void> => {
   
   console.log('[emscriptenWorker] Starting compiler warmup...');
   
+  const controller = new AbortController();
+  let timeoutId: NodeJS.Timeout | null = null;
+  
   try {
     // 发送一个极简的测试请求来预热编译器
     const warmupCode = `#include <iostream>
 int main() { return 0; }`;
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    timeoutId = setTimeout(() => {
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    }, 10000);
     
     const response = await fetch('https://wandbox.org/api/compile.json', {
       method: 'POST',
@@ -349,7 +366,10 @@ int main() { return 0; }`;
       signal: controller.signal
     });
     
-    clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
     
     if (response.ok) {
       compilerWarmedUp = true;
@@ -360,8 +380,17 @@ int main() { return 0; }`;
     } else {
       console.warn('[emscriptenWorker] Compiler warmup failed:', response.status);
     }
-  } catch (error) {
-    console.warn('[emscriptenWorker] Compiler warmup error:', error);
+  } catch (error: any) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    // 只在非 AbortError 时记录警告，避免控制台噪音
+    if (error.name !== 'AbortError') {
+      console.warn('[emscriptenWorker] Compiler warmup error:', error);
+    } else {
+      console.log('[emscriptenWorker] Compiler warmup timed out (this is expected and harmless)');
+    }
   }
 }
 

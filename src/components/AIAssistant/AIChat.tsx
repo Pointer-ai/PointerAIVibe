@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { ChatMessage } from './types'
-import { getAIResponse } from './service'
+import { getAIResponseStream } from './service'
 import { log, error } from '../../utils/logger'
 
 interface AIChatProps {
@@ -31,9 +31,13 @@ export const AIChat: React.FC<AIChatProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [streamingContent, setStreamingContent] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [position, setPosition] = useState(initialPosition)
+  const [chatSize, setChatSize] = useState({ width: 384, height: 384 }) // w-96 h-96 = 384px
+  const [isResizing, setIsResizing] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,6 +57,13 @@ export const AIChat: React.FC<AIChatProps> = ({
     // 滚动到底部
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // 流式内容更新时自动滚动到底部
+  useEffect(() => {
+    if (streamingContent) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [streamingContent])
 
   // 新开对话
   const handleNewChat = () => {
@@ -103,6 +114,43 @@ export const AIChat: React.FC<AIChatProps> = ({
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  // 处理调整大小的鼠标事件
+  const handleResizeMouseDown = (e: React.MouseEvent, direction: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    setIsResizing(true)
+    const startX = e.clientX
+    const startY = e.clientY
+    const startWidth = chatSize.width
+    const startHeight = chatSize.height
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
+      
+      let newWidth = startWidth
+      let newHeight = startHeight
+      
+      if (direction.includes('right')) {
+        newWidth = Math.max(300, Math.min(800, startWidth + (e.clientX - startX)))
+      }
+      if (direction.includes('bottom')) {
+        newHeight = Math.max(300, Math.min(600, startHeight + (e.clientY - startY)))
+      }
+      
+      setChatSize({ width: newWidth, height: newHeight })
+    }
+    
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+
   const handleSendMessage = async (message: string = inputValue) => {
     if (!message.trim() || isLoading) return
 
@@ -118,16 +166,40 @@ export const AIChat: React.FC<AIChatProps> = ({
     setIsLoading(true)
 
     try {
-      const response = await getAIResponse(message.trim())
+      // 创建流式AI消息
+      const assistantMessageId = (Date.now() + 1).toString()
+      setStreamingMessageId(assistantMessageId)
+      setStreamingContent('')
       
+      // 先添加一个空的AI消息占位符
+      const placeholderMessage: ChatMessage = {
+        id: assistantMessageId,
+        type: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, placeholderMessage])
+
+      // 获取流式AI回复
+      const response = await getAIResponseStream(
+        message.trim(),
+        undefined,
+        (chunk: string) => {
+          // 实时更新流式内容
+          setStreamingContent(prev => prev + chunk)
+        }
+      )
+      
+      // 完成后更新最终消息
       const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMessageId,
         type: 'assistant',
         content: response,
         timestamp: new Date()
       }
 
-      setMessages(prev => [...prev, assistantMessage])
+      setMessages(prev => [...prev.slice(0, -1), assistantMessage])
       log('[AIChat] Message sent and response received')
     } catch (err) {
       error('[AIChat] Failed to get AI response:', err)
@@ -139,9 +211,11 @@ export const AIChat: React.FC<AIChatProps> = ({
         timestamp: new Date()
       }
 
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => [...prev.slice(0, -1), errorMessage])
     } finally {
       setIsLoading(false)
+      setStreamingMessageId(null)
+      setStreamingContent('')
     }
   }
 
@@ -160,7 +234,36 @@ export const AIChat: React.FC<AIChatProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-96 w-96 bg-white rounded-xl shadow-2xl border border-gray-200">
+    <div className="flex flex-col bg-white rounded-xl shadow-2xl border border-gray-200" style={{ width: `${chatSize.width}px`, height: `${chatSize.height}px` }}>
+      {/* 调整大小的手柄 */}
+      {/* 右边缘 */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
+      />
+      
+      {/* 底边缘 */}
+      <div
+        className="absolute bottom-0 left-0 w-full h-1 cursor-ns-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')}
+      />
+      
+      {/* 右下角 */}
+      <div
+        className="absolute bottom-0 right-0 w-3 h-3 cursor-nw-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
+      />
+      
+      {/* 右下角调整大小图标 */}
+      <div className="absolute bottom-1 right-1 pointer-events-none">
+        <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M9.5 13a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H10v1.5a.5.5 0 0 1-.5.5z"/>
+          <path d="M13 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0v-2z"/>
+          <path d="M2.5 13a.5.5 0 0 1 0-1h2v-1.5a.5.5 0 0 1 1 0v2a.5.5 0 0 1-.5.5h-2z"/>
+          <path d="M2 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H3v1.5a.5.5 0 0 1-1 0v-2z"/>
+        </svg>
+      </div>
+
       {/* 标题栏 - 可拖拽 */}
       <div 
         className={`flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-t-xl ${
@@ -311,7 +414,15 @@ export const AIChat: React.FC<AIChatProps> = ({
               }`}
             >
               <div className="whitespace-pre-wrap break-words">
-                {message.content}
+                {/* 如果是流式消息且正在流式输出，显示实时内容；否则显示完整内容 */}
+                {message.type === 'assistant' && message.id === streamingMessageId && streamingContent 
+                  ? streamingContent 
+                  : message.content}
+                
+                {/* 流式输出时显示光标 */}
+                {message.type === 'assistant' && message.id === streamingMessageId && (
+                  <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-1 rounded-full"></span>
+                )}
               </div>
               <div className={`text-xs mt-1 ${
                 message.type === 'user' ? 'text-blue-100' : 'text-gray-500'
@@ -322,7 +433,7 @@ export const AIChat: React.FC<AIChatProps> = ({
           </div>
         ))}
 
-        {isLoading && (
+        {isLoading && !streamingMessageId && (
           <div className="flex justify-start">
             <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-bl-none">
               <div className="flex items-center gap-1">

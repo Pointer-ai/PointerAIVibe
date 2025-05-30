@@ -350,4 +350,253 @@ ${context ? `上下文信息：${context}` : ''}`
       throw new Error('AI助手暂时不可用，请稍后重试。')
     }
   }
+}
+
+/**
+ * 流式调用AI API获取回复
+ */
+export const getAIResponseStream = async (
+  message: string, 
+  context?: string,
+  onChunk?: (chunk: string) => void
+): Promise<string> => {
+  const config = getAssistantConfig()
+  if (!config) {
+    throw new Error('AI助手配置不可用')
+  }
+  
+  try {
+    let apiUrl = ''
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+    let body: any = {}
+    
+    const systemPrompt = `你是悟语，一个专业的AI学习助手。你的任务是：
+1. 为用户解释、分析各种概念、术语和文本内容
+2. 提供清晰、准确、易懂的解释
+3. 结合实际应用场景和例子
+4. 保持回复简洁但完整
+5. 使用中文回复，语气亲切友好
+
+${context ? `上下文信息：${context}` : ''}`
+    
+    switch (config.model) {
+      case 'openai':
+        apiUrl = 'https://api.openai.com/v1/chat/completions'
+        headers['Authorization'] = `Bearer ${config.apiKey}`
+        body = {
+          model: config.specificModel || 'gpt-3.5-turbo',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ],
+          temperature: config.params?.temperature || 0.7,
+          max_tokens: config.params?.maxTokens || 1000,
+          stream: true // 启用流式输出
+        }
+        
+        // 添加其他参数（如果存在且有效）
+        if (config.params?.topP !== undefined && config.params.topP > 0) {
+          body.top_p = config.params.topP
+        }
+        if (config.params?.presencePenalty !== undefined) {
+          body.presence_penalty = config.params.presencePenalty
+        }
+        if (config.params?.frequencyPenalty !== undefined) {
+          body.frequency_penalty = config.params.frequencyPenalty
+        }
+        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
+          body.stop = config.params.stopSequences
+        }
+        break
+        
+      case 'claude':
+        apiUrl = 'https://api.anthropic.com/v1/messages'
+        headers['x-api-key'] = config.apiKey
+        headers['anthropic-version'] = '2023-06-01'
+        body = {
+          model: config.specificModel || 'claude-3-sonnet-20240229',
+          system: systemPrompt,
+          messages: [{ role: 'user', content: message }],
+          max_tokens: config.params?.maxTokens || 1000,
+          stream: true // 启用流式输出
+        }
+        
+        // 添加其他参数
+        if (config.params?.temperature !== undefined) {
+          body.temperature = config.params.temperature
+        }
+        if (config.params?.topP !== undefined && config.params.topP > 0) {
+          body.top_p = config.params.topP
+        }
+        if (config.params?.topK !== undefined && config.params.topK > 0) {
+          body.top_k = config.params.topK
+        }
+        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
+          body.stop_sequences = config.params.stopSequences
+        }
+        break
+        
+      case 'qwen':
+        apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+        headers['Authorization'] = `Bearer ${config.apiKey}`
+        body = {
+          model: config.specificModel || 'qwen-max',
+          input: {
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message }
+            ]
+          },
+          parameters: {
+            temperature: config.params?.temperature || 0.7,
+            max_tokens: config.params?.maxTokens || 1000,
+            incremental_output: true // 启用增量输出
+          }
+        }
+        
+        // 添加其他参数
+        if (config.params?.topP !== undefined && config.params.topP > 0) {
+          body.parameters.top_p = config.params.topP
+        }
+        if (config.params?.topK !== undefined && config.params.topK > 0) {
+          body.parameters.top_k = config.params.topK
+        }
+        if (config.params?.presencePenalty !== undefined) {
+          body.parameters.presence_penalty = config.params.presencePenalty
+        }
+        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
+          body.parameters.stop = config.params.stopSequences
+        }
+        break
+        
+      default:
+        throw new Error(`不支持的AI模型: ${config.model}`)
+    }
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    })
+    
+    if (!response.ok) {
+      let errorMessage = `API请求失败: ${response.status} ${response.statusText}`
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          if (typeof errorData.error === 'string') {
+            errorMessage += `\n错误信息: ${errorData.error}`
+          } else if (errorData.error.message) {
+            errorMessage += `\n错误信息: ${errorData.error.message}`
+          }
+        }
+      } catch (parseError) {
+        errorMessage += '\n无法解析错误响应'
+      }
+      throw new Error(errorMessage)
+    }
+    
+    // 处理流式响应
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('无法获取响应流')
+    }
+    
+    const decoder = new TextDecoder()
+    let fullResponse = ''
+    let chunkBuffer = '' // 缓冲区用于累积小的chunk
+    
+    // 防抖函数，避免过于频繁的更新
+    let updateTimer: NodeJS.Timeout | null = null
+    const flushBuffer = () => {
+      if (chunkBuffer && onChunk) {
+        onChunk(chunkBuffer)
+        chunkBuffer = ''
+      }
+    }
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.trim() === '') continue
+          
+          try {
+            let content = ''
+            
+            if (config.model === 'openai') {
+              // OpenAI 流式格式: data: {"choices":[{"delta":{"content":"..."}}]}
+              if (line.startsWith('data: ')) {
+                const jsonStr = line.slice(6)
+                if (jsonStr === '[DONE]') continue
+                
+                const data = JSON.parse(jsonStr)
+                content = data.choices?.[0]?.delta?.content || ''
+              }
+            } else if (config.model === 'claude') {
+              // Claude 流式格式: event: content_block_delta\ndata: {"delta":{"text":"..."}}
+              if (line.startsWith('data: ')) {
+                const data = JSON.parse(line.slice(6))
+                content = data.delta?.text || ''
+              }
+            } else if (config.model === 'qwen') {
+              // 通义千问流式格式: data:{"output":{"text":"..."}}
+              if (line.startsWith('data:')) {
+                const data = JSON.parse(line.slice(5))
+                content = data.output?.text || ''
+                // 通义千问是增量式的，需要计算差值
+                if (content.startsWith(fullResponse)) {
+                  content = content.slice(fullResponse.length)
+                }
+              }
+            }
+            
+            if (content) {
+              fullResponse += content
+              chunkBuffer += content
+              
+              // 使用防抖机制，每50ms最多更新一次
+              if (updateTimer) {
+                clearTimeout(updateTimer)
+              }
+              updateTimer = setTimeout(flushBuffer, 50)
+            }
+          } catch (parseError) {
+            // 忽略解析错误，继续处理下一行
+            continue
+          }
+        }
+      }
+      
+      // 确保最后的内容被发送
+      if (updateTimer) {
+        clearTimeout(updateTimer)
+      }
+      flushBuffer()
+      
+    } finally {
+      reader.releaseLock()
+    }
+    
+    if (!fullResponse) {
+      fullResponse = '抱歉，我无法回答这个问题。'
+    }
+    
+    return fullResponse
+    
+  } catch (err) {
+    error('[AIAssistant] Stream API call failed:', err)
+    if (err instanceof Error) {
+      throw new Error(`AI助手调用失败: ${err.message}`)
+    } else {
+      throw new Error('AI助手暂时不可用，请稍后重试。')
+    }
+  }
 } 

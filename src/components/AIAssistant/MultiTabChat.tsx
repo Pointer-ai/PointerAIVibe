@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import { ChatMessage, ChatSession } from './types'
-import { getAIResponse, createChatSession, saveChatSession, deleteChatSession, getChatSessions, updateSessionTitle } from './service'
+import { getAIResponseStream, createChatSession, saveChatSession, deleteChatSession, getChatSessions, updateSessionTitle } from './service'
 import { log, error } from '../../utils/logger'
 
 interface MultiTabChatProps {
@@ -40,51 +40,37 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+  const [streamingContent, setStreamingContent] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [position, setPosition] = useState(initialPosition)
+  const [chatSize, setChatSize] = useState({ width: 600, height: 384 }) // 24rem = 384px
+  const [isResizing, setIsResizing] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ startX: number; startY: number; startMouseX: number; startMouseY: number } | null>(null)
-  const processedQueryIds = useRef<Set<string>>(new Set())
 
-  // 组件挂载日志
+  // 处理新的随意搜查询请求 - 简化逻辑，因为组件常驻
   useEffect(() => {
-    log('[MultiTabChat] Component mounted')
-    
-    return () => {
-      log('[MultiTabChat] Component unmounting')
-    }
-  }, [])
-
-  // 处理新的随意搜查询请求
-  useEffect(() => {
-    if (newQueryRequest && !processedQueryIds.current.has(newQueryRequest.id)) {
-      // 标记为已处理
-      processedQueryIds.current.add(newQueryRequest.id)
-      
-      log('[MultiTabChat] Processing new query request:', newQueryRequest.id, 'text:', newQueryRequest.text)
+    if (newQueryRequest) {
+      log('[MultiTabChat] 处理随意搜查询:', newQueryRequest.text.substring(0, 30))
       
       // 创建新的关键词会话
       const newSession = createChatSession('keyword', newQueryRequest.text)
-      log('[MultiTabChat] Created new keyword session:', newSession.id)
       
       // 立即添加到会话列表最前面并设置为活跃
       setSessions(prev => {
         const updatedSessions = [newSession, ...prev.slice(0, 9)] // 保持最多10个
-        log('[MultiTabChat] Updated sessions list, new length:', updatedSessions.length)
         return updatedSessions
       })
       
       setActiveSessionId(newSession.id)
-      log('[MultiTabChat] Set active session to:', newSession.id)
       
       // 立即发送消息到新会话
       const sendMessageToNewSession = async () => {
         try {
-          log('[MultiTabChat] Sending message to new session:', newQueryRequest.message)
-          
           // 创建用户消息
           const userMessage: ChatMessage = {
             id: Date.now().toString(),
@@ -107,20 +93,50 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
           
           setIsLoading(true)
           
-          // 获取AI回复
-          const response = await getAIResponse(newQueryRequest.message.trim())
+          // 创建流式AI消息
+          const assistantMessageId = (Date.now() + 1).toString()
+          setStreamingMessageId(assistantMessageId)
+          setStreamingContent('')
           
-          const assistantMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
+          // 先添加一个空的AI消息占位符
+          const placeholderMessage: ChatMessage = {
+            id: assistantMessageId,
+            type: 'assistant',
+            content: '',
+            timestamp: new Date()
+          }
+          
+          const sessionWithPlaceholder = {
+            ...updatedSession,
+            messages: [...updatedSession.messages, placeholderMessage],
+            lastActivity: new Date()
+          }
+          
+          setSessions(prev => prev.map(session => 
+            session.id === newSession.id ? sessionWithPlaceholder : session
+          ))
+          
+          // 获取流式AI回复
+          const response = await getAIResponseStream(
+            newQueryRequest.message.trim(),
+            undefined,
+            (chunk: string) => {
+              // 实时更新流式内容
+              setStreamingContent(prev => prev + chunk)
+            }
+          )
+          
+          // 完成后更新最终消息
+          const finalMessage: ChatMessage = {
+            id: assistantMessageId,
             type: 'assistant',
             content: response,
             timestamp: new Date()
           }
           
-          // 添加AI回复
           const finalSession = {
-            ...updatedSession,
-            messages: [...updatedSession.messages, assistantMessage],
+            ...sessionWithPlaceholder,
+            messages: [...updatedSession.messages, finalMessage],
             lastActivity: new Date()
           }
           saveChatSession(finalSession)
@@ -129,13 +145,31 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
             session.id === newSession.id ? finalSession : session
           ))
           
-          log('[MultiTabChat] Successfully completed new query conversation')
-          
         } catch (err) {
-          error('[MultiTabChat] Failed to process new query:', err)
+          error('[MultiTabChat] 随意搜查询失败:', err)
+          
+          // 添加错误消息
+          const errorMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            type: 'assistant',
+            content: '抱歉，我暂时无法回答您的问题。请检查网络连接或稍后重试。',
+            timestamp: new Date()
+          }
+          
+          setSessions(prev => prev.map(session => {
+            if (session.id === newSession.id) {
+              return {
+                ...session,
+                messages: [...session.messages.filter(m => m.id !== streamingMessageId), errorMessage],
+                lastActivity: new Date()
+              }
+            }
+            return session
+          }))
         } finally {
           setIsLoading(false)
-          // 通知处理完成
+          setStreamingMessageId(null)
+          setStreamingContent('')
           onQueryRequestProcessed?.()
         }
       }
@@ -164,6 +198,13 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [sessions, activeSessionId])
 
+  // 流式内容更新时自动滚动到底部
+  useEffect(() => {
+    if (streamingContent) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [streamingContent])
+
   // 拖拽处理 - 现在整个聊天框都可以拖拽
   const handleMouseDown = (e: React.MouseEvent) => {
     // 如果点击的是输入框、按钮、消息内容或其他交互元素，不触发拖拽
@@ -183,7 +224,10 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       target.closest('pre') ||
       target.closest('.no-drag') ||
       target.closest('.message-content') ||
-      target.closest('.markdown-content')
+      target.closest('.markdown-content') ||
+      target.classList.contains('cursor-ew-resize') ||
+      target.classList.contains('cursor-ns-resize') ||
+      target.classList.contains('cursor-nw-resize')
     ) {
       return
     }
@@ -226,6 +270,49 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  // 处理调整大小的鼠标事件
+  const handleResizeMouseDown = (e: React.MouseEvent, direction: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    setIsResizing(true)
+    const startX = e.clientX
+    const startY = e.clientY
+    const startWidth = chatSize.width
+    const startHeight = chatSize.height
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
+      
+      let newWidth = startWidth
+      let newHeight = startHeight
+      
+      if (direction.includes('right')) {
+        newWidth = Math.max(400, Math.min(1000, startWidth + (e.clientX - startX)))
+      }
+      if (direction.includes('left')) {
+        newWidth = Math.max(400, Math.min(1000, startWidth - (e.clientX - startX)))
+      }
+      if (direction.includes('bottom')) {
+        newHeight = Math.max(300, Math.min(800, startHeight + (e.clientY - startY)))
+      }
+      if (direction.includes('top')) {
+        newHeight = Math.max(300, Math.min(800, startHeight - (e.clientY - startY)))
+      }
+      
+      setChatSize({ width: newWidth, height: newHeight })
+    }
+    
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+
   // 创建新会话
   const handleNewChat = () => {
     const newSession = createChatSession('manual')
@@ -233,7 +320,6 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
     setActiveSessionId(newSession.id)
     setInputValue('')
     inputRef.current?.focus()
-    log('[MultiTabChat] New manual chat created')
   }
 
   // 切换会话
@@ -313,22 +399,55 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       })
       setSessions(updatedSessions)
 
-      // 获取AI回复
-      const response = await getAIResponse(message.trim())
+      // 创建流式AI消息
+      const assistantMessageId = (Date.now() + 1).toString()
+      setStreamingMessageId(assistantMessageId)
+      setStreamingContent('')
       
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+      // 先添加一个空的AI消息占位符
+      const placeholderMessage: ChatMessage = {
+        id: assistantMessageId,
+        type: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }
+      
+      const sessionsWithPlaceholder = updatedSessions.map(session => {
+        if (session.id === targetSessionId) {
+          return {
+            ...session,
+            messages: [...session.messages, placeholderMessage],
+            lastActivity: new Date()
+          }
+        }
+        return session
+      })
+      setSessions(sessionsWithPlaceholder)
+
+      // 获取流式AI回复
+      const response = await getAIResponseStream(
+        message.trim(),
+        undefined,
+        (chunk: string) => {
+          // 实时更新流式内容
+          setStreamingContent(prev => prev + chunk)
+        }
+      )
+      
+      // 完成后更新最终消息
+      const finalMessage: ChatMessage = {
+        id: assistantMessageId,
         type: 'assistant',
         content: response,
         timestamp: new Date()
       }
 
       // 更新会话
-      const finalSessions = updatedSessions.map(session => {
+      const finalSessions = sessionsWithPlaceholder.map(session => {
         if (session.id === targetSessionId) {
           const finalSession = {
             ...session,
-            messages: [...session.messages, assistantMessage],
+            messages: [...session.messages.filter(m => m.id !== assistantMessageId), finalMessage],
             lastActivity: new Date()
           }
           saveChatSession(finalSession)
@@ -352,7 +471,7 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
         if (session.id === targetSessionId) {
           return {
             ...session,
-            messages: [...session.messages, errorMessage],
+            messages: [...session.messages.filter(m => m.id !== streamingMessageId), errorMessage],
             lastActivity: new Date()
           }
         }
@@ -361,6 +480,8 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       setSessions(errorSessions)
     } finally {
       setIsLoading(false)
+      setStreamingMessageId(null)
+      setStreamingContent('')
     }
 
     onQueryRequestProcessed?.()
@@ -398,20 +519,51 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
 
   return (
     <div 
-      className={`flex h-96 w-[600px] bg-white rounded-xl shadow-2xl border border-gray-200 ${
+      className={`flex bg-white rounded-xl shadow-2xl border border-gray-200 ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
-      }`}
+      } ${isResizing ? 'select-none' : ''}`}
       style={{
         position: 'fixed',
         left: position.x,
         top: position.y,
+        width: `${chatSize.width}px`,
+        height: `${chatSize.height}px`,
         zIndex: 1000,
-        userSelect: isDragging ? 'none' : 'auto'
+        userSelect: isDragging || isResizing ? 'none' : 'auto'
       }}
       onMouseDown={handleMouseDown}
     >
+      {/* 调整大小的手柄 */}
+      {/* 右边缘 */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
+      />
+      
+      {/* 底边缘 */}
+      <div
+        className="absolute bottom-0 left-0 w-full h-1 cursor-ns-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')}
+      />
+      
+      {/* 右下角 */}
+      <div
+        className="absolute bottom-0 right-0 w-3 h-3 cursor-nw-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
+      />
+      
+      {/* 右下角调整大小图标 */}
+      <div className="absolute bottom-1 right-1 pointer-events-none">
+        <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M9.5 13a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H10v1.5a.5.5 0 0 1-.5.5z"/>
+          <path d="M13 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0v-2z"/>
+          <path d="M2.5 13a.5.5 0 0 1 0-1h2v-1.5a.5.5 0 0 1 1 0v2a.5.5 0 0 1-.5.5h-2z"/>
+          <path d="M2 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H3v1.5a.5.5 0 0 1-1 0v-2z"/>
+        </svg>
+      </div>
+
       {/* 左侧对话列表 */}
-      <div className="w-48 bg-gray-50 border-r border-gray-200 rounded-tl-xl flex flex-col">
+      <div className="bg-gray-50 border-r border-gray-200 rounded-tl-xl flex flex-col" style={{ width: Math.max(180, Math.min(250, chatSize.width * 0.3)) }}>
         <div className="p-3 border-b border-gray-200 bg-gray-100 rounded-tl-xl">
           <h3 className="font-medium text-gray-700 text-sm">对话列表</h3>
         </div>
@@ -527,9 +679,10 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
                 onClose()
               }}
               className="p-1 hover:bg-white/20 rounded-full transition-colors no-drag"
+              title="最小化"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14" />
               </svg>
             </button>
           </div>
@@ -609,8 +762,16 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
                             )
                           }}
                         >
-                          {message.content}
+                          {/* 如果是流式消息且正在流式输出，显示实时内容；否则显示完整内容 */}
+                          {message.id === streamingMessageId && streamingContent 
+                            ? streamingContent 
+                            : message.content || ''}
                         </ReactMarkdown>
+                        
+                        {/* 流式输出时显示光标 */}
+                        {message.id === streamingMessageId && (
+                          <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-1 rounded-full"></span>
+                        )}
                       </div>
                     ) : (
                       <div className="whitespace-pre-wrap">
@@ -628,7 +789,7 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
             ))
           )}
 
-          {isLoading && (
+          {isLoading && !streamingMessageId && (
             <div className="flex justify-start">
               <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-bl-none">
                 <div className="flex items-center gap-1">

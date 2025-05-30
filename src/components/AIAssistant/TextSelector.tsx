@@ -22,80 +22,112 @@ export const TextSelector: React.FC<TextSelectorProps> = ({ isActive, onTextQuer
       return
     }
 
-    const handleSelection = () => {
-      // 获取当前选择的文本
+    const handleTextSelection = () => {
       const selection = window.getSelection()
-      let text = selection?.toString().trim() || ''
+      let text = ''
       let rect: DOMRect | null = null
-
-      // 如果标准选择没有文本，检查是否在Monaco Editor等特殊编辑器中
-      if (!text) {
-        // 检查Monaco Editor
-        const monacoElements = document.querySelectorAll('.monaco-editor')
-        monacoElements.forEach(monacoEl => {
-          if (monacoEl.contains(document.activeElement)) {
-            // 尝试从Monaco Editor获取选中文本
-            try {
-              const monacoInstance = (monacoEl as any).__monaco_editor_instance
-              if (monacoInstance) {
-                const selectedText = monacoInstance.getModel()?.getValueInRange(monacoInstance.getSelection())
-                if (selectedText && selectedText.trim()) {
-                  text = selectedText.trim()
-                  // 使用Monaco Editor的选择位置
-                  const domNode = monacoInstance.getDomNode()
-                  if (domNode) {
-                    rect = domNode.getBoundingClientRect()
-                  }
-                }
-              }
-            } catch (e) {
-              // Monaco实例获取失败，继续使用标准方法
-            }
-          }
-        })
-
-        // 检查其他可能的代码编辑器
-        const codeElements = document.querySelectorAll('textarea, .CodeMirror, .ace_editor, [contenteditable="true"]')
-        codeElements.forEach(el => {
-          if (el.contains(document.activeElement) || el === document.activeElement) {
-            if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
-              const start = el.selectionStart || 0
-              const end = el.selectionEnd || 0
-              if (start !== end) {
-                text = el.value.substring(start, end).trim()
-                rect = el.getBoundingClientRect()
+      
+      // 优先检查Monaco编辑器的选择
+      const monacoEditors = document.querySelectorAll('.monaco-editor')
+      let isMonacoSelection = false
+      
+      for (const editor of monacoEditors) {
+        try {
+          const monacoInstance = (editor as any)._monacoEditor
+          if (monacoInstance) {
+            const selection = monacoInstance.getSelection()
+            if (selection && !selection.isEmpty()) {
+              const selectedText = monacoInstance.getModel()?.getValueInRange(selection)
+              if (selectedText && selectedText.trim().length >= 2) {
+                text = selectedText.trim()
+                isMonacoSelection = true
+                
+                // 获取Monaco编辑器选择的位置
+                const editorRect = editor.getBoundingClientRect()
+                const lineHeight = monacoInstance.getOption(58) || 20 // 行高
+                const startLineNumber = selection.startLineNumber
+                const endLineNumber = selection.endLineNumber
+                
+                // 估算选择区域的位置
+                rect = new DOMRect(
+                  editorRect.left + 100, // 编辑器左边距估算
+                  editorRect.top + (startLineNumber - 1) * lineHeight + 50, // 基于行号估算位置
+                  200, // 宽度估算
+                  (endLineNumber - startLineNumber + 1) * lineHeight // 高度基于行数
+                )
+                break
               }
             }
           }
-        })
-      } else {
-        // 标准选择，获取选择范围的位置
-        const range = selection?.getRangeAt(0)
-        if (range) {
-          rect = range.getBoundingClientRect()
+        } catch (e) {
+          // Monaco编辑器检测失败，继续使用标准选择
+          console.debug('Monaco selection detection failed:', e)
         }
       }
+      
+      // 如果不是Monaco选择，使用标准文本选择
+      if (!isMonacoSelection) {
+        if (!selection || selection.isCollapsed) {
+          setSelectedText('')
+          setButtonPosition(null)
+          setShowButton(false)
+          return
+        }
 
-      // 检查文本长度和有效性
-      if (text && text.length > 2 && text.length < 500) {
-        setSelectedText(text)
+        text = selection.toString().trim()
+        if (text.length < 2) {
+          setSelectedText('')
+          setButtonPosition(null)
+          setShowButton(false)
+          return
+        }
+
+        // 检查选择是否在需要排除的区域内（但允许Monaco编辑器）
+        const range = selection.getRangeAt(0)
+        const container = range.commonAncestorContainer.parentElement
         
-        if (rect && rect.width > 0 && rect.height > 0) {
-          const x = rect.left + rect.width / 2
-          const y = rect.top - 10
-          
-          setButtonPosition({ x, y })
-          setShowButton(true)
-        } else {
-          // 如果无法获取位置，使用鼠标位置作为后备
-          const mouseX = (window as any).lastMouseX || window.innerWidth / 2
-          const mouseY = (window as any).lastMouseY || 100
-          setButtonPosition({ x: mouseX, y: mouseY - 40 })
-          setShowButton(true)
+        // 只排除聊天相关区域，允许Monaco编辑器
+        if (container?.closest('.no-select') ||
+            container?.closest('.ai-chat-input') ||
+            container?.closest('.message-content') ||
+            container?.closest('.multi-tab-chat-input') ||
+            container?.closest('.markdown-content')) {
+          setSelectedText('')
+          setButtonPosition(null)
+          setShowButton(false)
+          return
         }
-      } else {
-        setShowButton(false)
+        
+        rect = range.getBoundingClientRect()
       }
+
+      if (!text || !rect) {
+        setSelectedText('')
+        setButtonPosition(null)
+        setShowButton(false)
+        return
+      }
+
+      setSelectedText(text)
+
+      // 计算按钮位置
+      const buttonWidth = 120
+      const buttonHeight = 36
+      
+      // 计算最佳位置（右上角，但要考虑边界）
+      let x = rect.right + 10
+      let y = rect.top - buttonHeight - 5
+      
+      // 边界检测
+      if (x + buttonWidth > window.innerWidth - 20) {
+        x = rect.left - buttonWidth - 10
+      }
+      if (y < 20) {
+        y = rect.bottom + 5
+      }
+      
+      setButtonPosition({ x, y })
+      setShowButton(true)
     }
 
     const handleClickOutside = (e: MouseEvent) => {
@@ -114,34 +146,58 @@ export const TextSelector: React.FC<TextSelectorProps> = ({ isActive, onTextQuer
     }
 
     // 监听文本选择
-    document.addEventListener('mouseup', handleSelection)
-    document.addEventListener('keyup', handleSelection)
+    document.addEventListener('mouseup', handleTextSelection)
+    document.addEventListener('keyup', handleTextSelection)
     document.addEventListener('click', handleClickOutside)
     document.addEventListener('mousemove', handleMouseMove)
     
     // 监听选择变化
     document.addEventListener('selectionchange', () => {
-      setTimeout(handleSelection, 50) // 延迟检查，确保选择已完成
+      setTimeout(handleTextSelection, 50) // 延迟检查，确保选择已完成
     })
 
-    // 特殊处理：监听Monaco Editor的选择变化
-    const handleMonacoSelection = () => {
-      setTimeout(handleSelection, 100)
+    // 专门为Monaco编辑器添加事件监听
+    const setupMonacoListeners = () => {
+      const monacoEditors = document.querySelectorAll('.monaco-editor')
+      const listeners: (() => void)[] = []
+      
+      monacoEditors.forEach(editor => {
+        try {
+          const monacoInstance = (editor as any)._monacoEditor
+          if (monacoInstance) {
+            // 监听Monaco编辑器的选择变化
+            const disposable = monacoInstance.onDidChangeCursorSelection(() => {
+              setTimeout(handleTextSelection, 100)
+            })
+            listeners.push(() => disposable.dispose())
+          }
+        } catch (e) {
+          console.debug('Failed to setup Monaco listeners:', e)
+        }
+      })
+      
+      return () => {
+        listeners.forEach(cleanup => cleanup())
+      }
     }
-    document.addEventListener('monacoSelectionChange', handleMonacoSelection)
+    
+    const cleanupMonaco = setupMonacoListeners()
+    
+    // 定期重新设置Monaco监听器（防止编辑器动态加载）
+    const monacoInterval = setInterval(setupMonacoListeners, 2000)
 
     return () => {
-      document.removeEventListener('mouseup', handleSelection)
-      document.removeEventListener('keyup', handleSelection)
+      document.removeEventListener('mouseup', handleTextSelection)
+      document.removeEventListener('keyup', handleTextSelection)
       document.removeEventListener('click', handleClickOutside)
       document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('monacoSelectionChange', handleMonacoSelection)
+      cleanupMonaco()
+      clearInterval(monacoInterval)
     }
   }, [isActive])
 
   const handleQuery = () => {
     if (selectedText) {
-      log('[TextSelector] Query triggered for:', selectedText.substring(0, 50))
       onTextQuery(selectedText)
       setShowButton(false)
       

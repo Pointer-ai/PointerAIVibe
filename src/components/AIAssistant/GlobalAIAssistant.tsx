@@ -48,6 +48,10 @@ export const GlobalAIAssistant: React.FC = () => {
           isActive: isNowActive
         }))
         
+        if (isNowActive) {
+          log('[GlobalAIAssistant] 悟语助手已激活')
+        }
+        
         // 只有在真正没有API配置时才显示介绍（用户主动禁用时不显示）
         if (!hasApiConfig && !state.isUserDisabled) {
           if (wasActive && !isNowActive) {
@@ -74,7 +78,6 @@ export const GlobalAIAssistant: React.FC = () => {
     introTimeoutRef.current = setTimeout(() => {
       if (!state.isActive && !showIntroCard && !state.isUserDisabled) {
         setShowIntroCard(true)
-        log('[GlobalAIAssistant] Showing intro card')
         
         // 10秒后自动隐藏
         setTimeout(() => {
@@ -104,6 +107,42 @@ export const GlobalAIAssistant: React.FC = () => {
     }
   }, [state.isActive, state.isUserDisabled])
 
+  // 处理文本随意搜
+  const handleTextQuery = (text: string) => {
+    if (!state.isActive) {
+      return
+    }
+    
+    const message = `请帮我解释或分析这段文字："${text}"`
+    
+    // 强制确保聊天窗口打开
+    setState(prev => ({
+      ...prev,
+      isOpen: true
+    }))
+    
+    // 创建新的查询请求，通过props传递给MultiTabChat
+    const queryRequest = {
+      text,
+      message,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    }
+    
+    setNewQueryRequest(queryRequest)
+    
+    log(`[GlobalAIAssistant] 随意搜查询: "${text.substring(0, 30)}..."`)
+  }
+
+  // 处理聊天窗口最小化/展开
+  const handleChatToggle = () => {
+    setState(prev => ({
+      ...prev,
+      isOpen: !prev.isOpen
+    }))
+    
+    log(`[GlobalAIAssistant] 悟语聊天窗口${state.isOpen ? '已最小化' : '已展开'}`)
+  }
+
   // 处理助手图标点击
   const handleAssistantClick = () => {
     // 如果正在拖拽，不触发点击
@@ -111,12 +150,7 @@ export const GlobalAIAssistant: React.FC = () => {
     
     if (!state.isActive) return
     
-    setState(prev => ({
-      ...prev,
-      isOpen: !prev.isOpen
-    }))
-    
-    log(`[GlobalAIAssistant] Chat ${state.isOpen ? 'closed' : 'opened'}`)
+    handleChatToggle()
   }
 
   // 处理助手激活/禁用切换
@@ -134,49 +168,7 @@ export const GlobalAIAssistant: React.FC = () => {
       isUserDisabled: !prev.isUserDisabled
     }))
     
-    log(`[GlobalAIAssistant] Assistant ${state.isUserDisabled ? 'enabled' : 'disabled'} by user`)
-  }
-
-  // 处理文本随意搜
-  const handleTextQuery = (text: string) => {
-    log('[GlobalAIAssistant] handleTextQuery called')
-    
-    if (!state.isActive) {
-      log('[GlobalAIAssistant] Assistant not active, ignoring text query')
-      return
-    }
-    
-    const message = `请帮我解释或分析这段文字："${text}"`
-    
-    // 强制确保聊天窗口打开
-    log('[GlobalAIAssistant] Force opening chat window')
-    setState(prev => ({
-      ...prev,
-      isOpen: true
-    }))
-    
-    // 创建新的查询请求，通过props传递给MultiTabChat
-    const queryRequest = {
-      text,
-      message,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9)
-    }
-    
-    log('[GlobalAIAssistant] Created query request:', queryRequest.id, 'Chat should be open:', true)
-    setNewQueryRequest(queryRequest)
-    
-    log(`[GlobalAIAssistant] New query request created: "${text.substring(0, 30)}..."`)
-  }
-
-  // 处理聊天窗口关闭
-  const handleChatClose = () => {
-    setState(prev => ({
-      ...prev,
-      isOpen: false
-    }))
-    
-    // 清除查询请求
-    setNewQueryRequest(null)
+    log(`[GlobalAIAssistant] 悟语${state.isUserDisabled ? '已激活' : '已暂停'}`)
   }
 
   // 处理查询请求完成
@@ -350,10 +342,12 @@ export const GlobalAIAssistant: React.FC = () => {
       {/* 介绍卡片 */}
       {renderIntroCard()}
 
-      {/* 非模态聊天界面 */}
-      {(state.isActive || state.isUserDisabled) && state.isOpen && (
+      {/* 非模态聊天界面 - 常驻组件，通过显示状态控制 */}
+      {(state.isActive || state.isUserDisabled) && (
         <div 
-          className="fixed z-40"
+          className={`fixed z-40 transition-opacity duration-300 ${
+            state.isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
           style={{
             left: `${chatPosition.x}px`,
             top: `${chatPosition.y}px`
@@ -361,7 +355,7 @@ export const GlobalAIAssistant: React.FC = () => {
         >
           <MultiTabChat 
             key="main-chat"
-            onClose={handleChatClose}
+            onClose={handleChatToggle}
             initialMessage={''}
             initialKeyword={''}
             onPositionChange={setChatPosition}

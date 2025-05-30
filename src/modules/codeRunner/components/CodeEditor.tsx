@@ -42,6 +42,12 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     editorRef.current = editor
     setIsEditorReady(true)
 
+    // 将编辑器实例暴露到DOM元素上，供TextSelector使用
+    const editorContainer = editor.getDomNode()?.closest('.monaco-editor')
+    if (editorContainer) {
+      ;(editorContainer as any)._monacoEditor = editor
+    }
+
     // 添加运行代码快捷键 (Ctrl/Cmd + Enter)
     editor.addCommand(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

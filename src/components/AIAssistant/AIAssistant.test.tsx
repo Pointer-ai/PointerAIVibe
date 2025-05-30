@@ -1,10 +1,16 @@
 // AI Assistant 测试文件
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import { GlobalAIAssistant } from './GlobalAIAssistant'
 import * as profileUtils from '../../utils/profile'
 import * as assistantService from './service'
+
+// Mock DOM methods that aren't available in test environment
+Object.defineProperty(Element.prototype, 'scrollIntoView', {
+  value: vi.fn(),
+  writable: true
+})
 
 // Mock dependencies
 vi.mock('../../utils/profile', () => ({
@@ -13,7 +19,22 @@ vi.mock('../../utils/profile', () => ({
 
 vi.mock('./service', () => ({
   isAssistantAvailable: vi.fn(),
-  getAIResponse: vi.fn()
+  getAIResponse: vi.fn(),
+  getChatSessions: vi.fn(),
+  createChatSession: vi.fn(),
+  saveChatSession: vi.fn(),
+  deleteChatSession: vi.fn(),
+  updateSessionTitle: vi.fn(),
+  getLearningProgress: vi.fn(),
+  getAIResponseStream: vi.fn(),
+  AIChatService: vi.fn().mockImplementation(() => ({
+    getMessages: vi.fn(() => []),
+    getLoadingState: vi.fn(() => false),
+    getStreamingContent: vi.fn(() => ({ messageId: null, content: '' })),
+    clearMessages: vi.fn(),
+    sendMessage: vi.fn(),
+    destroy: vi.fn()
+  }))
 }))
 
 vi.mock('../../utils/logger', () => ({
@@ -23,10 +44,23 @@ vi.mock('../../utils/logger', () => ({
 
 const mockGetCurrentProfile = vi.mocked(profileUtils.getCurrentProfile)
 const mockIsAssistantAvailable = vi.mocked(assistantService.isAssistantAvailable)
+const mockGetChatSessions = vi.mocked(assistantService.getChatSessions)
+const mockCreateChatSession = vi.mocked(assistantService.createChatSession)
 
 describe('GlobalAIAssistant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // 设置默认的 mock 返回值
+    mockGetChatSessions.mockReturnValue([])
+    mockCreateChatSession.mockReturnValue({
+      id: 'test-session',
+      title: '对话 12:00',
+      messages: [],
+      createdAt: new Date(),
+      lastActivity: new Date(),
+      trigger: 'manual',
+      isActive: true
+    })
   })
 
   it('should render in inactive state when no profile exists', () => {

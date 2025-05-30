@@ -9,8 +9,6 @@ import { log, error } from '../../utils/logger'
 
 interface MultiTabChatProps {
   onClose: () => void
-  initialMessage?: string
-  initialKeyword?: string
   onPositionChange?: (position: { x: number; y: number }) => void
   initialPosition?: { x: number; y: number }
   onAssistantToggle?: () => void
@@ -26,8 +24,6 @@ interface MultiTabChatProps {
 
 export const MultiTabChat: React.FC<MultiTabChatProps> = ({ 
   onClose, 
-  initialMessage,
-  initialKeyword,
   onPositionChange,
   initialPosition = { x: 100, y: 100 },
   onAssistantToggle,

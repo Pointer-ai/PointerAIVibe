@@ -2,6 +2,7 @@
 
 export { GlobalAIAssistant } from './GlobalAIAssistant'
 export { MultiTabChat } from './MultiTabChat'
+export { AIChat } from './AIChat'
 export { TextSelector } from './TextSelector'
 export { LearningStats } from './LearningStats'
 
@@ -18,5 +19,6 @@ export {
   getLearningStats,
   createChatSession,
   getChatSessions,
-  updateSessionTitle
+  updateSessionTitle,
+  AIChatService
 } from './service' 

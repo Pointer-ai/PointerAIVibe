@@ -1,7 +1,7 @@
 // AI Assistant 服务层
 
 import { getAPIConfig } from '../../modules/profileSettings/service'
-import { AssistantConfig, ChatSession, LearningProgress } from './types'
+import { AssistantConfig, ChatSession, LearningProgress, ChatMessage } from './types'
 import { log, error } from '../../utils/logger'
 import { getProfileData, setProfileData } from '../../utils/profile'
 
@@ -598,5 +598,193 @@ ${context ? `上下文信息：${context}` : ''}`
     } else {
       throw new Error('AI助手暂时不可用，请稍后重试。')
     }
+  }
+}
+
+/**
+ * AI聊天服务类 - 提供底层聊天功能
+ */
+export class AIChatService {
+  private messages: ChatMessage[] = []
+  private isLoading = false
+  private streamingMessageId: string | null = null
+  private streamingContent = ''
+  
+  // 事件回调
+  private onMessagesUpdate?: (messages: ChatMessage[]) => void
+  private onLoadingStateChange?: (isLoading: boolean) => void
+  private onStreamingUpdate?: (messageId: string, content: string) => void
+  private onStreamingComplete?: (messageId: string, finalContent: string) => void
+
+  constructor(
+    callbacks?: {
+      onMessagesUpdate?: (messages: ChatMessage[]) => void
+      onLoadingStateChange?: (isLoading: boolean) => void
+      onStreamingUpdate?: (messageId: string, content: string) => void
+      onStreamingComplete?: (messageId: string, finalContent: string) => void
+    }
+  ) {
+    if (callbacks) {
+      this.onMessagesUpdate = callbacks.onMessagesUpdate
+      this.onLoadingStateChange = callbacks.onLoadingStateChange
+      this.onStreamingUpdate = callbacks.onStreamingUpdate
+      this.onStreamingComplete = callbacks.onStreamingComplete
+    }
+  }
+
+  /**
+   * 获取当前消息列表
+   */
+  getMessages(): ChatMessage[] {
+    return [...this.messages]
+  }
+
+  /**
+   * 获取加载状态
+   */
+  getLoadingState(): boolean {
+    return this.isLoading
+  }
+
+  /**
+   * 获取流式内容
+   */
+  getStreamingContent(): { messageId: string | null; content: string } {
+    return {
+      messageId: this.streamingMessageId,
+      content: this.streamingContent
+    }
+  }
+
+  /**
+   * 清空聊天记录
+   */
+  clearMessages(): void {
+    this.messages = []
+    this.onMessagesUpdate?.(this.messages)
+    log('[AIChatService] Messages cleared')
+  }
+
+  /**
+   * 添加消息
+   */
+  addMessage(message: ChatMessage): void {
+    this.messages.push(message)
+    this.onMessagesUpdate?.(this.messages)
+  }
+
+  /**
+   * 更新最后一条消息
+   */
+  updateLastMessage(updatedMessage: ChatMessage): void {
+    if (this.messages.length > 0) {
+      this.messages[this.messages.length - 1] = updatedMessage
+      this.onMessagesUpdate?.(this.messages)
+    }
+  }
+
+  /**
+   * 移除最后一条消息
+   */
+  removeLastMessage(): void {
+    if (this.messages.length > 0) {
+      this.messages.pop()
+      this.onMessagesUpdate?.(this.messages)
+    }
+  }
+
+  /**
+   * 发送消息并获取AI回复
+   */
+  async sendMessage(content: string, keyword?: string): Promise<void> {
+    if (!content.trim() || this.isLoading) {
+      return
+    }
+
+    // 添加用户消息
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: content.trim(),
+      timestamp: new Date(),
+      keyword
+    }
+
+    this.addMessage(userMessage)
+
+    // 设置加载状态
+    this.isLoading = true
+    this.onLoadingStateChange?.(true)
+
+    try {
+      // 创建流式AI消息
+      const assistantMessageId = (Date.now() + 1).toString()
+      this.streamingMessageId = assistantMessageId
+      this.streamingContent = ''
+      
+      // 先添加一个空的AI消息占位符
+      const placeholderMessage: ChatMessage = {
+        id: assistantMessageId,
+        type: 'assistant',
+        content: '',
+        timestamp: new Date()
+      }
+      
+      this.addMessage(placeholderMessage)
+
+      // 获取流式AI回复
+      const response = await getAIResponseStream(
+        content.trim(),
+        undefined,
+        (chunk: string) => {
+          // 实时更新流式内容
+          this.streamingContent += chunk
+          this.onStreamingUpdate?.(assistantMessageId, this.streamingContent)
+        }
+      )
+      
+      // 完成后更新最终消息
+      const finalMessage: ChatMessage = {
+        id: assistantMessageId,
+        type: 'assistant',
+        content: response,
+        timestamp: new Date()
+      }
+
+      this.updateLastMessage(finalMessage)
+      this.onStreamingComplete?.(assistantMessageId, response)
+      
+      log('[AIChatService] Message sent and response received')
+    } catch (err) {
+      error('[AIChatService] Failed to get AI response:', err)
+      
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: '抱歉，我暂时无法回答您的问题。请检查网络连接或稍后重试。',
+        timestamp: new Date()
+      }
+
+      this.updateLastMessage(errorMessage)
+    } finally {
+      this.isLoading = false
+      this.streamingMessageId = null
+      this.streamingContent = ''
+      this.onLoadingStateChange?.(false)
+    }
+  }
+
+  /**
+   * 销毁服务实例
+   */
+  destroy(): void {
+    this.messages = []
+    this.isLoading = false
+    this.streamingMessageId = null
+    this.streamingContent = ''
+    this.onMessagesUpdate = undefined
+    this.onLoadingStateChange = undefined
+    this.onStreamingUpdate = undefined
+    this.onStreamingComplete = undefined
   }
 } 

@@ -356,8 +356,6 @@ export const GlobalAIAssistant: React.FC = () => {
           <MultiTabChat 
             key="main-chat"
             onClose={handleChatToggle}
-            initialMessage={''}
-            initialKeyword={''}
             onPositionChange={setChatPosition}
             initialPosition={chatPosition}
             onAssistantToggle={handleAssistantToggle}

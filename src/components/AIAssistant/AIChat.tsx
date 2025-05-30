@@ -1,222 +1,78 @@
-// AI 对话界面组件
+// AI 对话组件 - 专门用于简历分析等简单对话场景
 
 import React, { useState, useRef, useEffect } from 'react'
 import { ChatMessage } from './types'
-import { getAIResponseStream } from './service'
-import { log, error } from '../../utils/logger'
+import { AIChatService } from './service'
+import { log } from '../../utils/logger'
 
 interface AIChatProps {
   onClose: () => void
   initialMessage?: string
-  onSkillToggle?: () => void
-  isSkillActive?: boolean
-  onPositionChange?: (position: { x: number; y: number }) => void
-  initialPosition?: { x: number; y: number }
-  onAssistantToggle?: () => void
-  isAssistantActive?: boolean
   hasApiConfig?: boolean
+  className?: string
 }
 
 export const AIChat: React.FC<AIChatProps> = ({ 
   onClose, 
   initialMessage, 
-  onSkillToggle, 
-  isSkillActive = false,
-  onPositionChange,
-  initialPosition = { x: 100, y: 100 },
-  onAssistantToggle,
-  isAssistantActive = false,
-  hasApiConfig = false
+  hasApiConfig = false,
+  className = ''
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
-  const [streamingContent, setStreamingContent] = useState('')
-  const [isDragging, setIsDragging] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [position, setPosition] = useState(initialPosition)
-  const [chatSize, setChatSize] = useState({ width: 384, height: 384 }) // w-96 h-96 = 384px
-  const [isResizing, setIsResizing] = useState(false)
+  const [streamingInfo, setStreamingInfo] = useState<{ messageId: string | null; content: string }>({ 
+    messageId: null, 
+    content: '' 
+  })
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const dragRef = useRef<{ startX: number; startY: number; startMouseX: number; startMouseY: number } | null>(null)
+  const chatServiceRef = useRef<AIChatService | null>(null)
 
+  // 初始化聊天服务
   useEffect(() => {
+    chatServiceRef.current = new AIChatService({
+      onMessagesUpdate: (newMessages) => {
+        setMessages(newMessages)
+      },
+      onLoadingStateChange: (loading) => {
+        setIsLoading(loading)
+      },
+      onStreamingUpdate: (messageId, content) => {
+        setStreamingInfo({ messageId, content })
+      },
+      onStreamingComplete: () => {
+        setStreamingInfo({ messageId: null, content: '' })
+      }
+    })
+
     // 如果有初始消息，自动发送
     if (initialMessage) {
-      handleSendMessage(initialMessage)
+      setTimeout(() => {
+        chatServiceRef.current?.sendMessage(initialMessage)
+      }, 300)
     }
-    
-    // 聚焦输入框（延迟一下，避免干扰用户操作）
+
+    // 聚焦输入框
     setTimeout(() => inputRef.current?.focus(), 300)
+
+    // 清理函数
+    return () => {
+      chatServiceRef.current?.destroy()
+    }
   }, [initialMessage])
 
   useEffect(() => {
     // 滚动到底部
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  // 流式内容更新时自动滚动到底部
-  useEffect(() => {
-    if (streamingContent) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [streamingContent])
-
-  // 新开对话
-  const handleNewChat = () => {
-    setMessages([])
-    setInputValue('')
-    inputRef.current?.focus()
-    log('[AIChat] New chat started')
-  }
-
-  // 拖拽相关函数
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    const rect = e.currentTarget.getBoundingClientRect()
-    dragRef.current = {
-      startX: position.x,
-      startY: position.y,
-      startMouseX: e.clientX,
-      startMouseY: e.clientY
-    }
-    
-    setIsDragging(true)
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragRef.current) return
-      
-      e.preventDefault()
-      
-      const deltaX = e.clientX - dragRef.current.startMouseX
-      const deltaY = e.clientY - dragRef.current.startMouseY
-      
-      const newX = Math.max(0, Math.min(window.innerWidth - 400, dragRef.current.startX + deltaX))
-      const newY = Math.max(0, Math.min(window.innerHeight - 400, dragRef.current.startY + deltaY))
-      
-      const newPosition = { x: newX, y: newY }
-      setPosition(newPosition)
-      onPositionChange?.(newPosition)
-    }
-    
-    const handleMouseUp = () => {
-      setIsDragging(false)
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-    
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }
-
-  // 处理调整大小的鼠标事件
-  const handleResizeMouseDown = (e: React.MouseEvent, direction: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    setIsResizing(true)
-    const startX = e.clientX
-    const startY = e.clientY
-    const startWidth = chatSize.width
-    const startHeight = chatSize.height
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault()
-      
-      let newWidth = startWidth
-      let newHeight = startHeight
-      
-      if (direction.includes('right')) {
-        newWidth = Math.max(300, Math.min(800, startWidth + (e.clientX - startX)))
-      }
-      if (direction.includes('bottom')) {
-        newHeight = Math.max(300, Math.min(600, startHeight + (e.clientY - startY)))
-      }
-      
-      setChatSize({ width: newWidth, height: newHeight })
-    }
-    
-    const handleMouseUp = () => {
-      setIsResizing(false)
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-    
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-  }
+  }, [messages, streamingInfo.content])
 
   const handleSendMessage = async (message: string = inputValue) => {
-    if (!message.trim() || isLoading) return
+    if (!message.trim() || isLoading || !chatServiceRef.current) return
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: message.trim(),
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, userMessage])
     setInputValue('')
-    setIsLoading(true)
-
-    try {
-      // 创建流式AI消息
-      const assistantMessageId = (Date.now() + 1).toString()
-      setStreamingMessageId(assistantMessageId)
-      setStreamingContent('')
-      
-      // 先添加一个空的AI消息占位符
-      const placeholderMessage: ChatMessage = {
-        id: assistantMessageId,
-        type: 'assistant',
-        content: '',
-        timestamp: new Date()
-      }
-      
-      setMessages(prev => [...prev, placeholderMessage])
-
-      // 获取流式AI回复
-      const response = await getAIResponseStream(
-        message.trim(),
-        undefined,
-        (chunk: string) => {
-          // 实时更新流式内容
-          setStreamingContent(prev => prev + chunk)
-        }
-      )
-      
-      // 完成后更新最终消息
-      const assistantMessage: ChatMessage = {
-        id: assistantMessageId,
-        type: 'assistant',
-        content: response,
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev.slice(0, -1), assistantMessage])
-      log('[AIChat] Message sent and response received')
-    } catch (err) {
-      error('[AIChat] Failed to get AI response:', err)
-      
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: '抱歉，我暂时无法回答您的问题。请检查网络连接或稍后重试。',
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev.slice(0, -1), errorMessage])
-    } finally {
-      setIsLoading(false)
-      setStreamingMessageId(null)
-      setStreamingContent('')
-    }
+    await chatServiceRef.current.sendMessage(message.trim())
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -226,6 +82,13 @@ export const AIChat: React.FC<AIChatProps> = ({
     }
   }
 
+  const handleNewChat = () => {
+    chatServiceRef.current?.clearMessages()
+    setInputValue('')
+    inputRef.current?.focus()
+    log('[AIChat] New chat started')
+  }
+
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('zh-CN', { 
       hour: '2-digit', 
@@ -233,75 +96,41 @@ export const AIChat: React.FC<AIChatProps> = ({
     })
   }
 
-  return (
-    <div className="flex flex-col bg-white rounded-xl shadow-2xl border border-gray-200" style={{ width: `${chatSize.width}px`, height: `${chatSize.height}px` }}>
-      {/* 调整大小的手柄 */}
-      {/* 右边缘 */}
-      <div
-        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-300 transition-colors"
-        onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
-      />
-      
-      {/* 底边缘 */}
-      <div
-        className="absolute bottom-0 left-0 w-full h-1 cursor-ns-resize hover:bg-blue-300 transition-colors"
-        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')}
-      />
-      
-      {/* 右下角 */}
-      <div
-        className="absolute bottom-0 right-0 w-3 h-3 cursor-nw-resize hover:bg-blue-400 transition-colors"
-        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
-      />
-      
-      {/* 右下角调整大小图标 */}
-      <div className="absolute bottom-1 right-1 pointer-events-none">
-        <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M9.5 13a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H10v1.5a.5.5 0 0 1-.5.5z"/>
-          <path d="M13 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0v-2z"/>
-          <path d="M2.5 13a.5.5 0 0 1 0-1h2v-1.5a.5.5 0 0 1 1 0v2a.5.5 0 0 1-.5.5h-2z"/>
-          <path d="M2 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H3v1.5a.5.5 0 0 1-1 0v-2z"/>
-        </svg>
+  if (!hasApiConfig) {
+    return (
+      <div className={`flex flex-col bg-white rounded-xl shadow-lg border border-gray-200 w-96 h-96 ${className}`}>
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-t-xl">
+          <span className="font-medium">AI 助手</span>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="flex-1 flex items-center justify-center p-8 text-center">
+          <div>
+            <p className="text-gray-600 mb-2">⚠️ 需要配置 API Key</p>
+            <p className="text-sm text-gray-500">
+              请在设置中配置 AI API Key 后使用助手功能
+            </p>
+          </div>
+        </div>
       </div>
+    )
+  }
 
-      {/* 标题栏 - 可拖拽 */}
-      <div 
-        className={`flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-t-xl ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
-        onMouseDown={handleMouseDown}
-      >
+  return (
+    <div className={`flex flex-col bg-white rounded-xl shadow-lg border border-gray-200 w-96 h-96 ${className}`}>
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-t-xl">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-          <span className="font-medium">AI 学习助手</span>
+          <span className="font-medium">AI 助手</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* 助手激活开关 */}
-          {hasApiConfig && onAssistantToggle && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onAssistantToggle()
-              }}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                isAssistantActive ? 'bg-green-400' : 'bg-white/30'
-              }`}
-              title={isAssistantActive ? '点击暂停助手' : '点击激活助手'}
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                  isAssistantActive ? 'translate-x-5' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          )}
-          
-          {/* 新开对话按钮 */}
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleNewChat()
-            }}
+            onClick={handleNewChat}
             className="p-1 hover:bg-white/20 rounded-full transition-colors"
             title="新开对话"
           >
@@ -310,26 +139,8 @@ export const AIChat: React.FC<AIChatProps> = ({
             </svg>
           </button>
           
-          {/* 设置按钮 */}
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowSettings(!showSettings)
-            }}
-            className="p-1 hover:bg-white/20 rounded-full transition-colors"
-            title="设置"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-          
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClose()
-            }}
+            onClick={onClose}
             className="p-1 hover:bg-white/20 rounded-full transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -339,65 +150,13 @@ export const AIChat: React.FC<AIChatProps> = ({
         </div>
       </div>
 
-      {/* 设置面板 */}
-      {showSettings && (
-        <div className="bg-gray-50 border-b border-gray-200 p-3">
-          {/* 关键词识别开关 */}
-          {isAssistantActive && onSkillToggle && (
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">关键词识别</span>
-                <button
-                  onClick={() => {
-                    onSkillToggle()
-                    setShowSettings(false)
-                  }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isSkillActive ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isSkillActive ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                开启后会自动识别页面中的计算机专业术语
-              </p>
-            </div>
-          )}
-          
-          {/* 没有API配置的提示 */}
-          {!hasApiConfig && (
-            <div className="text-center py-2">
-              <p className="text-sm text-gray-600 mb-2">⚠️ 需要配置API Key</p>
-              <p className="text-xs text-gray-500">
-                请在Profile设置中配置AI API Key后使用助手功能
-              </p>
-            </div>
-          )}
-          
-          {/* 助手被禁用的提示 */}
-          {hasApiConfig && !isAssistantActive && (
-            <div className="text-center py-2">
-              <p className="text-sm text-gray-600 mb-2">🛑 助手已暂停</p>
-              <p className="text-xs text-gray-500">
-                点击标题栏的开关重新激活助手
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* 消息列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center text-gray-500 py-8">
             <div className="text-4xl mb-2">🤖</div>
-            <p>你好！我是你的AI学习助手</p>
-            <p className="text-sm mt-1">问我任何计算机专业相关的问题吧~</p>
+            <p>你好！我是你的AI助手</p>
+            <p className="text-sm mt-1">问我任何问题吧~</p>
           </div>
         )}
 
@@ -415,12 +174,12 @@ export const AIChat: React.FC<AIChatProps> = ({
             >
               <div className="whitespace-pre-wrap break-words">
                 {/* 如果是流式消息且正在流式输出，显示实时内容；否则显示完整内容 */}
-                {message.type === 'assistant' && message.id === streamingMessageId && streamingContent 
-                  ? streamingContent 
+                {message.type === 'assistant' && message.id === streamingInfo.messageId && streamingInfo.content 
+                  ? streamingInfo.content 
                   : message.content}
                 
                 {/* 流式输出时显示光标 */}
-                {message.type === 'assistant' && message.id === streamingMessageId && (
+                {message.type === 'assistant' && message.id === streamingInfo.messageId && (
                   <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-1 rounded-full"></span>
                 )}
               </div>
@@ -433,7 +192,7 @@ export const AIChat: React.FC<AIChatProps> = ({
           </div>
         ))}
 
-        {isLoading && !streamingMessageId && (
+        {isLoading && !streamingInfo.messageId && (
           <div className="flex justify-start">
             <div className="bg-gray-100 text-gray-800 px-4 py-2 rounded-2xl rounded-bl-none">
               <div className="flex items-center gap-1">
@@ -462,22 +221,17 @@ export const AIChat: React.FC<AIChatProps> = ({
             onKeyPress={handleKeyPress}
             placeholder="输入你的问题..."
             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            disabled={isLoading || !isAssistantActive}
+            disabled={isLoading}
           />
           <button
             onClick={() => handleSendMessage()}
-            disabled={!inputValue.trim() || isLoading || !isAssistantActive}
+            disabled={!inputValue.trim() || isLoading}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
           </button>
-        </div>
-        
-        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-          <span>💡 提示：点击页面中高亮的关键词可以快速询问</span>
-          <span>· 拖拽标题栏移动窗口</span>
         </div>
       </div>
     </div>

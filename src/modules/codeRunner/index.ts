@@ -1,51 +1,50 @@
-import { log } from '../../utils/logger'
+// CodeRunner 模块主要导出
 
-let pyodideWorker: Worker | null = null
-
-/**
- * 初始化 Pyodide Worker
- */
-export const initPyodide = async (): Promise<void> => {
-  log('[codeRunner] Initializing Pyodide')
-  
-  try {
-    pyodideWorker = new Worker(
-      new URL('./pyodideWorker.ts', import.meta.url),
-      { type: 'module' }
-    )
-    
-    log('[codeRunner] Pyodide worker created')
-  } catch (error) {
-    log('[codeRunner] Failed to create Pyodide worker', error)
-    throw error
-  }
-}
-
-/**
- * 运行 Python 代码
- */
-export const runPython = async (_code: string): Promise<string> => {
-  log('[codeRunner] Running Python code')
-  
-  if (!pyodideWorker) {
-    throw new Error('Pyodide not initialized')
-  }
-  
-  // TODO: 实现与 Worker 的通信
-  return 'Python 执行结果占位'
-}
-
-/**
- * 清理资源
- */
-export const cleanup = (): void => {
-  if (pyodideWorker) {
-    pyodideWorker.terminate()
-    pyodideWorker = null
-    log('[codeRunner] Pyodide worker terminated')
-  }
-}
-
+// 原有组件导出
 export { CodeRunnerView } from './view'
-export * from './types'
-export * from './service' 
+export { CodeEditor } from './components/CodeEditor'
+export { OutputPanel } from './components/OutputPanel'
+
+// 新增集成组件导出
+export { 
+  IntegratedCodeRunner,
+  PythonRunner,
+  JavaScriptRunner, 
+  CppRunner,
+  CompactCodeRunner,
+  CodeDisplay
+} from './components/IntegratedCodeRunner'
+
+// Runtime Context 导出
+export {
+  RuntimeProvider,
+  useRuntime,
+  useRuntimeStatus,
+  useCodeExecution,
+  useLanguageRuntime
+} from './context/RuntimeContext'
+
+// 服务层导出
+export {
+  initRuntime,
+  runCode,
+  runPython,
+  runCpp,
+  runJavaScript,
+  getRuntimeStatus,
+  getLanguageExecutionHistory,
+  cleanup,
+  preloadRuntime,
+  preloadAllRuntimes
+} from './service'
+
+// 类型导出
+export type {
+  CodeExecution,
+  RuntimeStatus
+} from './types'
+
+export type { IntegratedCodeRunnerProps } from './components/IntegratedCodeRunner'
+
+// 定义支持的语言类型
+export type SupportedLanguage = 'python' | 'cpp' | 'javascript' 

@@ -663,9 +663,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
             <div className="p-8 bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-gray-300 transition-all">
               <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-xl font-semibold mb-3 text-gray-900">实时代码执行</h3>
+              <h3 className="text-xl font-semibold mb-3 text-gray-900">专业代码环境</h3>
               <p className="text-gray-600">
-                基于Pyodide的浏览器Python环境，无需安装即可运行代码，学习效果立竿见影。
+                集成Monaco Editor（VS Code内核），支持Python/JavaScript/C++三语言运行，语法高亮+智能补全。
               </p>
             </div>
           </div>

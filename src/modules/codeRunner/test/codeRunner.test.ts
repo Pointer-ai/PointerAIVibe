@@ -137,10 +137,21 @@ describe('codeRunner', () => {
       expect(result.error).toBe('Simulated error')
     })
     
-    it('应该在 Pyodide 未初始化时抛出错误', async () => {
+    it('应该在 Pyodide 未初始化时自动初始化并执行', async () => {
       cleanup()
       
-      await expect(runPython('print("test")')).rejects.toThrow('Pyodide not initialized')
+      // 验证未初始化状态
+      expect(getPyodideStatus().isReady).toBe(false)
+      
+      // 调用runPython应该自动初始化并成功执行
+      const result = await runPython('print("test")')
+      
+      expect(result.code).toBe('print("test")')
+      expect(result.status).toBe('success')
+      expect(result.output).toBe('Output: print("test")')
+      
+      // 验证已经自动初始化
+      expect(getPyodideStatus().isReady).toBe(true)
     })
   })
   

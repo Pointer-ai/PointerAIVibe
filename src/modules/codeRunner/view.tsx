@@ -2,40 +2,85 @@ import React, { useState, useEffect } from 'react'
 import { CodeEditor } from './components/CodeEditor'
 import { OutputPanel } from './components/OutputPanel'
 import { 
-  initPyodide, 
-  runPython, 
-  getPyodideStatus,
-  getExecutionHistory,
-  cleanup 
+  initRuntime,
+  runCode,
+  getRuntimeStatus,
+  getLanguageExecutionHistory,
+  cleanup,
+  preloadRuntime
 } from './service'
 import { CODE_EXAMPLES, CodeExecution } from './types'
 import { log, error } from '../../utils/logger'
 
+type SupportedLanguage = 'python' | 'cpp' | 'javascript'
+
 export const CodeRunnerView: React.FC = () => {
-  const [code, setCode] = useState(CODE_EXAMPLES[0].code)
-  const [selectedExample, setSelectedExample] = useState(CODE_EXAMPLES[0].id)
-  const [pyodideStatus, setPyodideStatus] = useState(getPyodideStatus())
+  const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('javascript') // 默认JavaScript最快
+  const [code, setCode] = useState('')
+  const [selectedExample, setSelectedExample] = useState('')
+  const [runtimeStatus, setRuntimeStatus] = useState(getRuntimeStatus())
   const [isRunning, setIsRunning] = useState(false)
   const [currentExecution, setCurrentExecution] = useState<CodeExecution | undefined>()
   const [executionHistory, setExecutionHistory] = useState<CodeExecution[]>([])
 
-  // 初始化 Pyodide
+  // 获取当前语言的示例
+  const currentLanguageExamples = CODE_EXAMPLES.filter(example => example.language === selectedLanguage)
+
+  // 初始化时设置第一个示例
   useEffect(() => {
-    const init = async () => {
-      try {
-        log('[CodeRunnerView] Initializing Pyodide')
-        await initPyodide()
-        setPyodideStatus(getPyodideStatus())
-        log('[CodeRunnerView] Pyodide initialized')
-      } catch (err) {
-        error('[CodeRunnerView] Failed to initialize Pyodide', err)
-        setPyodideStatus(getPyodideStatus())
-      }
+    const firstExample = currentLanguageExamples[0]
+    if (firstExample && !selectedExample) {
+      setSelectedExample(firstExample.id)
+      setCode(firstExample.code)
     }
+  }, [currentLanguageExamples, selectedExample])
 
-    init()
+  // 预热运行时环境（可选的性能优化）
+  useEffect(() => {
+    // 预热 JavaScript 运行时（最快）
+    preloadRuntime('javascript').catch(err => {
+      error('[CodeRunnerView] Failed to preload JavaScript runtime', err)
+    })
+  }, [])
 
-    // 清理
+  // 语言切换时更新代码示例和运行时
+  useEffect(() => {
+    const firstExample = currentLanguageExamples[0]
+    if (firstExample) {
+      setSelectedExample(firstExample.id)
+      setCode(firstExample.code)
+    }
+    
+    // 清空当前执行结果
+    setCurrentExecution(undefined)
+    
+    // 更新执行历史
+    setExecutionHistory(getLanguageExecutionHistory(selectedLanguage))
+    
+    // 更新运行时状态
+    setRuntimeStatus(getRuntimeStatus())
+    
+    // Lazy loading：只在切换到某语言时才初始化（如果需要）
+    const currentStatus = getRuntimeStatus()[selectedLanguage]
+    if (!currentStatus?.isReady && !currentStatus?.isLoading) {
+      log(`[CodeRunnerView] Preloading ${selectedLanguage} runtime`)
+      preloadRuntime(selectedLanguage).catch(err => {
+        error(`[CodeRunnerView] Failed to preload ${selectedLanguage} runtime`, err)
+      })
+    }
+  }, [selectedLanguage])
+
+  // 监听运行时状态变化
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRuntimeStatus(getRuntimeStatus())
+    }, 1000)
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  // 清理资源
+  useEffect(() => {
     return () => {
       cleanup()
     }
@@ -43,13 +88,14 @@ export const CodeRunnerView: React.FC = () => {
 
   // 运行代码
   const handleRun = async () => {
-    if (!pyodideStatus.isReady || isRunning) return
+    if (isRunning) return
 
     setIsRunning(true)
     try {
-      const execution = await runPython(code)
+      const execution = await runCode(code, selectedLanguage)
       setCurrentExecution(execution)
-      setExecutionHistory(getExecutionHistory())
+      setExecutionHistory(getLanguageExecutionHistory(selectedLanguage))
+      setRuntimeStatus(getRuntimeStatus()) // 更新状态
     } catch (err) {
       error('[CodeRunnerView] Failed to run code', err)
     } finally {
@@ -66,37 +112,153 @@ export const CodeRunnerView: React.FC = () => {
     }
   }
 
+  // 切换语言
+  const handleLanguageChange = (language: SupportedLanguage) => {
+    setSelectedLanguage(language)
+  }
+
+  // 获取语言显示信息
+  const getLanguageInfo = (lang: SupportedLanguage) => {
+    switch (lang) {
+      case 'javascript':
+        return { icon: '🚀', name: 'JavaScript', description: '最快启动' }
+      case 'python':
+        return { icon: '🐍', name: 'Python', description: '丰富库支持' }
+      case 'cpp':
+        return { icon: '⚡', name: 'C++', description: '高性能编译' }
+    }
+  }
+
+  const currentStatus = runtimeStatus[selectedLanguage]
+  const currentLangInfo = getLanguageInfo(selectedLanguage)
+
   return (
     <div className="bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto p-6">
         {/* 页面标题 */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">代码运行器</h1>
+          <h1 className="text-3xl font-bold text-gray-900">多语言代码运行器</h1>
           <p className="mt-2 text-gray-600">
-            在浏览器中运行 Python 代码，无需安装任何环境
+            在浏览器中运行多种编程语言，支持 Lazy Loading 和实例缓存优化
           </p>
         </div>
 
-        {/* Pyodide 状态 */}
-        {pyodideStatus.isLoading && (
+        {/* 语言选择器 */}
+        <div className="mb-6 bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-lg font-semibold mb-4">选择编程语言</h2>
+          <div className="flex gap-3">
+            {(['javascript', 'python', 'cpp'] as SupportedLanguage[]).map(lang => {
+              const langInfo = getLanguageInfo(lang)
+              const status = runtimeStatus[lang]
+              
+              return (
+                <button
+                  key={lang}
+                  onClick={() => handleLanguageChange(lang)}
+                  className={`relative px-4 py-3 rounded-lg font-medium transition-colors ${
+                    selectedLanguage === lang
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{langInfo.icon}</span>
+                    <div className="text-left">
+                      <div className="font-medium">{langInfo.name}</div>
+                      <div className="text-xs opacity-75">{langInfo.description}</div>
+                    </div>
+                  </div>
+                  
+                  {/* 状态指示器 */}
+                  {status?.isLoading && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
+                  )}
+                  {status?.isReady && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full"></div>
+                  )}
+                  {status?.error && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-400 rounded-full"></div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 运行时状态 */}
+        {currentStatus?.isLoading && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mr-3"></div>
-              <span className="text-blue-700">正在加载 Python 运行环境...</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mr-3"></div>
+                <span className="text-blue-700">
+                  正在加载 {currentLangInfo.name} 运行环境...
+                </span>
+              </div>
+              
+              {/* 如果是C++且加载时间超过10秒，显示提示 */}
+              {selectedLanguage === 'cpp' && (
+                <div className="text-xs text-blue-600">
+                  首次加载可能需要几秒钟...
+                </div>
+              )}
+            </div>
+            
+            {/* 进度提示 */}
+            {selectedLanguage === 'cpp' && (
+              <div className="mt-2 text-xs text-blue-600">
+                正在检查在线编译服务连接...
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentStatus?.error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-red-700">加载失败: {currentStatus.error}</span>
+                
+                {/* 针对C++的特殊说明 */}
+                {selectedLanguage === 'cpp' && (
+                  <div className="mt-2 text-sm text-red-600">
+                    <div>可能的原因：</div>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>网络连接问题</li>
+                      <li>在线编译服务不可用</li>
+                      <li>防火墙或代理设置阻止连接</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => preloadRuntime(selectedLanguage)}
+                  className="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded"
+                >
+                  重试
+                </button>
+                
+                {/* 针对C++提供切换到JavaScript的建议 */}
+                {selectedLanguage === 'cpp' && (
+                  <button
+                    onClick={() => handleLanguageChange('javascript')}
+                    className="px-3 py-1 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 rounded"
+                  >
+                    切换到 JavaScript
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
 
-        {pyodideStatus.error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <span className="text-red-700">加载失败: {pyodideStatus.error}</span>
-          </div>
-        )}
-
-        {pyodideStatus.isReady && (
+        {currentStatus?.isReady && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
             <span className="text-green-700">
-              Python 环境已就绪 {pyodideStatus.version && `(Pyodide ${pyodideStatus.version})`}
+              {currentLangInfo.name} 环境已就绪 
+              {currentStatus.version && ` (${currentStatus.version})`}
             </span>
           </div>
         )}
@@ -105,9 +267,11 @@ export const CodeRunnerView: React.FC = () => {
           {/* 左侧：代码示例 */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-lg font-semibold mb-4">代码示例</h2>
+              <h2 className="text-lg font-semibold mb-4">
+                代码示例 ({currentLangInfo.name})
+              </h2>
               <div className="space-y-2">
-                {CODE_EXAMPLES.map((example) => (
+                {currentLanguageExamples.map((example) => (
                   <button
                     key={example.id}
                     onClick={() => handleSelectExample(example.id)}
@@ -153,14 +317,20 @@ export const CodeRunnerView: React.FC = () => {
                         <span className="text-sm font-mono truncate">
                           {exec.code.split('\n')[0].substring(0, 30)}...
                         </span>
-                        <span className={`text-xs ${
-                          exec.status === 'success' ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {exec.status === 'success' ? '成功' : '失败'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            {exec.language.toUpperCase()}
+                          </span>
+                          <span className={`text-xs ${
+                            exec.status === 'success' ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {exec.status === 'success' ? '成功' : '失败'}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         {new Date(exec.timestamp).toLocaleTimeString('zh-CN')}
+                        {exec.executionTime && ` (${exec.executionTime}ms)`}
                       </div>
                     </button>
                   ))}
@@ -174,17 +344,19 @@ export const CodeRunnerView: React.FC = () => {
             {/* 代码编辑器 */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">代码编辑器</h2>
+                <h2 className="text-lg font-semibold">
+                  代码编辑器 ({currentLangInfo.name})
+                </h2>
                 <button
                   onClick={handleRun}
-                  disabled={!pyodideStatus.isReady || isRunning}
+                  disabled={!currentStatus?.isReady || isRunning}
                   className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    !pyodideStatus.isReady || isRunning
+                    !currentStatus?.isReady || isRunning
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-blue-500 text-white hover:bg-blue-600'
                   }`}
                 >
-                  {isRunning ? '运行中...' : '运行代码'}
+                  {isRunning ? '运行中...' : `运行 ${currentLangInfo.name}`}
                 </button>
               </div>
               
@@ -192,8 +364,8 @@ export const CodeRunnerView: React.FC = () => {
                 value={code}
                 onChange={setCode}
                 onRun={handleRun}
-                language="python"
-                readOnly={!pyodideStatus.isReady}
+                language={selectedLanguage}
+                readOnly={!currentStatus?.isReady}
               />
             </div>
 

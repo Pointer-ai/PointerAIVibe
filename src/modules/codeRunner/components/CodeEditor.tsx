@@ -4,7 +4,7 @@ interface CodeEditorProps {
   value: string
   onChange: (value: string) => void
   onRun?: () => void
-  language?: 'python' | 'javascript'
+  language?: 'python' | 'cpp' | 'javascript'
   theme?: 'light' | 'dark'
   readOnly?: boolean
 }

@@ -1,15 +1,31 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { 
-  IntegratedCodeRunner, 
-  PythonRunner, 
-  JavaScriptRunner, 
-  CppRunner,
-  CompactCodeRunner,
-  CodeDisplay,
-  RuntimeProvider 
-} from '../index'
+
+// Mock service functions directly in vi.mock
+vi.mock('../service', () => ({
+  getRuntimeStatus: vi.fn(() => ({
+    python: { isLoading: false, isReady: true, version: '3.9' },
+    cpp: { isLoading: false, isReady: false },
+    javascript: { isLoading: false, isReady: true, version: 'ES2022' }
+  })),
+  initRuntime: vi.fn(() => Promise.resolve()),
+  runCode: vi.fn(() => Promise.resolve({
+    id: 'test-exec-1',
+    code: 'test code',
+    language: 'javascript',
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    output: 'test output',
+    executionTime: 100
+  })),
+  getLanguageExecutionHistory: vi.fn(() => []),
+  cleanup: vi.fn(),
+  preloadRuntime: vi.fn(() => Promise.resolve())
+}))
+
+// Import the mocked functions
+import { getRuntimeStatus, runCode } from '../service'
 
 // Mock Monaco Editor
 const mockEditor = {
@@ -61,31 +77,15 @@ Object.defineProperty(window, 'monaco', {
   writable: true
 })
 
-// Mock service functions
-const mockGetRuntimeStatus = vi.fn(() => ({
-  python: { isLoading: false, isReady: true, version: '3.9' },
-  cpp: { isLoading: false, isReady: false },
-  javascript: { isLoading: false, isReady: true, version: 'ES2022' }
-}))
-
-const mockRunCode = vi.fn(() => Promise.resolve({
-  id: 'test-exec-1',
-  code: 'test code',
-  language: 'javascript',
-  timestamp: new Date().toISOString(),
-  status: 'success',
-  output: 'test output',
-  executionTime: 100
-}))
-
-vi.mock('../service', () => ({
-  getRuntimeStatus: mockGetRuntimeStatus,
-  initRuntime: vi.fn(() => Promise.resolve()),
-  runCode: mockRunCode,
-  getLanguageExecutionHistory: vi.fn(() => []),
-  cleanup: vi.fn(),
-  preloadRuntime: vi.fn(() => Promise.resolve())
-}))
+import { 
+  IntegratedCodeRunner, 
+  PythonRunner, 
+  JavaScriptRunner, 
+  CppRunner,
+  CompactCodeRunner,
+  CodeDisplay,
+  RuntimeProvider 
+} from '../index'
 
 const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <RuntimeProvider config={{ preloadLanguages: [] }}>
@@ -97,7 +97,7 @@ describe('IntegratedCodeRunner', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // 重置 mock 状态
-    mockGetRuntimeStatus.mockReturnValue({
+    vi.mocked(getRuntimeStatus).mockReturnValue({
       python: { isLoading: false, isReady: true, version: '3.9' },
       cpp: { isLoading: false, isReady: false },
       javascript: { isLoading: false, isReady: true, version: 'ES2022' }
@@ -310,8 +310,10 @@ describe('RuntimeProvider', () => {
 describe('错误处理', () => {
   it('应该处理运行时错误', () => {
     // Mock 运行时错误状态
-    mockGetRuntimeStatus.mockReturnValue({
-      javascript: { isLoading: false, isReady: false, error: 'Runtime error' }
+    vi.mocked(getRuntimeStatus).mockReturnValue({
+      python: { isLoading: false, isReady: true, version: '3.9' },
+      cpp: { isLoading: false, isReady: false },
+      javascript: { isLoading: false, isReady: false, error: 'Runtime error', version: 'ES2022' }
     })
 
     render(
@@ -323,13 +325,16 @@ describe('错误处理', () => {
       </TestWrapper>
     )
 
-    expect(screen.getByText('运行时错误：Runtime error')).toBeInTheDocument()
+    expect(screen.getByText(/运行时错误：/)).toBeInTheDocument()
+    expect(screen.getByText('Runtime error')).toBeInTheDocument()
     expect(screen.getByText('重试初始化')).toBeInTheDocument()
   })
 
   it('应该处理加载状态', () => {
-    mockGetRuntimeStatus.mockReturnValue({
-      python: { isLoading: true, isReady: false }
+    vi.mocked(getRuntimeStatus).mockReturnValue({
+      python: { isLoading: true, isReady: false, version: '3.9' },
+      cpp: { isLoading: false, isReady: false },
+      javascript: { isLoading: false, isReady: true, version: 'ES2022' }
     })
 
     render(
@@ -347,7 +352,7 @@ describe('错误处理', () => {
 
   it('应该处理错误回调', async () => {
     const mockOnError = vi.fn()
-    mockRunCode.mockRejectedValue(new Error('Execution failed'))
+    vi.mocked(runCode).mockRejectedValue(new Error('Execution failed'))
 
     render(
       <TestWrapper>
@@ -397,8 +402,10 @@ describe('按钮状态', () => {
   })
 
   it('应该在运行时未就绪时禁用', () => {
-    mockGetRuntimeStatus.mockReturnValue({
-      javascript: { isLoading: false, isReady: false }
+    vi.mocked(getRuntimeStatus).mockReturnValue({
+      python: { isLoading: false, isReady: true, version: '3.9' },
+      cpp: { isLoading: false, isReady: false },
+      javascript: { isLoading: false, isReady: false, version: 'ES2022' }
     })
 
     render(

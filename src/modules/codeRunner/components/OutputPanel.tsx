@@ -4,16 +4,24 @@ import { CodeExecution } from '../types'
 interface OutputPanelProps {
   execution?: CodeExecution
   loading?: boolean
+  language?: 'python' | 'cpp' | 'javascript'
 }
 
-export const OutputPanel: React.FC<OutputPanelProps> = ({ execution, loading }) => {
+export const OutputPanel: React.FC<OutputPanelProps> = ({ execution, loading, language }) => {
   if (loading) {
     return (
       <div className="bg-gray-50 rounded-lg p-6">
         <div className="flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <span className="ml-3 text-gray-600">正在运行代码...</span>
+          <span className="ml-3 text-gray-600">
+            {language === 'cpp' ? '正在编译代码，请耐心等待...' : '正在运行代码...'}
+          </span>
         </div>
+        {language === 'cpp' && (
+          <div className="mt-3 text-center text-xs text-amber-600">
+            C++ 前端编译较慢，预计需要 2-5 秒
+          </div>
+        )}
       </div>
     )
   }

@@ -125,7 +125,7 @@ export const CodeRunnerView: React.FC = () => {
       case 'python':
         return { icon: '🐍', name: 'Python', description: '丰富库支持' }
       case 'cpp':
-        return { icon: '⚡', name: 'C++', description: '高性能编译' }
+        return { icon: '⚡', name: 'C++', description: '教学演示（较慢）' }
     }
   }
 
@@ -183,6 +183,24 @@ export const CodeRunnerView: React.FC = () => {
               )
             })}
           </div>
+          
+          {/* C++性能说明 */}
+          {selectedLanguage === 'cpp' && (
+            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <span className="text-amber-500 mt-0.5">⚠️</span>
+                <div>
+                  <h3 className="font-medium text-amber-800 mb-2">C++ 前端编译说明</h3>
+                  <div className="text-sm text-amber-700 space-y-1">
+                    <p>• 前端编译情况相对复杂，编译和运行速度较慢</p>
+                    <p>• 主要用于教学演示，占用浏览器编译资源</p>
+                    <p>• 性能表现一般，请理解并耐心等待</p>
+                    <p>• 如需快速体验，建议选择 JavaScript 或 Python</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 运行时状态 */}
@@ -207,7 +225,7 @@ export const CodeRunnerView: React.FC = () => {
             {/* 进度提示 */}
             {selectedLanguage === 'cpp' && (
               <div className="mt-2 text-xs text-blue-600">
-                正在检查在线编译服务连接...
+                正在连接在线编译服务，首次编译需要较长时间...
               </div>
             )}
           </div>
@@ -347,17 +365,25 @@ export const CodeRunnerView: React.FC = () => {
                 <h2 className="text-lg font-semibold">
                   代码编辑器 ({currentLangInfo.name})
                 </h2>
-                <button
-                  onClick={handleRun}
-                  disabled={!currentStatus?.isReady || isRunning}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    !currentStatus?.isReady || isRunning
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-500 text-white hover:bg-blue-600'
-                  }`}
-                >
-                  {isRunning ? '运行中...' : `运行 ${currentLangInfo.name}`}
-                </button>
+                <div className="flex items-center gap-3">
+                  {/* C++运行提示 */}
+                  {selectedLanguage === 'cpp' && currentStatus?.isReady && (
+                    <div className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                      编译较慢，请耐心等待
+                    </div>
+                  )}
+                  <button
+                    onClick={handleRun}
+                    disabled={!currentStatus?.isReady || isRunning}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      !currentStatus?.isReady || isRunning
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                  >
+                    {isRunning ? '运行中...' : `运行 ${currentLangInfo.name}`}
+                  </button>
+                </div>
               </div>
               
               <CodeEditor
@@ -375,6 +401,7 @@ export const CodeRunnerView: React.FC = () => {
               <OutputPanel 
                 execution={currentExecution} 
                 loading={isRunning}
+                language={selectedLanguage}
               />
             </div>
           </div>

@@ -1,15 +1,33 @@
 import React from 'react'
 import { getCurrentProfile } from '../utils/profile'
+import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface LayoutProps {
   title?: string
   onBack?: () => void
   onHome?: () => void
+  onLogout?: () => void
+  onProfileSwitch?: () => void
   children: React.ReactNode
 }
 
-const Layout: React.FC<LayoutProps> = ({ title, onBack, onHome, children }) => {
+const Layout: React.FC<LayoutProps> = ({ 
+  title, 
+  onBack, 
+  onHome, 
+  onLogout,
+  onProfileSwitch,
+  children 
+}) => {
   const profile = getCurrentProfile()
+
+  const handleProfileSwitch = () => {
+    onProfileSwitch?.()
+  }
+
+  const handleLogout = () => {
+    onLogout?.()
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -50,9 +68,14 @@ const Layout: React.FC<LayoutProps> = ({ title, onBack, onHome, children }) => {
             
             <div className="flex items-center space-x-4">
               {profile && (
-                <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <span className="text-xl">{profile.avatar}</span>
-                  <span>{profile.name}</span>
+                <div className="relative">
+                  {/* 创建一个渐变背景用于统一样式 */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+                  <AppleProfileSwitcher
+                    onProfileSwitch={handleProfileSwitch}
+                    onLogout={handleLogout}
+                    className="relative"
+                  />
                 </div>
               )}
             </div>

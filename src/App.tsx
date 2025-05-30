@@ -94,21 +94,39 @@ const App = () => {
     
     case 'ability-assess':
       return (
-        <Layout title="能力评估" onBack={handleBackToDashboard} onHome={handleGoHome}>
+        <Layout 
+          title="能力评估" 
+          onBack={handleBackToDashboard} 
+          onHome={handleGoHome}
+          onLogout={handleLogout}
+          onProfileSwitch={handleProfileSwitch}
+        >
           <AbilityAssessView />
         </Layout>
       )
     
     case 'profile-settings':
       return (
-        <Layout title="Profile 设置" onBack={handleBackToDashboard} onHome={handleGoHome}>
+        <Layout 
+          title="Profile 设置" 
+          onBack={handleBackToDashboard} 
+          onHome={handleGoHome}
+          onLogout={handleLogout}
+          onProfileSwitch={handleProfileSwitch}
+        >
           <ProfileSettingsView />
         </Layout>
       )
     
     case 'code-runner':
       return (
-        <Layout title="代码运行器" onBack={handleBackToDashboard} onHome={handleGoHome}>
+        <Layout 
+          title="代码运行器" 
+          onBack={handleBackToDashboard} 
+          onHome={handleGoHome}
+          onLogout={handleLogout}
+          onProfileSwitch={handleProfileSwitch}
+        >
           <CodeRunnerView />
         </Layout>
       )
@@ -124,7 +142,13 @@ const App = () => {
       }
       
       return (
-        <Layout title={titles[currentView]} onBack={handleBackToDashboard} onHome={handleGoHome}>
+        <Layout 
+          title={titles[currentView]} 
+          onBack={handleBackToDashboard} 
+          onHome={handleGoHome}
+          onLogout={handleLogout}
+          onProfileSwitch={handleProfileSwitch}
+        >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <div className="text-center">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">

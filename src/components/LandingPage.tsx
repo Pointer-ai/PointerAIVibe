@@ -141,10 +141,15 @@ const LandingPage: React.FC<LandingPageProps> = ({
             {/* 登录/用户信息 */}
             {isLoggedIn ? (
               <div className="flex items-center space-x-4">
-                <AppleProfileSwitcher 
-                  onProfileSwitch={handleProfileSwitch}
-                  onLogout={handleLogout}
-                />
+                <div className="relative">
+                  {/* 创建一个渐变背景用于统一样式 */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+                  <AppleProfileSwitcher 
+                    onProfileSwitch={handleProfileSwitch}
+                    onLogout={handleLogout}
+                    className="relative"
+                  />
+                </div>
                 {onDashboard && (
                   <button
                     onClick={onDashboard}

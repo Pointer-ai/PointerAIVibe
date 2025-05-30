@@ -3,7 +3,6 @@
 export { GlobalAIAssistant } from './GlobalAIAssistant'
 export { MultiTabChat } from './MultiTabChat'
 export { TextSelector } from './TextSelector'
-export { LearningStats } from './LearningStats'
 
 export type {
   AIAssistantState,

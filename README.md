@@ -11,6 +11,7 @@
 | 模块 | 状态 | 负责人 | 覆盖率 | 简述 |
 |------|------|--------|-------|------|
 | profile       | ✅ 已完成 | @ai | 100% | 多 Profile 管理，支持密码保护 |
+| coreData      | 🚧 开发中 | @ai | 5%   | 统一的用户核心数据存储 |
 | landingPage   | ✅ 已完成 | @ai | 100% | 苹果风格首页，展示产品特性 |
 | dashboard     | ✅ 已完成 | @ai | 100% | 登录后主界面，功能模块入口 |
 | profileSettings | ✅ 已完成 | @ai | 95%  | API 配置、模型选择、参数调节、活动记录 |
@@ -97,6 +98,10 @@ interface LocalState {
 - [x] 支持密码保护（可选）
 - [x] localStorage 存储方案
 - [x] Profile 切换功能
+
+### coreData
+- [x] 创建基础数据结构及服务层
+- [ ] 与各模块的行为记录打通
 
 ### landingPage ✅
 - [x] 苹果风格设计

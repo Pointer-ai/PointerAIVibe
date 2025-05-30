@@ -5,7 +5,7 @@ import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings') => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search') => void
   onHome?: () => void
 }
 
@@ -122,6 +122,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
               )}
             </div>
             <div className="flex items-center gap-4">
+              {/* 测试随意搜按钮 - 只在开发环境显示 */}
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={() => onNavigate('test-random-search')}
+                  className="text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-purple-50 border border-purple-200"
+                >
+                  <span>🔍</span>
+                  测试随意搜
+                </button>
+              )}
+              
               {/* 设置按钮 */}
               <button
                 onClick={() => onNavigate('profile-settings')}

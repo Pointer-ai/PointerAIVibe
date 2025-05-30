@@ -6,9 +6,11 @@ import Layout from './components/Layout'
 import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
+import { GlobalAIAssistant } from './components/AIAssistant'
 import { getCurrentProfileId } from './utils/profile'
+import { TestRandomSearch } from './pages/TestRandomSearch'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -76,99 +78,122 @@ const App = () => {
     setCurrentView('landing')
   }
 
-  switch (currentView) {
-    case 'landing':
-      return <LandingPage 
-        onGetStarted={handleGetStarted} 
-        onLogin={handleProfileLogin} 
-        onDashboard={handleBackToDashboard}
-        onProfileSwitch={handleProfileSwitch}
-        onLogout={handleLogout}
-      />
-    
-    case 'profile':
-      return <ProfileManager onLogin={handleLogin} />
-    
-    case 'dashboard':
-      return <Dashboard onLogout={handleLogout} onNavigate={handleNavigate} onHome={handleGoHome} />
-    
-    case 'ability-assess':
-      return (
-        <Layout 
-          title="能力评估" 
-          onBack={handleBackToDashboard} 
-          onHome={handleGoHome}
-          onLogout={handleLogout}
-          onProfileSwitch={handleProfileSwitch}
-        >
-          <AbilityAssessView />
-        </Layout>
-      )
-    
-    case 'profile-settings':
-      return (
-        <Layout 
-          title="Profile 设置" 
-          onBack={handleBackToDashboard} 
-          onHome={handleGoHome}
-          onLogout={handleLogout}
-          onProfileSwitch={handleProfileSwitch}
-        >
-          <ProfileSettingsView />
-        </Layout>
-      )
-    
-    case 'code-runner':
-      return (
-        <Layout 
-          title="代码运行器" 
-          onBack={handleBackToDashboard} 
-          onHome={handleGoHome}
-          onLogout={handleLogout}
-          onProfileSwitch={handleProfileSwitch}
-        >
-          <CodeRunnerView />
-        </Layout>
-      )
-    
-    // 其他模块的占位符
-    case 'goal-setting':
-    case 'path-plan':
-    case 'course-content':
-      const titles = {
-        'goal-setting': '目标设定',
-        'path-plan': '路径规划',
-        'course-content': '课程内容'
-      }
-      
-      return (
-        <Layout 
-          title={titles[currentView]} 
-          onBack={handleBackToDashboard} 
-          onHome={handleGoHome}
-          onLogout={handleLogout}
-          onProfileSwitch={handleProfileSwitch}
-        >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="text-center">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                {titles[currentView]}
-              </h2>
-              <p className="text-gray-600">该模块正在开发中...</p>
-            </div>
-          </div>
-        </Layout>
-      )
-    
-    default:
-      return <LandingPage 
-        onGetStarted={handleGetStarted} 
-        onLogin={handleProfileLogin}
-        onDashboard={handleBackToDashboard}
-        onProfileSwitch={handleProfileSwitch}
-        onLogout={handleLogout}
-      />
-  }
+  return (
+    <>
+      {/* 主界面内容 */}
+      {(() => {
+        switch (currentView) {
+          case 'landing':
+            return <LandingPage 
+              onGetStarted={handleGetStarted} 
+              onLogin={handleProfileLogin} 
+              onDashboard={handleBackToDashboard}
+              onProfileSwitch={handleProfileSwitch}
+              onLogout={handleLogout}
+            />
+          
+          case 'profile':
+            return <ProfileManager onLogin={handleLogin} />
+          
+          case 'dashboard':
+            return <Dashboard onLogout={handleLogout} onNavigate={handleNavigate} onHome={handleGoHome} />
+          
+          case 'ability-assess':
+            return (
+              <Layout 
+                title="能力评估" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <AbilityAssessView />
+              </Layout>
+            )
+          
+          case 'profile-settings':
+            return (
+              <Layout 
+                title="Profile 设置" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <ProfileSettingsView />
+              </Layout>
+            )
+          
+          case 'code-runner':
+            return (
+              <Layout 
+                title="代码运行器" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <CodeRunnerView />
+              </Layout>
+            )
+          
+          case 'test-random-search':
+            return (
+              <Layout 
+                title="随机搜索测试" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <TestRandomSearch />
+              </Layout>
+            )
+          
+          // 其他模块的占位符
+          case 'goal-setting':
+          case 'path-plan':
+          case 'course-content':
+            const titles = {
+              'goal-setting': '目标设定',
+              'path-plan': '路径规划',
+              'course-content': '课程内容'
+            }
+            
+            return (
+              <Layout 
+                title={titles[currentView]} 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                  <div className="text-center">
+                    <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                      {titles[currentView]}
+                    </h2>
+                    <p className="text-gray-600">该模块正在开发中...</p>
+                  </div>
+                </div>
+              </Layout>
+            )
+          
+          default:
+            return <LandingPage 
+              onGetStarted={handleGetStarted} 
+              onLogin={handleProfileLogin}
+              onDashboard={handleBackToDashboard}
+              onProfileSwitch={handleProfileSwitch}
+              onLogout={handleLogout}
+            />
+        }
+      })()}
+
+      {/* 全局AI助手 */}
+      <GlobalAIAssistant />
+    </>
+  )
 }
 
 export default App 

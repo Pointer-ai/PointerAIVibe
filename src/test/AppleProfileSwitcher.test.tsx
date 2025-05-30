@@ -9,7 +9,9 @@ vi.mock('../utils/profile', () => ({
   getProfiles: vi.fn(),
   setCurrentProfile: vi.fn(),
   logout: vi.fn(),
-  verifyPassword: vi.fn()
+  verifyPassword: vi.fn(),
+  createProfile: vi.fn(),
+  deleteProfile: vi.fn()
 }))
 
 const mockCurrentProfile = {
@@ -369,5 +371,259 @@ describe('AppleProfileSwitcher', () => {
     // Look for the green dot (online indicator)
     const onlineIndicator = container.querySelector('.bg-green-400')
     expect(onlineIndicator).toBeInTheDocument()
+  })
+
+  // 新增功能测试
+  it('shows create profile modal when create button is clicked', async () => {
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockCurrentProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockCurrentProfile])
+    
+    render(<AppleProfileSwitcher />)
+    
+    // Open dropdown
+    fireEvent.click(screen.getByRole('button'))
+    
+    await waitFor(() => {
+      expect(screen.getByText('创建新 Profile')).toBeInTheDocument()
+    })
+    
+    // Click create profile
+    fireEvent.click(screen.getByText('创建新 Profile'))
+    
+    await waitFor(() => {
+      expect(screen.getByText('创建新 Profile')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('输入用户名')).toBeInTheDocument()
+      expect(screen.getByText('选择头像')).toBeInTheDocument()
+    })
+  })
+
+  it('creates new profile with valid data', async () => {
+    const onProfileSwitch = vi.fn()
+    const newProfile = {
+      id: 'new-profile',
+      name: 'New User',
+      avatar: '🚀',
+      hasPassword: false,
+      createdAt: '2024-01-03',
+      data: {}
+    }
+    
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockCurrentProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockCurrentProfile])
+    vi.mocked(profileUtils.createProfile).mockReturnValue(newProfile)
+    
+    render(<AppleProfileSwitcher onProfileSwitch={onProfileSwitch} />)
+    
+    // Open dropdown and click create
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('创建新 Profile'))
+    
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('输入用户名')).toBeInTheDocument()
+    })
+    
+    // Fill form
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'New User' }
+    })
+    
+    // Submit form
+    fireEvent.click(screen.getByText('创建Profile'))
+    
+    expect(profileUtils.createProfile).toHaveBeenCalledWith('New User', undefined, '👤')
+    expect(profileUtils.setCurrentProfile).toHaveBeenCalledWith('new-profile')
+    expect(onProfileSwitch).toHaveBeenCalled()
+  })
+
+  it('shows validation errors in create form', async () => {
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockCurrentProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockCurrentProfile])
+    
+    render(<AppleProfileSwitcher />)
+    
+    // Open create modal
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('创建新 Profile'))
+    
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('输入用户名')).toBeInTheDocument()
+    })
+    
+    // Try to submit empty form by finding the form element
+    const form = document.querySelector('form')
+    expect(form).toBeTruthy()
+    
+    fireEvent.submit(form!)
+    
+    await waitFor(() => {
+      expect(screen.getByText('请输入用户名')).toBeInTheDocument()
+    })
+    
+    // Clear error by entering text, then enter short name
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'Valid Name' }
+    })
+    
+    // Wait for error to clear, then test short name
+    await waitFor(() => {
+      expect(screen.queryByText('请输入用户名')).not.toBeInTheDocument()
+    })
+    
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'A' }
+    })
+    
+    // Submit with short name
+    fireEvent.submit(form!)
+    
+    await waitFor(() => {
+      expect(screen.getByText('用户名至少需要2个字符')).toBeInTheDocument()
+    })
+
+    // Clear error and test existing username
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'Valid Name' }
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('用户名至少需要2个字符')).not.toBeInTheDocument()
+    })
+
+    // Now test existing username (same as mockCurrentProfile.name)
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'Test User' }
+    })
+    
+    // Submit with existing name
+    fireEvent.submit(form!)
+
+    await waitFor(() => {
+      expect(screen.getByText('用户名已存在')).toBeInTheDocument()
+    })
+  })
+
+  it('validates password confirmation in create form', async () => {
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockCurrentProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockCurrentProfile])
+    
+    render(<AppleProfileSwitcher />)
+    
+    // Open create modal
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('创建新 Profile'))
+    
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('输入用户名')).toBeInTheDocument()
+    })
+    
+    // Fill form with mismatched passwords (use unique username)
+    fireEvent.change(screen.getByPlaceholderText('输入用户名'), {
+      target: { value: 'Unique User' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('留空表示无密码保护'), {
+      target: { value: 'password123' }
+    })
+    
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('再次输入密码')).toBeInTheDocument()
+    })
+    
+    fireEvent.change(screen.getByPlaceholderText('再次输入密码'), {
+      target: { value: 'different123' }
+    })
+    fireEvent.click(screen.getByText('创建Profile'))
+    
+    await waitFor(() => {
+      expect(screen.getByText('两次输入的密码不一致')).toBeInTheDocument()
+    })
+  })
+
+  it('shows delete confirmation modal when delete button is clicked', async () => {
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockCurrentProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockCurrentProfile, mockOtherProfile])
+    
+    render(<AppleProfileSwitcher />)
+    
+    // Open dropdown
+    fireEvent.click(screen.getByRole('button'))
+    
+    // Wait for dropdown and hover over a profile to show delete button
+    await waitFor(() => {
+      const profileRow = screen.getByText('Other User').closest('.group')
+      expect(profileRow).toBeInTheDocument()
+      
+      // Simulate hover to show delete button
+      if (profileRow) {
+        fireEvent.mouseEnter(profileRow)
+      }
+    })
+    
+    // Find delete button (it might be visible now)
+    const deleteButtons = screen.getAllByTitle('删除此Profile')
+    expect(deleteButtons.length).toBeGreaterThan(0)
+    
+    // Click first delete button
+    fireEvent.click(deleteButtons[0])
+    
+    await waitFor(() => {
+      expect(screen.getByText('删除确认')).toBeInTheDocument()
+      expect(screen.getByText('此操作无法撤销，所有数据将永久丢失')).toBeInTheDocument()
+    })
+  })
+
+  it('deletes profile after password confirmation', async () => {
+    const onLogout = vi.fn()
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockOtherProfile) // Current user is password-protected
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockOtherProfile])
+    vi.mocked(profileUtils.verifyPassword).mockReturnValue(true)
+    
+    render(<AppleProfileSwitcher onLogout={onLogout} />)
+    
+    // Open dropdown and click delete current profile
+    fireEvent.click(screen.getByRole('button'))
+    
+    await waitFor(() => {
+      const deleteButton = screen.getByTitle('删除此Profile')
+      fireEvent.click(deleteButton)
+    })
+    
+    await waitFor(() => {
+      expect(screen.getByText('输入密码确认删除')).toBeInTheDocument()
+    })
+    
+    // Enter password and confirm delete
+    fireEvent.change(screen.getByPlaceholderText('输入密码'), {
+      target: { value: 'correct-password' }
+    })
+    fireEvent.click(screen.getByText('确认删除'))
+    
+    expect(profileUtils.verifyPassword).toHaveBeenCalledWith('profile2', 'correct-password')
+    expect(profileUtils.deleteProfile).toHaveBeenCalledWith('profile2')
+    expect(onLogout).toHaveBeenCalled()
+  })
+
+  it('shows warning for non-password profile deletion', async () => {
+    vi.mocked(profileUtils.getCurrentProfile).mockReturnValue(mockNonPasswordProfile)
+    vi.mocked(profileUtils.getProfiles).mockReturnValue([mockNonPasswordProfile])
+    
+    render(<AppleProfileSwitcher />)
+    
+    // Open dropdown and click delete
+    fireEvent.click(screen.getByRole('button'))
+    
+    await waitFor(() => {
+      const deleteButton = screen.getByTitle('删除此Profile')
+      fireEvent.click(deleteButton)
+    })
+    
+    await waitFor(() => {
+      expect(screen.getByText('危险操作')).toBeInTheDocument()
+      expect(screen.getByText('删除后无法恢复，请确认您真的要执行此操作。')).toBeInTheDocument()
+    })
+    
+    // Can confirm delete directly (no password needed)
+    fireEvent.click(screen.getByText('确认删除'))
+    
+    expect(profileUtils.deleteProfile).toHaveBeenCalledWith('profile3')
   })
 }) 

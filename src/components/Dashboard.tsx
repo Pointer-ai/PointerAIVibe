@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { getCurrentProfile, logout } from '../utils/profile'
 import { getCurrentAssessment } from '../modules/abilityAssess'
+import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface DashboardProps {
   onLogout: () => void
@@ -9,7 +10,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) => {
-  const profile = getCurrentProfile()
+  const [profile, setProfile] = useState(getCurrentProfile())
   const currentAssessment = getCurrentAssessment()
 
   if (!profile) {
@@ -19,6 +20,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
   const handleLogout = () => {
     logout()
     onLogout()
+  }
+
+  const handleProfileSwitch = () => {
+    // 刷新profile状态
+    const newProfile = getCurrentProfile()
+    setProfile(newProfile)
   }
 
   const modules = [
@@ -113,28 +120,27 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
               ) : (
                 <h1 className="text-2xl font-bold text-gray-900">Pointer.ai</h1>
               )}
-              <div className="hidden sm:flex items-center space-x-2 text-sm text-gray-500">
-                <span className="text-2xl">{profile.avatar}</span>
-                <span>{profile.name}</span>
-              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               {/* 设置按钮 */}
               <button
                 onClick={() => onNavigate('profile-settings')}
-                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-2"
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100"
               >
                 <span>⚙️</span>
                 设置
               </button>
               
-              {/* 退出登录按钮 */}
-              <button
-                onClick={handleLogout}
-                className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
-              >
-                退出登录
-              </button>
+              {/* Profile切换器 - 适配Dashboard样式 */}
+              <div className="relative">
+                {/* 创建一个渐变背景用于Dashboard样式 */}
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+                <AppleProfileSwitcher 
+                  onProfileSwitch={handleProfileSwitch}
+                  onLogout={onLogout}
+                  className="relative"
+                />
+              </div>
             </div>
           </div>
         </div>

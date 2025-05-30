@@ -122,6 +122,11 @@ export const IntegratedCodeRunner: React.FC<IntegratedCodeRunnerProps> = ({
     onCodeChange?.(newCode)
   }
 
+  // 同步外部传入的 initialCode 到内部状态
+  useEffect(() => {
+    setCode(initialCode)
+  }, [initialCode])
+
   // 自动初始化运行时
   useEffect(() => {
     if (autoInitialize && !status?.isReady && !status?.isLoading) {

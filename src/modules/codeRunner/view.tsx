@@ -93,8 +93,8 @@ const LanguageSelector: React.FC<{
   )
 }
 
-// 示例选择器组件
-const ExampleSelector: React.FC<{
+// 示例选择器组件（左侧边栏版本）
+const ExampleSidebar: React.FC<{
   language: SupportedLanguage
   selectedExample: string
   onSelectExample: (exampleId: string) => void
@@ -103,26 +103,67 @@ const ExampleSelector: React.FC<{
 
   if (currentLanguageExamples.length === 0) return null
 
+  // 难度显示映射
+  const getDifficultyDisplay = (difficulty: string) => {
+    switch (difficulty) {
+      case 'beginner':
+        return { text: '初级', className: 'bg-green-100 text-green-700' }
+      case 'intermediate':
+        return { text: '中级', className: 'bg-yellow-100 text-yellow-700' }
+      case 'advanced':
+        return { text: '高级', className: 'bg-red-100 text-red-700' }
+      default:
+        return { text: difficulty, className: 'bg-gray-100 text-gray-700' }
+    }
+  }
+
   return (
-    <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
-      <h3 className="text-md font-semibold mb-3">代码示例</h3>
-      <div className="flex flex-wrap gap-2">
-        {currentLanguageExamples.map(example => (
-          <button
-            key={example.id}
-            onClick={() => onSelectExample(example.id)}
-            className={`px-3 py-2 text-sm rounded-md transition-colors ${
-              selectedExample === example.id
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <div className="text-left">
-              <div className="font-medium">{example.title}</div>
-              <div className="text-xs opacity-75">{example.difficulty}</div>
-            </div>
-          </button>
-        ))}
+    <div className="w-full bg-white rounded-lg shadow-sm p-4 h-full">
+      <h3 className="text-lg font-semibold mb-4 text-gray-800">代码示例</h3>
+      <div className="space-y-3 max-h-96 lg:max-h-full overflow-y-auto">
+        {currentLanguageExamples.map(example => {
+          const difficultyInfo = getDifficultyDisplay(example.difficulty)
+          return (
+            <button
+              key={example.id}
+              onClick={() => onSelectExample(example.id)}
+              className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
+                selectedExample === example.id
+                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+              }`}
+            >
+              <div>
+                <h4 className={`font-medium mb-2 ${
+                  selectedExample === example.id ? 'text-blue-900' : 'text-gray-900'
+                }`}>
+                  {example.title}
+                </h4>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    selectedExample === example.id 
+                      ? 'bg-blue-200 text-blue-800' 
+                      : difficultyInfo.className
+                  }`}>
+                    {difficultyInfo.text}
+                  </span>
+                  {example.category && (
+                    <span className="text-xs text-gray-500">
+                      {example.category}
+                    </span>
+                  )}
+                </div>
+                {/* 预览代码的前几行 */}
+                <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded font-mono overflow-hidden">
+                  <div className="line-clamp-3">
+                    {example.code.split('\n').slice(0, 3).join('\n')}
+                    {example.code.split('\n').length > 3 && '\n...'}
+                  </div>
+                </div>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -150,6 +191,7 @@ const CodeRunnerContent: React.FC = () => {
   const handleSelectExample = (exampleId: string) => {
     const example = CODE_EXAMPLES.find(e => e.id === exampleId)
     if (example) {
+      log(`[CodeRunnerView] 切换到示例: ${example.title}`)
       setSelectedExample(exampleId)
       setCode(example.code)
     }
@@ -158,9 +200,10 @@ const CodeRunnerContent: React.FC = () => {
   // 获取对应的组件
   const getLanguageRunner = () => {
     const commonProps = {
+      key: `${selectedLanguage}-${selectedExample}`, // 添加key确保正确重新渲染
       initialCode: code,
       onCodeChange: setCode,
-      height: '400px',
+      height: '500px',
       theme: 'dark' as const,
       onRunComplete: (execution: any) => {
         console.log('执行完成:', execution)
@@ -182,9 +225,9 @@ const CodeRunnerContent: React.FC = () => {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-full mx-auto p-6">
         {/* 页面标题 */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">多语言代码运行器</h1>
           <p className="mt-2 text-gray-600">
             基于 Monaco Editor 的专业代码编辑器，支持语法高亮、智能补全和多语言运行
@@ -197,16 +240,21 @@ const CodeRunnerContent: React.FC = () => {
           onLanguageChange={setSelectedLanguage}
         />
 
-        {/* 示例选择器 */}
-        <ExampleSelector
-          language={selectedLanguage}
-          selectedExample={selectedExample}
-          onSelectExample={handleSelectExample}
-        />
+        {/* 主要内容区域：左右布局 */}
+        <div className="flex flex-col lg:flex-row gap-6 h-full">
+          {/* 左侧：示例选择器 */}
+          <div className="lg:w-80 w-full">
+            <ExampleSidebar
+              language={selectedLanguage}
+              selectedExample={selectedExample}
+              onSelectExample={handleSelectExample}
+            />
+          </div>
 
-        {/* 代码运行器 */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          {getLanguageRunner()}
+          {/* 右侧：代码运行器 */}
+          <div className="flex-1 bg-white rounded-lg shadow-sm p-6">
+            {getLanguageRunner()}
+          </div>
         </div>
 
         {/* 功能说明 */}

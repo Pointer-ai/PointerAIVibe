@@ -46,7 +46,22 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     const editorContainer = editor.getDomNode()?.closest('.monaco-editor')
     if (editorContainer) {
       ;(editorContainer as any)._monacoEditor = editor
+      
+      // 为了确保TextSelector能够检测到，也设置到编辑器DOM节点本身
+      const editorDomNode = editor.getDomNode()
+      if (editorDomNode) {
+        ;(editorDomNode as any)._monacoEditor = editor
+      }
     }
+
+    // 监听编辑器选择变化，触发自定义事件供TextSelector使用
+    editor.onDidChangeCursorSelection(() => {
+      // 触发自定义事件，通知TextSelector检查选择
+      const event = new CustomEvent('monaco-selection-change', {
+        detail: { editor, selection: editor.getSelection() }
+      })
+      document.dispatchEvent(event)
+    })
 
     // 添加运行代码快捷键 (Ctrl/Cmd + Enter)
     editor.addCommand(

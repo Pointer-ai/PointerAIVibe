@@ -161,7 +161,7 @@ export class LearningSystemService {
     systemStatus: LearningSystemStatus
   }> {
     try {
-      log(`[LearningSystem] Using real LLM for chat`)
+      log(`[LearningSystem] Using real LLM with intelligent tool calling`)
       
       // 收集当前学习状态信息
       const systemStatus = await this.getSystemStatus()
@@ -213,64 +213,65 @@ export class LearningSystemService {
         })
       }
 
-      // 构建AI系统提示词
-      const systemPrompt = `你是一个专业的AI学习助手，专门帮助用户进行个性化编程学习。
+      // 导入AI工具定义
+      const { AGENT_TOOLS } = await import('./coreData/agentTools')
+      
+      // 使用LLM进行智能工具调用
+      const { getAIResponseWithTools } = await import('../components/AIAssistant/service')
+      
+      const result = await getAIResponseWithTools(
+        userMessage,
+        contextInfo,
+        AGENT_TOOLS,
+        // 工具执行器
+        async (toolName: string, parameters: any) => {
+          return await agentToolExecutor.executeTool(toolName, parameters)
+        }
+      )
 
-你的能力包括：
-• 🧠 分析技能水平和能力差距
-• 🎯 设定个性化学习目标
-• 🛤️ 生成定制学习路径
-• 📚 推荐学习内容和资源
-• 📊 跟踪学习进度
-• 🔧 调整学习节奏和难度
-• 🆘 解决学习困难
+      // 生成智能建议
+      const suggestions = this.generateSmartSuggestions(result.response, systemStatus)
 
-请根据用户的当前状态和问题，提供有针对性的建议和帮助。
-
-${contextInfo}`
-
-      // 调用真实LLM
-      const aiResponse = await getAIResponse(userMessage, systemPrompt)
-
-      // 智能分析AI响应，确定使用的工具和建议
-      const toolsUsed = this.extractToolsFromMessage(userMessage, aiResponse)
-      const suggestions = this.generateSmartSuggestions(aiResponse, systemStatus)
-
-      // 记录真实LLM交互
+      // 记录LLM工具调用交互
       const interaction: AgentInteraction = {
-        id: `interaction_llm_${Date.now()}`,
+        id: `interaction_llm_tools_${Date.now()}`,
         timestamp: new Date().toISOString(),
         userMessage,
-        agentResponse: aiResponse,
-        toolsUsed,
-        context: { useRealLLM: true, systemStatus }
+        agentResponse: result.response,
+        toolsUsed: result.toolCalls.map(tc => tc.name),
+        context: { 
+          useRealLLM: true, 
+          systemStatus,
+          toolCalls: result.toolCalls 
+        }
       }
       this.interactionHistory.push(interaction)
 
-      // 记录LLM交互事件
+      // 记录LLM工具调用事件
       addCoreEvent({
-        type: 'llm_interaction',
+        type: 'llm_tool_interaction',
         details: {
           userMessage,
-          responseLength: aiResponse.length,
-          toolsUsed,
+          responseLength: result.response.length,
+          toolsUsed: result.toolCalls.map(tc => tc.name),
+          toolCallsCount: result.toolCalls.length,
           success: true
         }
       })
 
-      log(`[LearningSystem] Real LLM interaction completed`)
+      log(`[LearningSystem] LLM tool calling completed, tools used:`, result.toolCalls.map(tc => tc.name))
 
       return {
-        response: aiResponse,
-        toolsUsed,
+        response: result.response,
+        toolsUsed: result.toolCalls.map(tc => tc.name),
         suggestions,
         systemStatus
       }
 
     } catch (error) {
-      log(`[LearningSystem] Real LLM chat failed:`, error)
+      log(`[LearningSystem] LLM tool calling failed:`, error)
       
-      // LLM失败时回退到基本功能
+      // 工具调用失败时回退到基本功能
       const systemStatus = await this.getSystemStatus()
       
       return {
@@ -569,31 +570,61 @@ ${contextInfo}`
     
     // 简化的意图识别逻辑
     const intents = [
+      // ========== 查询类意图 ==========
+      {
+        type: 'query_goals',
+        keywords: ['我的目标', '有哪些目标', '查看目标', '显示目标', '目标列表', '学习目标'],
+        tools: ['get_learning_goals']
+      },
+      {
+        type: 'query_paths',
+        keywords: ['我的路径', '有哪些路径', '查看路径', '显示路径', '路径列表', '学习路径'],
+        tools: ['get_learning_paths']
+      },
+      {
+        type: 'query_courses',
+        keywords: ['我的课程', '有哪些课程', '查看课程', '显示课程', '课程列表', '学习内容'],
+        tools: ['get_course_units']
+      },
+      {
+        type: 'query_progress',
+        keywords: ['我的进度', '学习情况', '进度查询', '学习统计', '学习摘要'],
+        tools: ['get_learning_summary']
+      },
+      {
+        type: 'query_context',
+        keywords: ['我的学习状态', '学习上下文', '整体情况', '学习概况'],
+        tools: ['get_learning_context']
+      },
+      // ========== 分析类意图 ==========
       {
         type: 'ability_analysis',
         keywords: ['能力', '评估', '技能', '水平', '测试'],
         tools: ['analyze_user_ability']
       },
+      // ========== 创建/设置类意图 ==========
       {
         type: 'goal_setting',
-        keywords: ['目标', '学习', '方向', '规划', '想学'],
+        keywords: ['创建目标', '设定目标', '新目标', '想学', '学习方向'],
         tools: ['create_learning_goal']
       },
       {
         type: 'path_generation',
-        keywords: ['路径', '计划', '步骤', '怎么学', '学习路线'],
+        keywords: ['生成路径', '创建路径', '制定计划', '怎么学', '学习路线'],
         tools: ['create_learning_path', 'generate_path_nodes']
       },
       {
         type: 'content_request',
-        keywords: ['内容', '课程', '教程', '学习材料'],
+        keywords: ['生成内容', '创建课程', '教程', '学习材料'],
         tools: ['create_course_unit']
       },
+      // ========== 状态跟踪类意图 ==========
       {
         type: 'progress_tracking',
-        keywords: ['进度', '完成', '学习情况', '统计'],
+        keywords: ['跟踪进度', '完成情况', '学习进度'],
         tools: ['track_learning_progress']
       },
+      // ========== 帮助类意图 ==========
       {
         type: 'difficulty_help',
         keywords: ['困难', '不懂', '问题', '帮助', '解释'],
@@ -750,6 +781,53 @@ ${contextInfo}`
     const result = actionResult.results[0]
     
     switch (intent.type) {
+      // ========== 查询类响应 ==========
+      case 'query_goals':
+        if (result?.goals?.length > 0) {
+          const goalsText = result.goals.map((goal: any, index: number) => 
+            `${index + 1}. ${goal.title} (${goal.category}, ${goal.status})`
+          ).join('\n')
+          return `您当前有 ${result.total} 个学习目标，其中筛选后显示 ${result.filtered} 个：\n\n${goalsText}\n\n${result.total > result.filtered ? '使用筛选条件可以查看更多目标。' : ''}您想了解哪个目标的详细信息吗？`
+        } else {
+          return '您还没有设定任何学习目标。建议您先创建一个学习目标来开始您的学习之旅！我可以帮您推荐一些适合的目标。'
+        }
+        
+      case 'query_paths':
+        if (result?.paths?.length > 0) {
+          const pathsText = result.paths.map((path: any, index: number) => 
+            `${index + 1}. ${path.title} - 进度: ${path.completedNodes}/${path.totalNodes} 节点 (${path.status})`
+          ).join('\n')
+          return `您当前有 ${result.total} 条学习路径，其中筛选后显示 ${result.filtered} 条：\n\n${pathsText}\n\n您想查看哪条路径的详细内容吗？`
+        } else {
+          return '您还没有生成任何学习路径。建议您先设定学习目标，然后我可以为您生成个性化的学习路径。'
+        }
+        
+      case 'query_courses':
+        if (result?.units?.length > 0) {
+          const unitsText = Object.entries(result.unitsByType || {}).map(([type, count]) => 
+            `${type}: ${count} 个`
+          ).join('，')
+          return `您当前有 ${result.total} 个课程单元，其中筛选后显示 ${result.filtered} 个。\n按类型分布：${unitsText}\n\n您想查看具体的课程内容吗？`
+        } else {
+          return '您还没有任何课程内容。建议您先创建学习路径，然后为路径节点生成相应的课程内容。'
+        }
+        
+      case 'query_progress':
+        if (result?.summary) {
+          const summary = result.summary
+          return `📊 学习摘要报告：\n\n整体进度：${summary.overallProgress}%\n活跃目标：${summary.activeGoals} 个\n活跃路径：${summary.activePaths} 个\n已完成节点：${summary.completedNodes}/${summary.totalNodes}\n主要学习领域：${summary.topLearningArea || '无'}\n\n💡 建议：${result.recommendations?.[0] || '继续保持学习节奏！'}`
+        } else {
+          return '暂时无法生成学习摘要。建议您先完成能力评估并设定学习目标。'
+        }
+        
+      case 'query_context':
+        if (result) {
+          return `📋 学习上下文概览：\n\n${result.hasAbilityProfile ? '✅' : '❌'} 能力档案\n活跃目标：${result.activeGoals} 个\n活跃路径：${result.activePaths} 个\n课程单元：${result.totalCourseUnits} 个\n当前重点：${result.currentFocus}\n\n💡 推荐：${result.nextRecommendation}`
+        } else {
+          return '无法获取学习上下文信息。请稍后重试。'
+        }
+        
+      // ========== 分析类响应 ==========
       case 'ability_analysis':
         if (result?.hasAbilityData) {
           return `根据您的能力评估，您的总体水平为 ${result.overallScore}/10。优势领域包括：${result.strengths.join(', ')}。建议重点提升：${result.weaknesses.join(', ')}。${result.recommendation}`
@@ -757,6 +835,7 @@ ${contextInfo}`
           return '您还没有完成能力评估。建议先进行能力测试，这样我就能为您提供更个性化的学习建议了。'
         }
         
+      // ========== 创建/设置类响应 ==========
       case 'goal_setting':
         return '我已经帮您创建了学习目标。接下来我们可以为这个目标制定详细的学习路径。您希望以什么样的节奏进行学习？'
         
@@ -767,6 +846,7 @@ ${contextInfo}`
           return '生成学习路径需要先设定明确的学习目标。请告诉我您想学习什么？'
         }
         
+      // ========== 状态跟踪类响应 ==========
       case 'progress_tracking':
         if (result?.overallProgress !== undefined) {
           return `您当前的学习进度是 ${Math.round(result.overallProgress)}%。已完成 ${result.completedNodes || 0} 个学习节点，还有 ${(result.totalNodes || 0) - (result.completedNodes || 0)} 个待完成。${result.insights?.[0] || '继续保持！'}`
@@ -774,6 +854,7 @@ ${contextInfo}`
           return '您还没有开始任何学习路径。建议先设定学习目标并生成学习计划。'
         }
         
+      // ========== 帮助类响应 ==========
       case 'difficulty_help':
         return `我理解您遇到的困难。${result?.message || ''}我建议您：${result?.solution?.suggestions?.join('、') || '寻求更详细的解释和练习'}。需要我为您提供更具体的帮助吗？`
         

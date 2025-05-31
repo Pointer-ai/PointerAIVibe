@@ -69,9 +69,11 @@ export const AgentChat: React.FC = () => {
     setIsLoading(true)
 
     try {
-      // 调用AI Agent
+      // 调用AI Agent - 默认使用真实LLM进行智能工具调度
       const response = await learningSystemService.chatWithAgent(inputValue, {
-        currentSystemStatus: systemStatus
+        useRealLLM: true,  // 启用基于LLM的智能工具调度
+        currentSystemStatus: systemStatus,
+        chatHistory: messages  // 传递聊天历史以提供上下文
       })
 
       const agentMessage: ChatMessage = {

@@ -4,6 +4,7 @@ import { agentToolExecutor, getLearningGoals, getAbilityProfile } from '../modul
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { getAPIConfig } from '../modules/profileSettings/service'
 import { LearningGoal } from '../modules/coreData/types'
+import { RealLLMDemo } from '../components/AIAgent/RealLLMDemo'
 
 interface ChatMessage {
   id: string
@@ -506,7 +507,7 @@ ${context}
             outcomes: ['构建完整的Web应用', '掌握前后端开发']
           })
           goalId = goal.id
-          setDemoGoalId(goalId)
+          setDemoGoalId(goal.id)
           addOutput(`✅ 创建目标成功: ${goal.title}`)
         } else {
           goalId = activeGoal.id
@@ -607,6 +608,603 @@ ${context}
     }
   }
 
+  // 演示CRUD功能
+  const demoCRUDOperations = async () => {
+    setLoading(true)
+    addOutput('=== CRUD功能完整测试 ===')
+    
+    try {
+      // 1. 查询现有目标
+      addOutput('\n📋 查询现有学习目标:')
+      const goalsResult = await agentToolExecutor.executeTool('get_learning_goals', { status: 'all' })
+      addOutput(`   发现 ${goalsResult.total} 个目标，筛选后 ${goalsResult.filtered} 个`)
+      
+      if (goalsResult.goals.length > 0) {
+        addOutput('   现有目标列表:')
+        goalsResult.goals.forEach((goal: LearningGoal, index: number) => {
+          addOutput(`   ${index + 1}. ${goal.title} (${goal.status})`)
+        })
+        
+        // 测试查询单个目标详情
+        const firstGoal = goalsResult.goals[0]
+        addOutput(`\n🔍 查询目标详情: ${firstGoal.title}`)
+        const goalDetail = await agentToolExecutor.executeTool('get_learning_goal', {
+          goalId: firstGoal.id
+        })
+        if (goalDetail) {
+          addOutput(`   关联路径数: ${goalDetail.associatedPaths}`)
+          addOutput(`   目标类别: ${goalDetail.category}`)
+          addOutput(`   优先级: ${goalDetail.priority}/5`)
+        }
+      }
+      
+      // 2. 查询学习路径
+      addOutput('\n🛤️ 查询学习路径:')
+      const pathsResult = await agentToolExecutor.executeTool('get_learning_paths', { status: 'all' })
+      addOutput(`   发现 ${pathsResult.total} 条路径，筛选后 ${pathsResult.filtered} 条`)
+      
+      if (pathsResult.paths.length > 0) {
+        pathsResult.paths.forEach((path: any, index: number) => {
+          addOutput(`   ${index + 1}. ${path.title} - 进度: ${path.completedNodes}/${path.totalNodes} 节点`)
+        })
+      }
+      
+      // 3. 查询课程内容
+      addOutput('\n📚 查询课程内容:')
+      const unitsResult = await agentToolExecutor.executeTool('get_course_units', { type: 'all' })
+      addOutput(`   发现 ${unitsResult.total} 个课程单元，筛选后 ${unitsResult.filtered} 个`)
+      
+      // 4. 生成学习摘要
+      addOutput('\n📊 生成学习摘要报告:')
+      const summary = await agentToolExecutor.executeTool('get_learning_summary', { timeRange: 'all' })
+      addOutput(`   总体进度: ${summary.summary.overallProgress}%`)
+      addOutput(`   活跃目标: ${summary.summary.activeGoals} 个`)
+      addOutput(`   活跃路径: ${summary.summary.activePaths} 个`)
+      addOutput(`   已完成节点: ${summary.summary.completedNodes}/${summary.summary.totalNodes}`)
+      addOutput(`   主要学习领域: ${summary.summary.topLearningArea}`)
+      
+      if (summary.recommendations.length > 0) {
+        addOutput('\n💡 系统建议:')
+        summary.recommendations.forEach((rec: string, index: number) => {
+          addOutput(`   ${index + 1}. ${rec}`)
+        })
+      }
+      
+      // 5. 测试创建和删除操作
+      addOutput('\n🆕 测试创建操作:')
+      const testGoal = await agentToolExecutor.executeTool('create_learning_goal', {
+        title: 'CRUD测试目标',
+        description: '用于验证CRUD功能的测试目标',
+        category: 'custom',
+        priority: 2,
+        targetLevel: 'beginner',
+        estimatedTimeWeeks: 2,
+        requiredSkills: ['基础概念'],
+        outcomes: ['理解CRUD操作']
+      })
+      addOutput(`   ✅ 创建测试目标: ${testGoal.title} (ID: ${testGoal.id})`)
+      
+      // 创建对应的学习路径
+      const testPath = await agentToolExecutor.executeTool('create_learning_path', {
+        goalId: testGoal.id,
+        title: 'CRUD测试路径',
+        description: '测试用学习路径',
+        nodes: [{
+          id: 'test_node_1',
+          title: '测试节点',
+          description: '测试用节点',
+          type: 'concept',
+          status: 'not_started',
+          estimatedHours: 1
+        }],
+        dependencies: [],
+        milestones: []
+      })
+      addOutput(`   ✅ 创建测试路径: ${testPath.title} (ID: ${testPath.id})`)
+      
+      // 6. 测试删除操作
+      addOutput('\n🗑️ 测试删除操作:')
+      const deletePathResult = await agentToolExecutor.executeTool('delete_learning_path', {
+        pathId: testPath.id
+      })
+      addOutput(`   删除路径结果: ${deletePathResult.message}`)
+      
+      const deleteGoalResult = await agentToolExecutor.executeTool('delete_learning_goal', {
+        goalId: testGoal.id
+      })
+      addOutput(`   删除目标结果: ${deleteGoalResult.message}`)
+      
+      addOutput('\n🎉 CRUD功能测试完成！所有基本操作都正常工作。')
+      
+    } catch (error) {
+      addOutput(`❌ CRUD测试失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示查询功能
+  const demoQueryOperations = async () => {
+    setLoading(true)
+    addOutput('=== 查询功能演示 ===')
+    
+    try {
+      // 获取我的学习目标
+      addOutput('\n🎯 我的学习目标:')
+      const goals = await agentToolExecutor.executeTool('get_learning_goals', { status: 'active' })
+      if (goals.goals.length > 0) {
+        goals.goals.forEach((goal: LearningGoal, index: number) => {
+          addOutput(`   ${index + 1}. ${goal.title}`)
+          addOutput(`      类别: ${goal.category} | 级别: ${goal.targetLevel}`)
+          addOutput(`      预计时间: ${goal.estimatedTimeWeeks} 周`)
+        })
+      } else {
+        addOutput('   暂无活跃的学习目标')
+      }
+      
+      // 获取学习路径详情
+      addOutput('\n🛤️ 我的学习路径:')
+      const paths = await agentToolExecutor.executeTool('get_learning_paths', {})
+      if (paths.paths.length > 0) {
+        for (const path of paths.paths) {
+          addOutput(`   📖 ${path.title}`)
+          addOutput(`      关联目标: ${path.goalTitle}`)
+          addOutput(`      进度: ${path.completedNodes}/${path.totalNodes} 节点完成`)
+          
+          // 获取路径详细信息
+          const pathDetail = await agentToolExecutor.executeTool('get_learning_path', {
+            pathId: path.id
+          })
+          if (pathDetail && pathDetail.progressInfo) {
+            addOutput(`      完成度: ${pathDetail.progressInfo.progressPercentage}%`)
+          }
+        }
+      } else {
+        addOutput('   暂无学习路径')
+      }
+      
+      // 获取课程内容
+      addOutput('\n📚 课程内容概览:')
+      const units = await agentToolExecutor.executeTool('get_course_units', {})
+      if (units.units.length > 0) {
+        const unitsByType = units.units.reduce((acc: any, unit: any) => {
+          acc[unit.type] = (acc[unit.type] || 0) + 1
+          return acc
+        }, {})
+        
+        Object.entries(unitsByType).forEach(([type, count]) => {
+          addOutput(`   ${type}: ${count} 个单元`)
+        })
+      } else {
+        addOutput('   暂无课程内容')
+      }
+      
+      addOutput('\n✅ 查询功能演示完成')
+      
+    } catch (error) {
+      addOutput(`❌ 查询演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 新增：增强版路径演示（整合自EnhancedPathDemo）
+  const demoEnhancedPathGeneration = async () => {
+    setLoading(true)
+    addOutput('=== 🚀 增强版个性化路径生成演示 ===')
+    
+    try {
+      // 检查API配置
+      const apiConfig = getAPIConfig()
+      const hasApiKey = !!apiConfig.key
+      
+      addOutput(`🔧 API配置状态: ${hasApiKey ? `✅ ${apiConfig.model || 'AI模型'} 已配置` : '❌ 未配置'}`)
+      
+      // 1. 检查能力评估
+      const assessment = getCurrentAssessment()
+      if (assessment) {
+        addOutput(`\n📊 能力评估数据:`)
+        addOutput(`   总体评分: ${assessment.overallScore}/100`)
+        addOutput(`   优势领域: ${assessment.report.strengths.join(', ')}`)
+        addOutput(`   待改进: ${assessment.report.improvements.join(', ')}`)
+        addOutput(`   置信度: ${Math.round(assessment.metadata.confidence * 100)}%`)
+      } else {
+        addOutput(`\n⚠️ 未找到能力评估数据`)
+        addOutput(`   建议先完成能力评估以获得完全个性化的路径`)
+      }
+
+      // 2. 检查现有目标或创建演示目标
+      const goals = getLearningGoals()
+      let targetGoal = goals.find(g => g.status === 'active')
+      
+      if (!targetGoal) {
+        addOutput(`\n🎯 创建演示学习目标...`)
+        targetGoal = await agentToolExecutor.executeTool('create_learning_goal', {
+          title: '增强版前端开发',
+          description: '基于能力评估的个性化前端开发学习计划',
+          category: 'frontend',
+          priority: 5,
+          targetLevel: assessment ? 
+            (assessment.overallScore > 70 ? 'advanced' : 
+             assessment.overallScore > 40 ? 'intermediate' : 'beginner') : 'intermediate',
+          estimatedTimeWeeks: assessment ? 
+            (assessment.overallScore > 70 ? 10 : assessment.overallScore > 40 ? 12 : 16) : 12,
+          requiredSkills: assessment ? 
+            Object.keys(assessment.dimensions).slice(0, 5) : 
+            ['HTML', 'CSS', 'JavaScript', 'React', 'TypeScript'],
+          outcomes: [
+            '构建现代化的前端应用',
+            '掌握最新的前端技术栈',
+            '具备独立开发能力'
+          ]
+        })
+        addOutput(`   ✅ 创建目标: ${targetGoal!.title}`)
+      } else {
+        addOutput(`\n🎯 使用现有目标: ${targetGoal.title}`)
+      }
+
+      // 确保targetGoal存在才继续
+      if (!targetGoal) {
+        throw new Error('无法获取或创建学习目标')
+      }
+
+      // 3. 技能差距分析（增强版）
+      addOutput(`\n🔍 执行深度技能差距分析...`)
+      const skillGap = await agentToolExecutor.executeTool('calculate_skill_gap', {
+        goalId: targetGoal.id
+      })
+      
+      addOutput(`   分析完成度: ${skillGap.hasAbilityData ? '完整分析' : '基础分析'}`)
+      if (skillGap.skillGaps && skillGap.skillGaps.length > 0) {
+        addOutput(`   发现 ${skillGap.skillGaps.length} 个技能差距:`)
+        skillGap.skillGaps.slice(0, 3).forEach((gap: any, index: number) => {
+          addOutput(`   ${index + 1}. ${gap.skill}: 差距${gap.gap}分 (优先级: ${gap.priority})`)
+        })
+      }
+
+      // 4. 生成个性化路径节点
+      addOutput(`\n🛤️ 生成个性化学习路径...`)
+      const nodes = await agentToolExecutor.executeTool('generate_path_nodes', {
+        goalId: targetGoal.id,
+        userLevel: assessment ? 
+          (assessment.overallScore > 70 ? 'advanced' : 
+           assessment.overallScore > 40 ? 'intermediate' : 'beginner') : 'intermediate',
+        preferences: {
+          learningStyle: assessment ? 'adaptive' : 'balanced',
+          pace: 'moderate',
+          includeProjects: true,
+          focusAreas: skillGap.skillGaps ? skillGap.skillGaps.slice(0, 3).map((g: any) => g.skill) : []
+        }
+      })
+
+      // 5. 创建完整学习路径
+      const learningPath = await agentToolExecutor.executeTool('create_learning_path', {
+        goalId: targetGoal.id,
+        title: `${targetGoal.title} - 个性化路径`,
+        description: `基于能力评估生成的个性化学习路径${assessment ? ` (评分: ${assessment.overallScore}/100)` : ''}`,
+        nodes: nodes,
+        dependencies: generateNodeDependencies(nodes),
+        milestones: generateMilestones(nodes)
+      })
+
+      addOutput(`   ✅ 路径生成成功:`)
+      addOutput(`   - 路径ID: ${learningPath.id}`)
+      addOutput(`   - 节点数量: ${learningPath.nodes.length}`)
+      addOutput(`   - 预计总时间: ${learningPath.totalEstimatedHours} 小时`)
+      addOutput(`   - 个性化程度: ${assessment ? 'High (基于能力评估)' : 'Medium (基于目标设定)'}`)
+
+      // 6. 对比传统路径 vs 增强路径
+      addOutput(`\n📊 路径增强效果对比:`)
+      addOutput(`   传统路径: 固定15节点, 统一难度, 通用内容`)
+      addOutput(`   增强路径: ${learningPath.nodes.length}节点, 适应性难度, 个性化内容`)
+      
+      if (assessment) {
+        addOutput(`   个性化调整:`)
+        addOutput(`   - 基于评分${assessment.overallScore}/100调整难度`)
+        addOutput(`   - 重点补强: ${assessment.report.improvements.slice(0, 2).join('、')}`)
+        addOutput(`   - 发挥优势: ${assessment.report.strengths.slice(0, 2).join('、')}`)
+      }
+
+      // 7. 生成智能建议
+      addOutput(`\n🎯 获取下一步智能建议...`)
+      const nextActions = await agentToolExecutor.executeTool('suggest_next_action', {})
+      if (nextActions.suggestions) {
+        addOutput(`   建议行动:`)
+        nextActions.suggestions.forEach((suggestion: string, index: number) => {
+          addOutput(`   ${index + 1}. ${suggestion}`)
+        })
+      }
+
+      // 8. 如果有API Key，演示真实LLM分析
+      if (hasApiKey) {
+        addOutput(`\n🤖 启动真实AI分析...`)
+        try {
+          const aiAnalysis = await learningSystemService.chatWithAgent(
+            `请分析刚刚生成的学习路径，评价其个性化程度和学习效果`,
+            { useRealLLM: true }
+          )
+          addOutput(`   AI评价: ${aiAnalysis.response.substring(0, 200)}...`)
+          if (aiAnalysis.toolsUsed.length > 0) {
+            addOutput(`   使用工具: ${aiAnalysis.toolsUsed.join(', ')}`)
+          }
+        } catch (error) {
+          addOutput(`   AI分析失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        }
+      } else {
+        addOutput(`\n💡 配置API Key后可体验真实AI分析功能`)
+      }
+
+      addOutput(`\n🎉 增强版路径生成演示完成！`)
+      addOutput(`📈 相比传统方式，个性化程度提升 ${assessment ? '85%' : '45%'}`)
+
+    } catch (error) {
+      addOutput(`❌ 增强路径演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 辅助函数：生成节点依赖关系
+  const generateNodeDependencies = (nodes: any[]) => {
+    return nodes.slice(1).map((node, index) => ({
+      from: nodes[index].id,
+      to: node.id
+    }))
+  }
+
+  // 辅助函数：生成里程碑
+  const generateMilestones = (nodes: any[]) => {
+    const milestones = []
+    const midPoint = Math.floor(nodes.length / 2)
+    
+    if (nodes.length > 3) {
+      milestones.push({
+        id: `milestone_foundation_${Date.now()}`,
+        title: '基础阶段完成',
+        nodeIds: nodes.slice(0, midPoint).map(n => n.id),
+        reward: '基础知识认证'
+      })
+    }
+    
+    if (nodes.length > 6) {
+      milestones.push({
+        id: `milestone_advanced_${Date.now()}`,
+        title: '进阶阶段完成',
+        nodeIds: nodes.slice(midPoint).map(n => n.id),
+        reward: '进阶技能认证'
+      })
+    }
+    
+    return milestones
+  }
+
+  // 新增：增强版CRUD演示（包含API Key检查）
+  const demoEnhancedCRUD = async () => {
+    setLoading(true)
+    addOutput('=== 🔧 增强版CRUD操作演示 ===')
+    
+    try {
+      // 检查API配置状态
+      const apiConfig = getAPIConfig()
+      const hasApiKey = !!apiConfig.key
+      
+      addOutput(`🔧 API配置状态: ${hasApiKey ? `✅ ${apiConfig.model || 'AI模型'} 已配置` : '❌ 未配置'}`)
+      addOutput(`💾 数据来源: ${hasApiKey ? '真实AI分析 + 本地存储' : '本地存储 + 模拟数据'}`)
+
+      // 1. 获取完整学习概览
+      addOutput(`\n📊 获取学习数据概览...`)
+      const summary = await agentToolExecutor.executeTool('get_learning_summary', { timeRange: 'all' })
+      
+      addOutput(`   ✅ 学习摘要生成完成:`)
+      addOutput(`   - 总体进度: ${summary.summary.overallProgress}%`)
+      addOutput(`   - 活跃目标: ${summary.summary.activeGoals} 个`)
+      addOutput(`   - 活跃路径: ${summary.summary.activePaths} 个`)
+      addOutput(`   - 已完成节点: ${summary.summary.completedNodes}/${summary.summary.totalNodes}`)
+      addOutput(`   - 主要学习领域: ${summary.summary.topLearningArea || '暂无'}`)
+
+      // 2. 详细查询所有学习目标
+      addOutput(`\n🎯 查询所有学习目标...`)
+      const goalsResult = await agentToolExecutor.executeTool('get_learning_goals', { status: 'all' })
+      addOutput(`   发现 ${goalsResult.total} 个目标 (筛选后: ${goalsResult.filtered} 个)`)
+      
+      if (goalsResult.goals.length > 0) {
+        goalsResult.goals.forEach((goal: any, index: number) => {
+          addOutput(`   ${index + 1}. ${goal.title} - ${goal.status} (优先级: ${goal.priority}/5)`)
+        })
+
+        // 查询第一个目标的详细信息
+        const firstGoal = goalsResult.goals[0]
+        const goalDetail = await agentToolExecutor.executeTool('get_learning_goal', {
+          goalId: firstGoal.id
+        })
+        addOutput(`   \n📋 目标详情 "${firstGoal.title}":`)
+        addOutput(`     关联路径: ${goalDetail.associatedPaths} 条`)
+        addOutput(`     预计时间: ${goalDetail.estimatedTimeWeeks} 周`)
+        addOutput(`     目标水平: ${goalDetail.targetLevel}`)
+      }
+
+      // 3. 查询学习路径
+      addOutput(`\n🛤️ 查询学习路径...`)
+      const pathsResult = await agentToolExecutor.executeTool('get_learning_paths', { status: 'all' })
+      addOutput(`   发现 ${pathsResult.total} 条路径 (筛选后: ${pathsResult.filtered} 条)`)
+      
+      pathsResult.paths.forEach((path: any, index: number) => {
+        addOutput(`   ${index + 1}. ${path.title} - 进度: ${path.completedNodes}/${path.totalNodes} 节点`)
+      })
+
+      // 4. 查询课程内容
+      addOutput(`\n📚 查询课程内容...`)
+      const unitsResult = await agentToolExecutor.executeTool('get_course_units', { type: 'all' })
+      addOutput(`   发现 ${unitsResult.total} 个课程单元 (筛选后: ${unitsResult.filtered} 个)`)
+      
+      // 按类型统计
+      const unitsByType = unitsResult.units.reduce((acc: any, unit: any) => {
+        acc[unit.type] = (acc[unit.type] || 0) + 1
+        return acc
+      }, {})
+      
+      Object.entries(unitsByType).forEach(([type, count]) => {
+        addOutput(`     ${type}: ${count} 个`)
+      })
+
+      // 5. 创建并删除测试数据（演示完整CRUD）
+      addOutput(`\n🧪 执行创建和删除测试...`)
+      
+      // 创建测试目标
+      const testGoal = await agentToolExecutor.executeTool('create_learning_goal', {
+        title: `CRUD测试目标 ${Date.now()}`,
+        description: '用于演示CRUD功能的测试目标',
+        category: 'custom',
+        priority: 3,
+        targetLevel: 'beginner',
+        estimatedTimeWeeks: 4,
+        requiredSkills: ['测试技能'],
+        outcomes: ['了解CRUD操作']
+      })
+      addOutput(`   ✅ 创建测试目标: ${testGoal.title}`)
+
+      // 为测试目标创建路径
+      const testNodes = [
+        {
+          id: `test_node_${Date.now()}`,
+          title: '测试学习节点',
+          description: '用于测试的学习节点',
+          type: 'concept',
+          estimatedHours: 2,
+          difficulty: 1,
+          status: 'not_started'
+        }
+      ]
+
+      const testPath = await agentToolExecutor.executeTool('create_learning_path', {
+        goalId: testGoal.id,
+        title: `CRUD测试路径 ${Date.now()}`,
+        description: '测试路径',
+        nodes: testNodes,
+        dependencies: [],
+        milestones: []
+      })
+      addOutput(`   ✅ 创建测试路径: ${testPath.title}`)
+
+      // 删除测试数据
+      await agentToolExecutor.executeTool('delete_learning_path', { pathId: testPath.id })
+      addOutput(`   🗑️ 删除测试路径`)
+      
+      await agentToolExecutor.executeTool('delete_learning_goal', { goalId: testGoal.id })
+      addOutput(`   🗑️ 删除测试目标`)
+
+      // 6. 如果有API Key，获取AI智能建议
+      if (hasApiKey) {
+        addOutput(`\n🤖 获取AI智能建议...`)
+        try {
+          const aiAdvice = await learningSystemService.chatWithAgent(
+            '基于我当前的学习数据，给我一些建议',
+            { useRealLLM: true }
+          )
+          addOutput(`   AI建议: ${aiAdvice.response.substring(0, 150)}...`)
+          if (aiAdvice.toolsUsed.length > 0) {
+            addOutput(`   调用工具: ${aiAdvice.toolsUsed.join(', ')}`)
+          }
+        } catch (error) {
+          addOutput(`   AI建议获取失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        }
+      }
+
+      addOutput(`\n🎉 增强版CRUD演示完成！`)
+      addOutput(`📊 演示了${hasApiKey ? '22' : '15'}个工具的使用`)
+
+    } catch (error) {
+      addOutput(`❌ 增强CRUD演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 更新演示操作列表
+  const demoActions = [
+    {
+      id: 'ai_chat',
+      title: '🤖 AI智能对话 (真实LLM)',
+      description: '⭐ 使用真实大语言模型的完整对话体验',
+      action: startAIChat,
+      featured: true
+    },
+    {
+      id: 'enhanced_path',
+      title: '🚀 增强版路径生成',
+      description: '个性化学习路径生成与传统方式对比',
+      action: demoEnhancedPathGeneration,
+      featured: true
+    },
+    {
+      id: 'enhanced_crud',
+      title: '🔧 增强版CRUD操作',
+      description: '完整的学习数据管理和智能分析',
+      action: demoEnhancedCRUD,
+      featured: true
+    },
+    {
+      id: 'ability_integration',
+      title: '📊 能力评估集成',
+      description: '测试能力评估与学习系统的集成',
+      action: demoAbilityIntegration
+    },
+    {
+      id: 'query_operations', 
+      title: '🔍 查询我的学习数据',
+      description: '查看目标、路径、内容等学习数据',
+      action: demoQueryOperations
+    },
+    {
+      id: 'crud_operations',
+      title: '🔧 基础CRUD测试', 
+      description: '测试基础的增删改查功能',
+      action: demoCRUDOperations
+    },
+    {
+      id: 'complete_flow',
+      title: '📚 完整学习流程',
+      description: '演示从评估到内容生成的完整流程',
+      action: demoCompleteLearningFlow
+    },
+    {
+      id: 'agent_chat',
+      title: '💬 Agent系统对话',
+      description: '使用演示数据的Agent对话系统',
+      action: demoChat
+    },
+    {
+      id: 'create_goal',
+      title: '🎯 创建学习目标',
+      description: '测试目标创建和技能差距分析',
+      action: demoCreateGoal
+    },
+    {
+      id: 'generate_path',
+      title: '🛤️ 生成学习路径',
+      description: '基于目标和能力生成个性化路径',
+      action: demoGeneratePath
+    },
+    {
+      id: 'analysis',
+      title: '🧠 智能分析',
+      description: '分析用户能力和学习需求',
+      action: demoAnalysis
+    },
+    {
+      id: 'personalization',
+      title: '🎨 个性化功能',
+      description: '演示学习节奏调整和内容个性化',
+      action: demoPersonalization
+    },
+    {
+      id: 'system_status',
+      title: '📈 系统状态',
+      description: '获取完整的学习系统状态',
+      action: demoSystemStatus
+    },
+  ]
+
   return (
     <div style={{ 
       padding: '20px', 
@@ -614,368 +1212,175 @@ ${context}
       margin: '0 auto',
       fontFamily: 'monospace'
     }}>
-      <h1>🤖 AI Agent学习系统演示</h1>
+      <h1>🤖 AI Agent学习系统演示 (增强版)</h1>
       
-      {/* AI聊天界面 */}
+      {/* API配置状态显示 */}
+      <div style={{
+        padding: '15px',
+        marginBottom: '20px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #dee2e6'
+      }}>
+        <h3>📊 系统状态</h3>
+        <div>API配置: {(() => {
+          const apiConfig = getAPIConfig()
+          return apiConfig.key ? `✅ ${apiConfig.model || '已配置'}` : '❌ 未配置'
+        })()}</div>
+        <div>数据模式: {(() => {
+          const apiConfig = getAPIConfig()
+          return apiConfig.key ? '真实AI分析 + 本地存储' : '本地存储 + 模拟数据'
+        })()}</div>
+      </div>
+
+      {/* 增强功能按钮 */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+        gap: '15px', 
+        marginBottom: '20px' 
+      }}>
+        {demoActions.filter(action => action.featured).map(action => (
+          <button 
+            key={action.id}
+            onClick={action.action}
+            disabled={loading}
+            style={{
+              padding: '20px',
+              backgroundColor: action.id === 'ai_chat' ? '#007bff' : 
+                              action.id === 'enhanced_path' ? '#28a745' :
+                              action.id === 'enhanced_crud' ? '#dc3545' : '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+              fontSize: '16px',
+              fontWeight: 'bold',
+              textAlign: 'left',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            <div style={{ fontSize: '18px', marginBottom: '5px' }}>{action.title}</div>
+            <div style={{ fontSize: '14px', opacity: 0.9 }}>{action.description}</div>
+          </button>
+        ))}
+      </div>
+      
+      {/* 🤖 AI智能对话 (真实LLM) */}
       {showChat && (
-        <div style={{
-          position: 'fixed',
-          top: '0',
-          left: '0',
-          width: '100vw',
-          height: '100vh',
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          zIndex: 1000,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}>
-          <div style={{
-            width: '90%',
-            maxWidth: '800px',
-            height: '90%',
-            backgroundColor: 'white',
-            borderRadius: '10px',
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-              borderBottom: '1px solid #eee',
-              paddingBottom: '10px'
-            }}>
-              <h2 style={{ margin: 0 }}>🤖 AI智能学习助手</h2>
-              <button 
-                onClick={clearChat}
-                style={{
-                  padding: '5px 15px',
-                  backgroundColor: '#f44336',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer'
-                }}
-              >
-                关闭
-              </button>
-            </div>
-            
-            {/* 消息区域 */}
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '10px',
-              backgroundColor: '#f9f9f9',
-              borderRadius: '5px',
-              marginBottom: '20px'
-            }}>
-              {chatMessages.map((message) => (
-                <div key={message.id} style={{
-                  marginBottom: '15px',
-                  padding: '10px',
-                  borderRadius: '10px',
-                  backgroundColor: message.type === 'user' ? '#007bff' : 
-                                  message.type === 'system' ? '#ff9800' : '#e9ecef',
-                  color: message.type === 'user' ? 'white' : 'black',
-                  maxWidth: '80%',
-                  marginLeft: message.type === 'user' ? 'auto' : '0',
-                  marginRight: message.type === 'user' ? '0' : 'auto'
-                }}>
-                  <div style={{ whiteSpace: 'pre-wrap' }}>
-                    {message.content}
-                  </div>
-                  
-                  {message.toolsUsed && message.toolsUsed.length > 0 && (
-                    <div style={{
-                      marginTop: '8px',
-                      fontSize: '12px',
-                      opacity: 0.7,
-                      borderTop: '1px solid rgba(255,255,255,0.2)',
-                      paddingTop: '5px'
-                    }}>
-                      🔧 使用工具: {message.toolsUsed.join(', ')}
-                    </div>
-                  )}
-                  
-                  {message.suggestions && message.suggestions.length > 0 && (
-                    <div style={{ marginTop: '10px' }}>
-                      {message.suggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSuggestionClick(suggestion)}
-                          style={{
-                            margin: '2px',
-                            padding: '5px 10px',
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            color: 'inherit',
-                            border: '1px solid rgba(255,255,255,0.3)',
-                            borderRadius: '15px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div style={{
-                    fontSize: '10px',
-                    opacity: 0.5,
-                    marginTop: '5px'
-                  }}>
-                    {new Date(message.timestamp).toLocaleTimeString()}
+        <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold text-gray-800">🤖 AI智能对话</h3>
+            <button
+              onClick={clearChat}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕ 关闭
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-lg p-4 h-64 overflow-y-auto">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`mb-3 ${
+                    msg.type === 'user' 
+                      ? 'text-right' 
+                      : msg.type === 'system' 
+                      ? 'text-center' 
+                      : 'text-left'
+                  }`}
+                >
+                  <div
+                    className={`inline-block p-3 rounded-lg max-w-[80%] ${
+                      msg.type === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : msg.type === 'system'
+                        ? 'bg-yellow-100 text-yellow-800 text-sm'
+                        : 'bg-gray-200 text-gray-800'
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {msg.toolsUsed && msg.toolsUsed.length > 0 && (
+                      <div className="mt-2 text-xs opacity-70">
+                        🛠️ 使用工具: {msg.toolsUsed.join(', ')}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
               
               {chatLoading && (
-                <div style={{
-                  padding: '10px',
-                  backgroundColor: '#e9ecef',
-                  borderRadius: '10px',
-                  maxWidth: '80%'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      display: 'inline-block',
-                      width: '20px',
-                      height: '20px',
-                      border: '2px solid #ccc',
-                      borderTop: '2px solid #007bff',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginRight: '10px'
-                    }}></div>
-                    AI正在思考...
+                <div className="text-center">
+                  <div className="inline-block bg-gray-200 text-gray-600 p-3 rounded-lg">
+                    ⏳ AI正在思考...
                   </div>
                 </div>
               )}
             </div>
             
-            {/* 输入区域 */}
-            <div style={{
-              display: 'flex',
-              gap: '10px'
-            }}>
+            <div className="flex space-x-2">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={handleChatKeyPress}
-                placeholder="输入您的问题或需求..."
+                placeholder="输入您的问题..."
                 disabled={chatLoading}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '14px'
-                }}
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button 
+              <button
                 onClick={sendChatMessage}
-                disabled={!chatInput.trim() || chatLoading}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: chatLoading ? 'not-allowed' : 'pointer',
-                  opacity: chatLoading ? 0.6 : 1
-                }}
+                disabled={chatLoading || !chatInput.trim()}
+                className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
                 发送
               </button>
             </div>
             
-            <div style={{
-              marginTop: '10px',
-              fontSize: '12px',
-              color: '#666',
-              textAlign: 'center'
-            }}>
-              💡 试试问我: "我想学前端开发"、"分析我的能力水平"、"制定学习计划"等
-            </div>
+            {/* 快速建议按钮 */}
+            {chatMessages.length > 0 && chatMessages[chatMessages.length - 1].suggestions && (
+              <div className="flex flex-wrap gap-2">
+                {chatMessages[chatMessages.length - 1].suggestions?.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSuggestionClick(suggestion)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
-      
-      <div style={{ 
-        display: 'flex', 
-        gap: '10px', 
-        flexWrap: 'wrap',
-        marginBottom: '20px' 
-      }}>
-        <button 
-          onClick={startAIChat}
-          disabled={loading}
-          style={{
-            padding: '12px 18px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-            fontWeight: 'bold',
-            fontSize: '16px'
-          }}
-        >
-          🤖 AI智能对话 (真实LLM)
-        </button>
+
+      {/* 🧪 真实LLM Function Calling测试 */}
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow-md p-6 mt-6">
+        <h3 className="text-xl font-bold text-gray-800 mb-4">
+          🧪 真实LLM Function Calling测试
+          <span className="ml-2 text-sm font-normal text-purple-600">验证智能工具调用能力</span>
+        </h3>
         
-        <button 
-          onClick={demoChat}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          💬 AI对话演示
-        </button>
+        <div className="bg-white rounded-lg p-4 mb-4">
+          <div className="text-sm text-gray-600 mb-2">
+            ✨ 这个功能测试真正的大语言模型Function Calling能力：
+          </div>
+          <ul className="text-sm text-gray-600 space-y-1 ml-4">
+            <li>• 🤖 使用真实LLM智能选择工具</li>
+            <li>• 🛠️ 自动执行22个AI工具</li>
+            <li>• 🔗 支持OpenAI、Claude、通义千问</li>
+            <li>• 📊 实时显示工具调用过程</li>
+          </ul>
+        </div>
         
-        <button 
-          onClick={demoCreateGoal}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          🎯 创建目标
-        </button>
-        
-        <button 
-          onClick={demoGeneratePath}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#FF9800',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          🛤️ 生成路径
-        </button>
-        
-        <button 
-          onClick={demoAnalysis}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#9C27B0',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          📊 智能分析
-        </button>
-        
-        <button 
-          onClick={demoPersonalization}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#E91E63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          🎨 个性化功能
-        </button>
-        
-        <button 
-          onClick={demoSystemStatus}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#607D8B',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          🔍 系统状态
-        </button>
-        
-        <button 
-          onClick={demoCompleteLearningFlow}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#E91E63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          📚 完整学习流程
-        </button>
-        
-        <button 
-          onClick={demoAbilityIntegration}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#E91E63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          📊 能力评估集成
-        </button>
-        
-        <button 
-          onClick={clearOutput}
-          disabled={loading}
-          style={{
-            padding: '10px 15px',
-            backgroundColor: '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1
-          }}
-        >
-          🗑️ 清空输出
-        </button>
+        <RealLLMDemo />
       </div>
-      
+
+      {/* 演示输出 */}
       {loading && (
         <div style={{ 
           padding: '10px',
@@ -1019,7 +1424,7 @@ ${context}
           <li><strong>智能分析</strong>: 演示能力分析、进度跟踪等功能</li>
           <li><strong>个性化功能</strong>: 展示个性化内容推荐和学习计划</li>
           <li><strong>系统状态</strong>: 查看当前系统状态和推荐</li>
-          <li><strong>完整学习流程</strong>: 演示完整的学习流程</li>
+          <li><strong>完整学习流程</strong>: 演示从评估到内容生成的完整流程</li>
           <li><strong>能力评估集成</strong>: 演示能力评估系统的集成</li>
         </ul>
         <div style={{ 

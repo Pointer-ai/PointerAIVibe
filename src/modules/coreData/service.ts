@@ -99,6 +99,16 @@ export const updateLearningGoal = (id: string, updates: Partial<LearningGoal>): 
   return coreData.goals[index]
 }
 
+export const deleteLearningGoal = (id: string): boolean => {
+  const coreData = getUserCoreData()
+  const index = coreData.goals.findIndex(g => g.id === id)
+  if (index === -1) return false
+  
+  coreData.goals.splice(index, 1)
+  saveUserCoreData(coreData)
+  return true
+}
+
 // 学习路径相关
 export const createLearningPath = (path: Omit<LearningPath, 'id' | 'createdAt' | 'updatedAt'>): LearningPath => {
   const coreData = getUserCoreData()
@@ -136,6 +146,16 @@ export const updateLearningPath = (id: string, updates: Partial<LearningPath>): 
   return coreData.paths[index]
 }
 
+export const deleteLearningPath = (id: string): boolean => {
+  const coreData = getUserCoreData()
+  const index = coreData.paths.findIndex(p => p.id === id)
+  if (index === -1) return false
+  
+  coreData.paths.splice(index, 1)
+  saveUserCoreData(coreData)
+  return true
+}
+
 // 课程单元相关
 export const createCourseUnit = (unit: Omit<CourseUnit, 'id' | 'createdAt' | 'updatedAt'>): CourseUnit => {
   const coreData = getUserCoreData()
@@ -171,6 +191,16 @@ export const updateCourseUnit = (id: string, updates: Partial<CourseUnit>): Cour
   
   saveUserCoreData(coreData)
   return coreData.courseUnits[index]
+}
+
+export const deleteCourseUnit = (id: string): boolean => {
+  const coreData = getUserCoreData()
+  const index = coreData.courseUnits.findIndex(u => u.id === id)
+  if (index === -1) return false
+  
+  coreData.courseUnits.splice(index, 1)
+  saveUserCoreData(coreData)
+  return true
 }
 
 // Agent 动作记录

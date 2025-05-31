@@ -3,12 +3,15 @@ import {
   createLearningGoal, 
   getLearningGoals, 
   updateLearningGoal,
+  deleteLearningGoal,
   createLearningPath, 
   getLearningPaths,
   updateLearningPath,
+  deleteLearningPath,
   createCourseUnit, 
   getCourseUnits,
   updateCourseUnit,
+  deleteCourseUnit,
   recordAgentAction,
   getAgentActions,
   getAbilityProfile,
@@ -21,6 +24,26 @@ import { log } from '../../utils/logger'
  * AI Agent 可用工具定义
  */
 export const AGENT_TOOLS: AgentTool[] = [
+  // ========== 学习目标 CRUD ==========
+  {
+    name: 'get_learning_goals',
+    description: '获取用户的所有学习目标列表，支持按状态筛选',
+    parameters: {
+      status: { 
+        type: 'string', 
+        enum: ['active', 'completed', 'paused', 'cancelled', 'all'],
+        description: '目标状态筛选，默认all',
+        optional: true 
+      }
+    }
+  },
+  {
+    name: 'get_learning_goal',
+    description: '获取特定学习目标的详细信息',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' }
+    }
+  },
   {
     name: 'create_learning_goal',
     description: '创建新的学习目标，用于定义用户的学习方向和期望成果',
@@ -52,15 +75,56 @@ export const AGENT_TOOLS: AgentTool[] = [
     }
   },
   {
+    name: 'delete_learning_goal',
+    description: '删除学习目标',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' }
+    }
+  },
+
+  // ========== 学习路径 CRUD ==========
+  {
+    name: 'get_learning_paths',
+    description: '获取用户的所有学习路径列表，支持按目标和状态筛选',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID筛选', optional: true },
+      status: { 
+        type: 'string', 
+        enum: ['draft', 'active', 'completed', 'archived', 'all'],
+        description: '路径状态筛选，默认all',
+        optional: true 
+      }
+    }
+  },
+  {
+    name: 'get_learning_path',
+    description: '获取特定学习路径的详细信息，包括所有节点和进度',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' }
+    }
+  },
+  {
     name: 'create_learning_path',
     description: '根据学习目标和用户能力创建个性化学习路径',
     parameters: {
       goalId: { type: 'string', description: '关联的学习目标ID' },
       title: { type: 'string', description: '路径标题' },
       description: { type: 'string', description: '路径描述' },
-      nodes: { type: 'array', description: '学习节点列表' },
-      dependencies: { type: 'array', description: '节点依赖关系' },
-      milestones: { type: 'array', description: '里程碑设置' }
+      nodes: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '学习节点列表' 
+      },
+      dependencies: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '节点依赖关系' 
+      },
+      milestones: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '里程碑设置' 
+      }
     }
   },
   {
@@ -69,6 +133,35 @@ export const AGENT_TOOLS: AgentTool[] = [
     parameters: {
       pathId: { type: 'string', description: '路径ID' },
       updates: { type: 'object', description: '要更新的字段' }
+    }
+  },
+  {
+    name: 'delete_learning_path',
+    description: '删除学习路径',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' }
+    }
+  },
+
+  // ========== 课程内容 CRUD ==========
+  {
+    name: 'get_course_units',
+    description: '获取课程单元列表，支持按节点和类型筛选',
+    parameters: {
+      nodeId: { type: 'string', description: '节点ID筛选', optional: true },
+      type: { 
+        type: 'string', 
+        enum: ['theory', 'example', 'exercise', 'project', 'quiz', 'all'],
+        description: '内容类型筛选，默认all',
+        optional: true 
+      }
+    }
+  },
+  {
+    name: 'get_course_unit',
+    description: '获取特定课程单元的详细内容',
+    parameters: {
+      unitId: { type: 'string', description: '课程单元ID' }
     }
   },
   {
@@ -96,14 +189,35 @@ export const AGENT_TOOLS: AgentTool[] = [
     }
   },
   {
+    name: 'delete_course_unit',
+    description: '删除课程单元',
+    parameters: {
+      unitId: { type: 'string', description: '课程单元ID' }
+    }
+  },
+
+  // ========== 分析和智能功能 ==========
+  {
     name: 'analyze_user_ability',
     description: '分析用户当前能力状况，为路径规划提供依据',
     parameters: {}
   },
   {
     name: 'get_learning_context',
-    description: '获取用户的学习上下文，包括目标、路径和进度',
+    description: '获取用户的完整学习上下文，包括目标、路径和进度统计',
     parameters: {}
+  },
+  {
+    name: 'get_learning_summary',
+    description: '获取学习情况的详细摘要报告',
+    parameters: {
+      timeRange: { 
+        type: 'string', 
+        enum: ['week', 'month', 'quarter', 'all'],
+        description: '统计时间范围，默认all',
+        optional: true 
+      }
+    }
   },
   {
     name: 'calculate_skill_gap',
@@ -121,6 +235,8 @@ export const AGENT_TOOLS: AgentTool[] = [
       preferences: { type: 'object', description: '学习偏好设置' }
     }
   },
+
+  // ========== 学习管理和调整 ==========
   {
     name: 'adjust_learning_pace',
     description: '根据用户反馈调整学习节奏和难度',
@@ -180,7 +296,11 @@ export const AGENT_TOOLS: AgentTool[] = [
     description: '根据用户时间安排推荐学习计划',
     parameters: {
       availableHoursPerWeek: { type: 'number', description: '每周可用学习时间' },
-      preferredStudyTimes: { type: 'array', description: '偏好的学习时间段' },
+      preferredStudyTimes: { 
+        type: 'array', 
+        items: { type: 'string' },
+        description: '偏好的学习时间段' 
+      },
       goalId: { type: 'string', description: '学习目标ID' }
     }
   }
@@ -201,12 +321,34 @@ export class AgentToolExecutor {
       let result: any
       
       switch (toolName) {
+        // ========== 学习目标 CRUD ==========
+        case 'get_learning_goals':
+          result = await this.getLearningGoalsTool(parameters)
+          break
+          
+        case 'get_learning_goal':
+          result = await this.getLearningGoalTool(parameters)
+          break
+          
         case 'create_learning_goal':
           result = await this.createLearningGoalTool(parameters)
           break
           
         case 'update_learning_goal':
           result = await this.updateLearningGoalTool(parameters)
+          break
+          
+        case 'delete_learning_goal':
+          result = await this.deleteLearningGoalTool(parameters)
+          break
+
+        // ========== 学习路径 CRUD ==========
+        case 'get_learning_paths':
+          result = await this.getLearningPathsTool(parameters)
+          break
+          
+        case 'get_learning_path':
+          result = await this.getLearningPathTool(parameters)
           break
           
         case 'create_learning_path':
@@ -217,6 +359,19 @@ export class AgentToolExecutor {
           result = await this.updateLearningPathTool(parameters)
           break
           
+        case 'delete_learning_path':
+          result = await this.deleteLearningPathTool(parameters)
+          break
+
+        // ========== 课程内容 CRUD ==========
+        case 'get_course_units':
+          result = await this.getCourseUnitsTool(parameters)
+          break
+          
+        case 'get_course_unit':
+          result = await this.getCourseUnitTool(parameters)
+          break
+          
         case 'create_course_unit':
           result = await this.createCourseUnitTool(parameters)
           break
@@ -225,12 +380,21 @@ export class AgentToolExecutor {
           result = await this.updateCourseUnitTool(parameters)
           break
           
+        case 'delete_course_unit':
+          result = await this.deleteCourseUnitTool(parameters)
+          break
+
+        // ========== 分析和智能功能 ==========
         case 'analyze_user_ability':
           result = await this.analyzeUserAbilityTool()
           break
           
         case 'get_learning_context':
           result = await this.getLearningContextTool()
+          break
+          
+        case 'get_learning_summary':
+          result = await this.getLearningSummaryTool(parameters)
           break
           
         case 'calculate_skill_gap':
@@ -241,6 +405,7 @@ export class AgentToolExecutor {
           result = await this.generatePathNodesTool(parameters)
           break
 
+        // ========== 学习管理和调整 ==========
         case 'adjust_learning_pace':
           result = await this.adjustLearningPaceTool(parameters)
           break
@@ -405,24 +570,31 @@ export class AgentToolExecutor {
   }
   
   private async calculateSkillGapTool(params: any): Promise<any> {
-    const goal = getLearningGoals().find(g => g.id === params.goalId)
+    const { goalId, context } = params
+    const goal = getLearningGoals().find(g => g.id === goalId)
     const ability = getAbilityProfile()
     
     if (!goal) {
       throw new Error('Goal not found')
     }
     
-    if (!ability) {
+    // 如果没有能力数据，返回基础分析
+    if (!ability && !context?.abilityProfile) {
       return {
         hasAbilityData: false,
-        recommendation: '需要先完成能力评估',
-        skillGaps: []
+        message: '需要完成能力评估以获得个性化技能差距分析',
+        basicRecommendation: '建议先进行能力测试，然后制定学习计划'
       }
     }
     
-    // 计算技能差距
-    const skillGaps = goal.requiredSkills.map(skill => {
-      const currentLevel = this.getSkillLevel(ability, skill)
+    // 使用传入的上下文或从系统获取能力数据
+    const abilityData = context?.abilityProfile || ability
+    
+    // 基于目标类别和用户能力计算技能差距
+    const requiredSkills = this.getRequiredSkillsForGoal(goal)
+    
+    const skillGaps = requiredSkills.map(skill => {
+      const currentLevel = this.getSkillLevel(abilityData, skill)
       const targetLevel = this.getTargetLevelScore(goal.targetLevel)
       const gap = Math.max(0, targetLevel - currentLevel)
       
@@ -431,7 +603,9 @@ export class AgentToolExecutor {
         currentLevel,
         targetLevel,
         gap,
-        priority: gap > 3 ? 'high' : gap > 1 ? 'medium' : 'low'
+        priority: gap > 3 ? 'high' : gap > 1 ? 'medium' : 'low',
+        // 如果有上下文，使用增强的优先级计算
+        enhancedPriority: context ? this.calculateContextualPriority(skill, gap, context) : undefined
       }
     })
     
@@ -443,9 +617,132 @@ export class AgentToolExecutor {
       summary: {
         averageGap,
         highPriorityCount: skillGaps.filter(g => g.priority === 'high').length,
-        estimatedWeeks: Math.ceil(averageGap * 2) // 2周per gap point
-      }
+        estimatedWeeks: Math.ceil(averageGap * 2), // 2周per gap point
+        // 如果有上下文，提供增强的分析
+        enhancedAnalysis: context ? {
+          personalizedEstimate: this.calculatePersonalizedTime(skillGaps, context),
+          strengthsToLeverage: this.identifyLeverageableStrengths(skillGaps, context),
+          focusAreas: this.identifyFocusAreas(skillGaps, context)
+        } : undefined
+      },
+      contextUsed: !!context,
+      timestamp: new Date().toISOString()
     }
+  }
+  
+  /**
+   * 计算基于上下文的优先级
+   */
+  private calculateContextualPriority(skill: string, gap: number, context: any): 'low' | 'medium' | 'high' {
+    let score = gap
+    
+    // 如果是用户的薄弱技能，提高优先级
+    if (context.abilityProfile?.weaknesses?.some((w: string) => w.includes(skill))) {
+      score += 2
+    }
+    
+    // 如果与目标直接相关，提高优先级
+    if (context.currentGoal?.requiredSkills?.includes(skill)) {
+      score += 1
+    }
+    
+    // 如果用户有相关的优势技能，可以降低优先级
+    if (context.abilityProfile?.strengths?.some((s: string) => s.includes(skill))) {
+      score -= 1
+    }
+    
+    if (score >= 4) return 'high'
+    if (score >= 2) return 'medium'
+    return 'low'
+  }
+  
+  /**
+   * 计算个性化学习时间
+   */
+  private calculatePersonalizedTime(skillGaps: any[], context: any): number {
+    let baseTime = skillGaps.reduce((sum: number, gap: any) => sum + gap.gap * 1.5, 0)
+    
+    // 根据用户能力调整
+    if (context.abilityProfile) {
+      const score = context.abilityProfile.overallScore
+      const multiplier = score >= 70 ? 0.8 : score >= 40 ? 1.0 : 1.3
+      baseTime *= multiplier
+    }
+    
+    // 根据学习历史调整
+    if (context.learningHistory?.completedGoals > 0) {
+      baseTime *= 0.9
+    }
+    
+    return Math.ceil(baseTime)
+  }
+  
+  /**
+   * 识别可利用的优势
+   */
+  private identifyLeverageableStrengths(skillGaps: any[], context: any): string[] {
+    const strengths: string[] = []
+    
+    if (context.abilityProfile?.strengths) {
+      context.abilityProfile.strengths.forEach((strength: string) => {
+        // 查找与优势相关的技能差距
+        const relatedGaps = skillGaps.filter((gap: any) => 
+          gap.skill.includes(strength) || strength.includes(gap.skill)
+        )
+        
+        if (relatedGaps.length > 0) {
+          strengths.push(`利用您在${strength}方面的优势来学习${relatedGaps[0].skill}`)
+        }
+      })
+    }
+    
+    return strengths
+  }
+  
+  /**
+   * 识别重点关注领域
+   */
+  private identifyFocusAreas(skillGaps: any[], context: any): string[] {
+    const focusAreas: string[] = []
+    
+    // 基于薄弱点确定重点
+    if (context.abilityProfile?.weaknesses) {
+      context.abilityProfile.weaknesses.forEach((weakness: string) => {
+        const relatedGaps = skillGaps.filter((gap: any) => 
+          gap.skill.includes(weakness) && gap.priority === 'high'
+        )
+        
+        if (relatedGaps.length > 0) {
+          focusAreas.push(`重点补强${weakness}相关技能`)
+        }
+      })
+    }
+    
+    // 基于目标优先级确定重点
+    const highPriorityGaps = skillGaps.filter((gap: any) => gap.priority === 'high')
+    if (highPriorityGaps.length > 0) {
+      focusAreas.push(`优先掌握${highPriorityGaps[0].skill}等核心技能`)
+    }
+    
+    return focusAreas
+  }
+  
+  /**
+   * 获取目标所需的技能列表
+   */
+  private getRequiredSkillsForGoal(goal: any): string[] {
+    // 基于目标类别返回相关技能
+    const skillMap: Record<string, string[]> = {
+      frontend: ['HTML', 'CSS', 'JavaScript', 'React', '响应式设计', '前端工具'],
+      backend: ['编程语言', '数据库', 'API设计', '服务器管理', '数据结构', '算法'],
+      fullstack: ['前端技术', '后端技术', '数据库', '系统设计', '项目管理', 'DevOps'],
+      automation: ['Python', '脚本编程', '数据处理', '自动化工具', '流程设计'],
+      ai: ['机器学习', '深度学习', '数据科学', 'Python', '统计学', '模型部署'],
+      mobile: ['移动开发', 'UI设计', '跨平台开发', '性能优化', '发布流程'],
+      data: ['数据分析', '数据库', '统计学', '可视化', '数据挖掘', '商业理解']
+    }
+    
+    return skillMap[goal.category] || goal.requiredSkills || ['编程基础', '逻辑思维', '问题解决']
   }
   
   private async generatePathNodesTool(params: any): Promise<PathNode[]> {
@@ -981,6 +1278,377 @@ export class AgentToolExecutor {
     }
     
     return nodes
+  }
+
+  // ========== 新增查询和删除工具 ==========
+  
+  private async getLearningGoalsTool(params: any): Promise<{
+    goals: LearningGoal[]
+    total: number
+    filtered: number
+  }> {
+    const allGoals = getLearningGoals()
+    const status = params.status || 'all'
+    
+    const filteredGoals = status === 'all' 
+      ? allGoals 
+      : allGoals.filter(goal => goal.status === status)
+    
+    return {
+      goals: filteredGoals,
+      total: allGoals.length,
+      filtered: filteredGoals.length
+    }
+  }
+  
+  private async getLearningGoalTool(params: any): Promise<any> {
+    const goals = getLearningGoals()
+    const goal = goals.find(g => g.id === params.goalId)
+    
+    if (!goal) {
+      return null
+    }
+    
+    // 增加关联信息
+    const paths = getLearningPaths().filter(p => p.goalId === goal.id)
+    
+    return {
+      ...goal,
+      associatedPaths: paths.length,
+      pathsInfo: paths.map(p => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        nodeCount: p.nodes.length
+      }))
+    }
+  }
+  
+  private async deleteLearningGoalTool(params: any): Promise<{
+    success: boolean
+    message: string
+  }> {
+    const success = deleteLearningGoal(params.goalId)
+    
+    if (success) {
+      // 同时删除关联的学习路径
+      const paths = getLearningPaths().filter(p => p.goalId === params.goalId)
+      paths.forEach(path => deleteLearningPath(path.id))
+      
+      return {
+        success: true,
+        message: `成功删除目标及其关联的 ${paths.length} 条学习路径`
+      }
+    }
+    
+    return {
+      success: false,
+      message: '目标不存在或删除失败'
+    }
+  }
+  
+  private async getLearningPathsTool(params: any): Promise<{
+    paths: LearningPath[]
+    total: number
+    filtered: number
+  }> {
+    const allPaths = getLearningPaths()
+    let filteredPaths = allPaths
+    
+    // 按目标筛选
+    if (params.goalId) {
+      filteredPaths = filteredPaths.filter(path => path.goalId === params.goalId)
+    }
+    
+    // 按状态筛选
+    if (params.status && params.status !== 'all') {
+      filteredPaths = filteredPaths.filter(path => path.status === params.status)
+    }
+    
+    // 增加关联信息
+    const pathsWithInfo = filteredPaths.map(path => {
+      const goal = getLearningGoals().find(g => g.id === path.goalId)
+      const units = getCourseUnits().filter(u => 
+        path.nodes.some(node => node.id === u.nodeId)
+      )
+      
+      return {
+        ...path,
+        goalTitle: goal?.title || '未知目标',
+        courseUnitsCount: units.length,
+        completedNodes: path.nodes.filter(n => n.status === 'completed').length,
+        totalNodes: path.nodes.length
+      }
+    })
+    
+    return {
+      paths: pathsWithInfo,
+      total: allPaths.length,
+      filtered: filteredPaths.length
+    }
+  }
+  
+  private async getLearningPathTool(params: any): Promise<any> {
+    const paths = getLearningPaths()
+    const path = paths.find(p => p.id === params.pathId)
+    
+    if (!path) {
+      return null
+    }
+    
+    // 获取关联信息
+    const goal = getLearningGoals().find(g => g.id === path.goalId)
+    const units = getCourseUnits().filter(u => 
+      path.nodes.some(node => node.id === u.nodeId)
+    )
+    
+    // 计算进度
+    const completedNodes = path.nodes.filter(n => n.status === 'completed').length
+    const inProgressNodes = path.nodes.filter(n => n.status === 'in_progress').length
+    const progress = path.nodes.length > 0 ? (completedNodes / path.nodes.length) * 100 : 0
+    
+    return {
+      ...path,
+      goalInfo: goal ? {
+        title: goal.title,
+        category: goal.category,
+        targetLevel: goal.targetLevel
+      } : null,
+      progressInfo: {
+        completedNodes,
+        inProgressNodes,
+        totalNodes: path.nodes.length,
+        progressPercentage: Math.round(progress)
+      },
+      courseUnits: units.map(u => ({
+        id: u.id,
+        title: u.title,
+        type: u.type,
+        nodeId: u.nodeId
+      }))
+    }
+  }
+  
+  private async deleteLearningPathTool(params: any): Promise<{
+    success: boolean
+    message: string
+  }> {
+    const success = deleteLearningPath(params.pathId)
+    
+    if (success) {
+      // 同时删除关联的课程单元
+      const units = getCourseUnits()
+      const path = getLearningPaths().find(p => p.id === params.pathId)
+      
+      if (path) {
+        const nodeIds = path.nodes.map(n => n.id)
+        const relatedUnits = units.filter(u => nodeIds.includes(u.nodeId))
+        relatedUnits.forEach(unit => deleteCourseUnit(unit.id))
+        
+        return {
+          success: true,
+          message: `成功删除路径及其关联的 ${relatedUnits.length} 个课程单元`
+        }
+      }
+      
+      return {
+        success: true,
+        message: '成功删除学习路径'
+      }
+    }
+    
+    return {
+      success: false,
+      message: '路径不存在或删除失败'
+    }
+  }
+  
+  private async getCourseUnitsTool(params: any): Promise<{
+    units: CourseUnit[]
+    total: number
+    filtered: number
+  }> {
+    const allUnits = getCourseUnits()
+    let filteredUnits = allUnits
+    
+    // 按节点筛选
+    if (params.nodeId) {
+      filteredUnits = filteredUnits.filter(unit => unit.nodeId === params.nodeId)
+    }
+    
+    // 按类型筛选
+    if (params.type && params.type !== 'all') {
+      filteredUnits = filteredUnits.filter(unit => unit.type === params.type)
+    }
+    
+    // 增加关联信息
+    const unitsWithInfo = filteredUnits.map(unit => {
+      const paths = getLearningPaths()
+      const relatedPath = paths.find(p => 
+        p.nodes.some(node => node.id === unit.nodeId)
+      )
+      
+      return {
+        ...unit,
+        pathInfo: relatedPath ? {
+          id: relatedPath.id,
+          title: relatedPath.title,
+          goalId: relatedPath.goalId
+        } : null
+      }
+    })
+    
+    return {
+      units: unitsWithInfo,
+      total: allUnits.length,
+      filtered: filteredUnits.length
+    }
+  }
+  
+  private async getCourseUnitTool(params: any): Promise<any> {
+    const units = getCourseUnits()
+    const unit = units.find(u => u.id === params.unitId)
+    
+    if (!unit) {
+      return null
+    }
+    
+    // 获取关联信息
+    const paths = getLearningPaths()
+    const relatedPath = paths.find(p => 
+      p.nodes.some(node => node.id === unit.nodeId)
+    )
+    
+    let nodeInfo = null
+    if (relatedPath) {
+      const node = relatedPath.nodes.find(n => n.id === unit.nodeId)
+      nodeInfo = node ? {
+        title: node.title,
+        status: node.status,
+        estimatedHours: node.estimatedHours
+      } : null
+    }
+    
+    return {
+      ...unit,
+      pathInfo: relatedPath ? {
+        id: relatedPath.id,
+        title: relatedPath.title,
+        goalId: relatedPath.goalId
+      } : null,
+      nodeInfo
+    }
+  }
+  
+  private async deleteCourseUnitTool(params: any): Promise<{
+    success: boolean
+    message: string
+  }> {
+    const success = deleteCourseUnit(params.unitId)
+    
+    return {
+      success,
+      message: success ? '成功删除课程单元' : '课程单元不存在或删除失败'
+    }
+  }
+  
+  private async getLearningSummaryTool(params: any): Promise<any> {
+    const goals = getLearningGoals()
+    const paths = getLearningPaths()
+    const units = getCourseUnits()
+    const ability = getAbilityProfile()
+    const timeRange = params.timeRange || 'all'
+    
+    // 统计各种状态的数量
+    const goalStats = {
+      total: goals.length,
+      active: goals.filter(g => g.status === 'active').length,
+      completed: goals.filter(g => g.status === 'completed').length,
+      paused: goals.filter(g => g.status === 'paused').length
+    }
+    
+    const pathStats = {
+      total: paths.length,
+      active: paths.filter(p => p.status === 'active').length,
+      completed: paths.filter(p => p.status === 'completed').length,
+      draft: paths.filter(p => p.status === 'draft').length
+    }
+    
+    // 计算总体进度
+    const activePaths = paths.filter(p => p.status === 'active')
+    const totalNodes = activePaths.reduce((sum, path) => sum + path.nodes.length, 0)
+    const completedNodes = activePaths.reduce((sum, path) => 
+      sum + path.nodes.filter(n => n.status === 'completed').length, 0
+    )
+    const overallProgress = totalNodes > 0 ? (completedNodes / totalNodes) * 100 : 0
+    
+    // 获取最活跃的学习领域
+    const categoryStats = goals.reduce((acc: Record<string, number>, goal) => {
+      acc[goal.category] = (acc[goal.category] || 0) + 1
+      return acc
+    }, {})
+    
+    const topCategory = Object.entries(categoryStats)
+      .sort(([,a], [,b]) => b - a)[0]?.[0] || '无'
+    
+    return {
+      summary: {
+        hasAbilityProfile: !!ability,
+        overallProgress: Math.round(overallProgress),
+        activeGoals: goalStats.active,
+        activePaths: pathStats.active,
+        completedNodes,
+        totalNodes,
+        topLearningArea: topCategory
+      },
+      goalStats,
+      pathStats,
+      unitStats: {
+        total: units.length,
+        byType: units.reduce((acc: Record<string, number>, unit) => {
+          acc[unit.type] = (acc[unit.type] || 0) + 1
+          return acc
+        }, {})
+      },
+      recommendations: this.generateSummaryRecommendations(goalStats, pathStats, overallProgress, ability),
+      timeRange,
+      generatedAt: new Date().toISOString()
+    }
+  }
+  
+  private generateSummaryRecommendations(
+    goalStats: any, 
+    pathStats: any, 
+    progress: number, 
+    ability: any
+  ): string[] {
+    const recommendations: string[] = []
+    
+    if (!ability) {
+      recommendations.push('完成能力评估以获得个性化学习建议')
+    }
+    
+    if (goalStats.active === 0) {
+      recommendations.push('设定新的学习目标开始学习之旅')
+    } else if (goalStats.active > 3) {
+      recommendations.push('考虑专注于1-2个主要目标，避免分散注意力')
+    }
+    
+    if (pathStats.active === 0 && goalStats.active > 0) {
+      recommendations.push('为现有目标生成学习路径')
+    }
+    
+    if (progress < 20 && pathStats.active > 0) {
+      recommendations.push('建议先完成当前路径的基础内容')
+    } else if (progress > 80) {
+      recommendations.push('恭喜！考虑设定更高级的学习目标')
+    }
+    
+    if (pathStats.draft > 0) {
+      recommendations.push('激活草稿状态的学习路径开始学习')
+    }
+    
+    return recommendations.slice(0, 3) // 返回前3条建议
   }
 }
 

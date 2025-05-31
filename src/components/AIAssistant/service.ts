@@ -253,8 +253,9 @@ ${context ? `上下文信息：${context}` : ''}`
       case 'qwen':
         apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
         headers['Authorization'] = `Bearer ${config.apiKey}`
+        headers['X-DashScope-SSE'] = 'disable'
         body = {
-          model: config.specificModel || 'qwen-max',
+          model: config.specificModel || 'qwen-turbo',
           input: {
             messages: [
               { role: 'system', content: systemPrompt },
@@ -262,23 +263,10 @@ ${context ? `上下文信息：${context}` : ''}`
             ]
           },
           parameters: {
-            temperature: config.params?.temperature || 0.7,
-            max_tokens: config.params?.maxTokens || 1000
+            temperature: config.params?.temperature || 0.3,
+            max_tokens: config.params?.maxTokens || 2000,
+            result_format: 'message'
           }
-        }
-        
-        // 添加其他参数
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.parameters.top_p = config.params.topP
-        }
-        if (config.params?.topK !== undefined && config.params.topK > 0) {
-          body.parameters.top_k = config.params.topK
-        }
-        if (config.params?.presencePenalty !== undefined) {
-          body.parameters.presence_penalty = config.params.presencePenalty
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.parameters.stop = config.params.stopSequences
         }
         break
         
@@ -786,5 +774,423 @@ export class AIChatService {
     this.onLoadingStateChange = undefined
     this.onStreamingUpdate = undefined
     this.onStreamingComplete = undefined
+  }
+}
+
+/**
+ * 调用AI API获取回复（支持工具调用）
+ */
+export const getAIResponseWithTools = async (
+  message: string, 
+  context?: string,
+  tools?: any[],
+  toolsExecutor?: (toolName: string, parameters: any) => Promise<any>
+): Promise<{
+  response: string
+  toolCalls: Array<{
+    name: string
+    parameters: any
+    result: any
+  }>
+}> => {
+  const config = getAssistantConfig()
+  if (!config) {
+    throw new Error('AI助手配置不可用')
+  }
+  
+  log('[AIAssistant] Starting function calling API request with tools:', tools?.length || 0)
+  
+  try {
+    let apiUrl = ''
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+    let body: any = {}
+    
+    const systemPrompt = `你是一个专业的AI学习助手，拥有多种工具来帮助用户管理和分析学习数据。
+
+你的核心职责：
+• 🔍 根据用户问题智能选择合适的工具
+• 📊 分析和查询用户的学习数据
+• 🎯 提供个性化的学习建议和指导
+• 🛠️ 执行学习管理相关的操作
+
+工具使用原则：
+1. 当用户询问"我的目标"、"学习目标"时，使用 get_learning_goals
+2. 当用户询问"我的路径"、"学习路径"时，使用 get_learning_paths  
+3. 当用户询问"我的课程"、"学习内容"时，使用 get_course_units
+4. 当用户询问"我的进度"、"学习统计"时，使用 get_learning_summary
+5. 当用户询问"我的状态"、"学习概况"时，使用 get_learning_context
+6. 当用户要求"分析能力"、"评估技能"时，使用 analyze_user_ability
+7. 当用户要求"创建目标"、"设定目标"时，使用 create_learning_goal
+8. 当用户要求"生成路径"、"制定计划"时，使用 create_learning_path 或 generate_path_nodes
+9. 当用户提出学习困难时，使用 handle_learning_difficulty
+10. 当用户需要建议时，使用 suggest_next_action
+
+请根据用户的具体需求选择最合适的工具，可以同时调用多个工具获取完整信息。
+
+${context ? `\n当前学习上下文：\n${context}` : ''}`
+    
+    switch (config.model) {
+      case 'openai':
+        apiUrl = 'https://api.openai.com/v1/chat/completions'
+        headers['Authorization'] = `Bearer ${config.apiKey}`
+        body = {
+          model: config.specificModel || 'gpt-4o',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: message }
+          ],
+          temperature: config.params?.temperature || 0.3,
+          max_tokens: config.params?.maxTokens || 2000
+        }
+        
+        // 添加工具定义（OpenAI function calling格式）
+        if (tools && tools.length > 0) {
+          body.tools = tools.map(tool => ({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: {
+                type: 'object',
+                properties: Object.entries(tool.parameters).reduce((props: any, [key, param]: [string, any]) => {
+                  props[key] = {
+                    type: param.type,
+                    description: param.description,
+                    ...(param.enum && { enum: param.enum }),
+                    ...(param.min && { minimum: param.min }),
+                    ...(param.max && { maximum: param.max }),
+                    ...(param.items && { items: param.items })
+                  }
+                  return props
+                }, {}),
+                required: Object.entries(tool.parameters)
+                  .filter(([_, param]: [string, any]) => !param.optional)
+                  .map(([key]) => key)
+              }
+            }
+          }))
+          body.tool_choice = 'auto'
+        }
+        break
+        
+      case 'claude':
+        apiUrl = 'https://api.anthropic.com/v1/messages'
+        headers['x-api-key'] = config.apiKey
+        headers['anthropic-version'] = '2023-06-01'
+        body = {
+          model: config.specificModel || 'claude-3-5-sonnet-20241022',
+          system: systemPrompt,
+          messages: [{ role: 'user', content: message }],
+          max_tokens: config.params?.maxTokens || 2000,
+          temperature: config.params?.temperature || 0.3
+        }
+        
+        // 添加工具定义（Claude tools格式）
+        if (tools && tools.length > 0) {
+          body.tools = tools.map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            input_schema: {
+              type: 'object',
+              properties: Object.entries(tool.parameters).reduce((props: any, [key, param]: [string, any]) => {
+                props[key] = {
+                  type: param.type,
+                  description: param.description,
+                  ...(param.enum && { enum: param.enum }),
+                  ...(param.min && { minimum: param.min }),
+                  ...(param.max && { maximum: param.max }),
+                  ...(param.items && { items: param.items })
+                }
+                return props
+              }, {}),
+              required: Object.entries(tool.parameters)
+                .filter(([_, param]: [string, any]) => !param.optional)
+                .map(([key]) => key)
+            }
+          }))
+        }
+        break
+        
+      case 'qwen':
+        apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+        headers['Authorization'] = `Bearer ${config.apiKey}`
+        headers['X-DashScope-SSE'] = 'disable'
+        body = {
+          model: config.specificModel || 'qwen-turbo',
+          input: {
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message }
+            ]
+          },
+          parameters: {
+            temperature: config.params?.temperature || 0.3,
+            max_tokens: config.params?.maxTokens || 2000,
+            result_format: 'message'
+          }
+        }
+        
+        // 添加工具定义（通义千问 function calling格式）
+        if (tools && tools.length > 0) {
+          body.input.tools = tools.map(tool => ({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: {
+                type: 'object',
+                properties: Object.entries(tool.parameters).reduce((props: any, [key, param]: [string, any]) => {
+                  props[key] = {
+                    type: param.type,
+                    description: param.description,
+                    ...(param.enum && { enum: param.enum }),
+                    ...(param.min && { minimum: param.min }),
+                    ...(param.max && { maximum: param.max }),
+                    ...(param.items && { items: param.items })
+                  }
+                  return props
+                }, {}),
+                required: Object.entries(tool.parameters)
+                  .filter(([_, param]: [string, any]) => !param.optional)
+                  .map(([key]) => key)
+              }
+            }
+          }))
+        }
+        break
+        
+      default:
+        throw new Error(`不支持的AI模型: ${config.model}`)
+    }
+    
+    log('[AIAssistant] Function calling request:', {
+      model: config.model,
+      toolsCount: tools?.length || 0,
+      messageLength: message.length
+    })
+    
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      log('[AIAssistant] API Error Response:', errorText)
+      throw new Error(`API请求失败 (${response.status}): ${errorText}`)
+    }
+    
+    const data = await response.json()
+    log('[AIAssistant] Function calling response received')
+    
+    // 处理不同模型的响应格式
+    let assistantMessage: any
+    let toolCalls: any[] = []
+    
+    switch (config.model) {
+      case 'openai':
+        assistantMessage = data.choices[0].message
+        if (assistantMessage.tool_calls) {
+          toolCalls = assistantMessage.tool_calls.map((call: any) => ({
+            id: call.id,
+            name: call.function.name,
+            parameters: JSON.parse(call.function.arguments)
+          }))
+          log('[AIAssistant] OpenAI tool calls detected:', toolCalls.length)
+        }
+        break
+        
+      case 'claude':
+        // Claude 可能返回多个 content 块
+        if (Array.isArray(data.content)) {
+          assistantMessage = data.content.find((c: any) => c.type === 'text') || data.content[0]
+          
+          // 查找工具调用
+          const toolUseBlocks = data.content.filter((content: any) => content.type === 'tool_use')
+          if (toolUseBlocks.length > 0) {
+            toolCalls = toolUseBlocks.map((content: any) => ({
+              id: content.id,
+              name: content.name,
+              parameters: content.input || {}
+            }))
+            log('[AIAssistant] Claude tool calls detected:', toolCalls.length)
+          }
+        } else {
+          assistantMessage = data.content
+        }
+        break
+        
+      case 'qwen':
+        assistantMessage = data.output.choices[0].message
+        if (assistantMessage.tool_calls) {
+          toolCalls = assistantMessage.tool_calls.map((call: any) => ({
+            id: call.id,
+            name: call.function.name,
+            parameters: JSON.parse(call.function.arguments)
+          }))
+          log('[AIAssistant] Qwen tool calls detected:', toolCalls.length)
+        }
+        break
+    }
+    
+    // 执行工具调用
+    const executedToolCalls: Array<{
+      name: string
+      parameters: any
+      result: any
+    }> = []
+    
+    if (toolCalls.length > 0 && toolsExecutor) {
+      log('[AIAssistant] Executing tool calls:', toolCalls.map(tc => tc.name))
+      
+      for (const toolCall of toolCalls) {
+        try {
+          log(`[AIAssistant] Executing tool: ${toolCall.name}`, toolCall.parameters)
+          const result = await toolsExecutor(toolCall.name, toolCall.parameters)
+          executedToolCalls.push({
+            name: toolCall.name,
+            parameters: toolCall.parameters,
+            result
+          })
+          log(`[AIAssistant] Tool executed successfully: ${toolCall.name}`)
+        } catch (toolError) {
+          log(`[AIAssistant] Tool execution failed: ${toolCall.name}`, toolError)
+          executedToolCalls.push({
+            name: toolCall.name,
+            parameters: toolCall.parameters,
+            result: { error: toolError instanceof Error ? toolError.message : 'Unknown error' }
+          })
+        }
+      }
+      
+      // 如果有工具调用，需要第二次API调用获取最终回复
+      if (executedToolCalls.length > 0) {
+        const toolResults = executedToolCalls.map(call => 
+          `工具 ${call.name} 执行结果：\n${JSON.stringify(call.result, null, 2)}`
+        ).join('\n\n')
+        
+        // 构建第二次请求
+        const secondBody = { ...body }
+        switch (config.model) {
+          case 'openai':
+            secondBody.messages = [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message },
+              { 
+                role: 'assistant', 
+                content: assistantMessage.content || null,
+                tool_calls: assistantMessage.tool_calls || []
+              },
+              ...executedToolCalls.map(call => ({
+                role: 'tool',
+                tool_call_id: toolCalls.find(tc => tc.name === call.name)?.id,
+                content: JSON.stringify(call.result)
+              }))
+            ]
+            delete secondBody.tools
+            delete secondBody.tool_choice
+            break
+            
+          case 'claude':
+            secondBody.messages = [
+              { role: 'user', content: message },
+              { 
+                role: 'assistant', 
+                content: [
+                  ...(Array.isArray(data.content) ? data.content : [data.content]),
+                  ...executedToolCalls.map(call => ({
+                    type: 'tool_result',
+                    tool_use_id: toolCalls.find(tc => tc.name === call.name)?.id,
+                    content: JSON.stringify(call.result)
+                  }))
+                ]
+              },
+              { role: 'user', content: '请基于工具执行结果回答我的问题。' }
+            ]
+            delete secondBody.tools
+            break
+            
+          case 'qwen':
+            secondBody.input.messages = [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message },
+              { role: 'assistant', content: assistantMessage.content, tool_calls: assistantMessage.tool_calls },
+              ...executedToolCalls.map(call => ({
+                role: 'tool',
+                name: call.name,
+                content: JSON.stringify(call.result)
+              }))
+            ]
+            delete secondBody.input.tools
+            break
+        }
+        
+        log('[AIAssistant] Sending follow-up request for final response')
+        
+        const secondResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(secondBody)
+        })
+        
+        if (secondResponse.ok) {
+          const secondData = await secondResponse.json()
+          let finalResponse = ''
+          
+          switch (config.model) {
+            case 'openai':
+              finalResponse = secondData.choices[0].message.content
+              break
+            case 'claude':
+              if (Array.isArray(secondData.content)) {
+                const textContent = secondData.content.find((c: any) => c.type === 'text')
+                finalResponse = textContent ? textContent.text : secondData.content[0]?.text || '无法生成回复'
+              } else {
+                finalResponse = secondData.content?.text || '无法生成回复'
+              }
+              break
+            case 'qwen':
+              finalResponse = secondData.output.choices[0].message.content
+              break
+          }
+          
+          log('[AIAssistant] Function calling completed successfully')
+          
+          return {
+            response: finalResponse,
+            toolCalls: executedToolCalls
+          }
+        } else {
+          log('[AIAssistant] Follow-up request failed, using tool results directly')
+        }
+      }
+    }
+    
+    // 没有工具调用或工具调用失败时的回复
+    let responseText = ''
+    switch (config.model) {
+      case 'openai':
+        responseText = assistantMessage.content || '抱歉，我无法生成回复。'
+        break
+      case 'claude':
+        responseText = assistantMessage.text || assistantMessage.content || '抱歉，我无法生成回复。'
+        break
+      case 'qwen':
+        responseText = assistantMessage.content || '抱歉，我无法生成回复。'
+        break
+    }
+    
+    return {
+      response: responseText,
+      toolCalls: executedToolCalls
+    }
+    
+  } catch (err) {
+    error('[AIAssistant] Function calling API error:', err)
+    const errorMessage = err instanceof Error ? err.message : '未知错误'
+    throw new Error(`AI请求失败: ${errorMessage}`)
   }
 } 

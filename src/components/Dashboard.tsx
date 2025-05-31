@@ -2,12 +2,11 @@ import React, { useState } from 'react'
 import { getCurrentProfile } from '../utils/profile'
 import { getCurrentAssessment } from '../modules/abilityAssess'
 import AppleProfileSwitcher from './AppleProfileSwitcher'
-import { Link } from 'react-router-dom'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat' | 'learning-path-view' | 'data-inspector') => void
-  onHome?: () => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector') => void
+  onHome: () => void
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) => {
@@ -51,20 +50,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       ),
       color: 'from-pink-500 to-rose-500',
       status: '可测试',
-      available: true
-    },
-    {
-      id: 'agent-chat',
-      view: 'agent-chat' as const,
-      title: 'AI 智能对话',
-      description: '与AI助手进行自然语言交互和学习规划',
-      icon: (
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      ),
-      color: 'from-cyan-500 to-blue-500',
-      status: '可使用',
       available: true
     },
     {
@@ -176,13 +161,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
             <div className="flex items-center gap-4">
               {/* 测试随意搜 - 仅开发环境显示 */}
               {window.location.hostname === 'localhost' && (
-                <Link 
-                  to="/test-random-search"
+                <button 
+                  onClick={() => onNavigate('test-random-search')}
                   className="text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-purple-50 border border-purple-200"
                 >
                   <span>🧪</span>
                   测试随意搜
-                </Link>
+                </button>
               )}
               
               {/* 设置按钮 */}
@@ -274,6 +259,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
               </div>
             </div>
           ))}
+        </div>
+
+        {/* AI系统演示 */}
+        <div 
+          className="card"
+          onClick={() => onNavigate('agent-demo')}
+          style={{ 
+            backgroundColor: '#e8f5e8', 
+            borderLeft: '4px solid #28a745',
+            cursor: 'pointer'
+          }}
+        >
+          <h3>🤖 AI系统演示</h3>
+          <p>体验AI工具的强大功能</p>
+          <small>测试各种AI Agent工具</small>
         </div>
 
         {/* Progress Section */}

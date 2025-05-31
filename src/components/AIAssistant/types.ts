@@ -17,6 +17,9 @@ export interface ChatMessage {
   timestamp: Date
   keyword?: string  // 如果是通过关键词触发的消息
   isLoading?: boolean
+  // Agent 模式扩展字段
+  toolsUsed?: string[]  // 使用的AI工具列表
+  suggestions?: string[]  // AI建议列表
 }
 
 export interface ChatSession {

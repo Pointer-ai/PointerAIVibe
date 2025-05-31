@@ -5,7 +5,11 @@ import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import { ChatMessage, ChatSession } from './types'
 import { getAIResponseStream, createChatSession, saveChatSession, deleteChatSession, getChatSessions, updateSessionTitle } from './service'
+import { learningSystemService, LearningSystemStatus } from '../../modules/learningSystem'
 import { log, error } from '../../utils/logger'
+
+// 添加聊天模式类型
+type ChatMode = 'question' | 'agent'
 
 interface MultiTabChatProps {
   onClose: () => void
@@ -44,9 +48,28 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
   const [chatSize, setChatSize] = useState({ width: 600, height: 384 }) // 24rem = 384px
   const [isResizing, setIsResizing] = useState(false)
   
+  // 新增：聊天模式状态
+  const [chatMode, setChatMode] = useState<ChatMode>('question')
+  const [systemStatus, setSystemStatus] = useState<LearningSystemStatus | null>(null)
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dragRef = useRef<{ startX: number; startY: number; startMouseX: number; startMouseY: number } | null>(null)
+
+  // 新增：初始化系统状态（Agent模式需要）
+  useEffect(() => {
+    if (chatMode === 'agent') {
+      const initializeSystemStatus = async () => {
+        try {
+          const status = await learningSystemService.getSystemStatus()
+          setSystemStatus(status)
+        } catch (error) {
+          log('[MultiTabChat] Failed to initialize system status:', error)
+        }
+      }
+      initializeSystemStatus()
+    }
+  }, [chatMode])
 
   // 处理新的随意搜查询请求 - 简化逻辑，因为组件常驻
   useEffect(() => {
@@ -420,22 +443,45 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       })
       setSessions(sessionsWithPlaceholder)
 
-      // 获取流式AI回复
-      const response = await getAIResponseStream(
-        message.trim(),
-        undefined,
-        (chunk: string) => {
-          // 实时更新流式内容
-          setStreamingContent(prev => prev + chunk)
-        }
-      )
+      let response: string
+      let toolsUsed: string[] = []
+      let suggestions: string[] = []
+
+      // 根据模式调用不同的服务
+      if (chatMode === 'agent') {
+        // Agent 模式：使用学习系统服务
+        const agentResponse = await learningSystemService.chatWithAgent(message.trim(), {
+          currentSystemStatus: systemStatus
+        })
+        response = agentResponse.response
+        toolsUsed = agentResponse.toolsUsed || []
+        suggestions = agentResponse.suggestions || []
+        
+        // 更新系统状态
+        setSystemStatus(agentResponse.systemStatus)
+      } else {
+        // 问答模式：使用原有的 AI 服务
+        response = await getAIResponseStream(
+          message.trim(),
+          undefined,
+          (chunk: string) => {
+            // 实时更新流式内容
+            setStreamingContent(prev => prev + chunk)
+          }
+        )
+      }
       
       // 完成后更新最终消息
       const finalMessage: ChatMessage = {
         id: assistantMessageId,
         type: 'assistant',
         content: response,
-        timestamp: new Date()
+        timestamp: new Date(),
+        // Agent 模式下添加额外信息
+        ...(chatMode === 'agent' && {
+          toolsUsed,
+          suggestions
+        })
       }
 
       // 更新会话
@@ -459,7 +505,9 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
-        content: '抱歉，我暂时无法回答您的问题。请检查网络连接或稍后重试。',
+        content: chatMode === 'agent' 
+          ? '抱歉，学习助手暂时无法处理您的请求。请稍后再试。'
+          : '抱歉，我暂时无法回答您的问题。请检查网络连接或稍后重试。',
         timestamp: new Date()
       }
 
@@ -617,9 +665,43 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
         <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-tr-xl">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            <span className="font-medium">悟语 AI学习助手</span>
+            <span className="font-medium">
+              悟语 AI助手 - {chatMode === 'agent' ? '学习模式' : '问答模式'}
+            </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* 模式切换按钮 */}
+            <div className="flex bg-white/20 rounded-full p-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setChatMode('question')
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors no-drag ${
+                  chatMode === 'question' 
+                    ? 'bg-white text-blue-600' 
+                    : 'text-white/80 hover:text-white'
+                }`}
+                title="问答模式"
+              >
+                💬 问答
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setChatMode('agent')
+                }}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors no-drag ${
+                  chatMode === 'agent' 
+                    ? 'bg-white text-blue-600' 
+                    : 'text-white/80 hover:text-white'
+                }`}
+                title="学习模式"
+              >
+                🤖 学习
+              </button>
+            </div>
+            
             {/* 助手激活开关 */}
             {hasApiConfig && onAssistantToggle && (
               <button
@@ -684,12 +766,94 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
           </div>
         </div>
 
+        {/* Agent 模式系统状态栏 */}
+        {chatMode === 'agent' && systemStatus && (
+          <div className="bg-gray-50 border-b border-gray-200 p-3">
+            <div className="grid grid-cols-3 gap-4 text-xs">
+              <div className="text-center">
+                <div className="text-gray-500">当前阶段</div>
+                <div className="font-medium text-gray-700">
+                  {systemStatus.currentPhase === 'assessment' && '能力评估'}
+                  {systemStatus.currentPhase === 'goal_setting' && '目标设定'}
+                  {systemStatus.currentPhase === 'path_planning' && '路径规划'}
+                  {systemStatus.currentPhase === 'learning' && '学习中'}
+                  {systemStatus.currentPhase === 'review' && '复习阶段'}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-gray-500">学习进度</div>
+                <div className="font-medium text-gray-700">
+                  {Math.round(systemStatus.progress.overallProgress)}%
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-gray-500">设置完成</div>
+                <div className={`font-medium ${systemStatus.setupComplete ? 'text-green-600' : 'text-yellow-600'}`}>
+                  {systemStatus.setupComplete ? '完成' : '进行中'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Agent 模式快速操作栏 */}
+        {chatMode === 'agent' && (
+          <div className="bg-white border-b border-gray-200 p-3">
+            <div className="flex flex-wrap gap-2">
+              <button 
+                className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium hover:bg-blue-200 transition-colors"
+                onClick={() => handleSendMessage('分析一下我的能力水平')}
+                disabled={isLoading}
+              >
+                🧠 分析能力
+              </button>
+              <button 
+                className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200 transition-colors"
+                onClick={() => handleSendMessage('我想设定一个学习目标')}
+                disabled={isLoading}
+              >
+                🎯 设定目标
+              </button>
+              <button 
+                className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium hover:bg-purple-200 transition-colors"
+                onClick={() => handleSendMessage('为我生成学习路径')}
+                disabled={isLoading}
+              >
+                🛤️ 生成路径
+              </button>
+              <button 
+                className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium hover:bg-yellow-200 transition-colors"
+                onClick={() => handleSendMessage('查看我的学习进度')}
+                disabled={isLoading}
+              >
+                📊 学习进度
+              </button>
+              <button 
+                className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium hover:bg-indigo-200 transition-colors"
+                onClick={() => handleSendMessage('给我一些学习建议')}
+                disabled={isLoading}
+              >
+                💡 获取建议
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 设置面板 */}
         {showSettings && (
           <div className="bg-gray-50 border-b border-gray-200 p-3">
             <div className="text-center text-sm text-gray-600">
-              <p>✨ 悟语随意搜功能已激活</p>
-              <p className="text-xs mt-1">选中页面任意文字即可进行AI查询</p>
+              {chatMode === 'agent' ? (
+                <>
+                  <p>🤖 学习模式已激活</p>
+                  <p className="text-xs mt-1">我可以帮您进行能力分析、目标设定、路径规划等学习管理</p>
+                </>
+              ) : (
+                <>
+                  <p>✨ 悟语随意搜功能已激活</p>
+                  <p className="text-xs mt-1">选中页面任意文字即可进行AI查询</p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -767,6 +931,41 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
                         {/* 流式输出时显示光标 */}
                         {message.id === streamingMessageId && (
                           <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-1 rounded-full"></span>
+                        )}
+
+                        {/* Agent 模式：显示使用的工具 */}
+                        {chatMode === 'agent' && message.toolsUsed && message.toolsUsed.length > 0 && (
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <div className="text-xs text-gray-500 mb-1">🔧 使用的工具:</div>
+                            <div className="flex flex-wrap gap-1">
+                              {message.toolsUsed.map((tool, index) => (
+                                <span key={index} className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">
+                                  {tool}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Agent 模式：显示建议 */}
+                        {chatMode === 'agent' && message.suggestions && message.suggestions.length > 0 && (
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <div className="text-xs text-gray-500 mb-2">💡 建议继续:</div>
+                            <div className="space-y-1">
+                              {message.suggestions.map((suggestion, index) => (
+                                <button
+                                  key={index}
+                                  onClick={() => {
+                                    setInputValue(suggestion)
+                                    inputRef.current?.focus()
+                                  }}
+                                  className="block w-full text-left px-2 py-1 bg-green-50 text-green-700 rounded text-xs hover:bg-green-100 transition-colors"
+                                >
+                                  {suggestion}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                     ) : (

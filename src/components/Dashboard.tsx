@@ -125,15 +125,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
     {
       id: 'data-inspector',
       view: 'data-inspector' as const,
-      title: '数据检查器',
-      description: '查看AI工具调用结果，验证数据存储状态',
+      title: '数据管理',
+      description: '管理和查看学习数据，支持删除和导出功能',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
         </svg>
       ),
       color: 'from-amber-500 to-orange-500',
-      status: '调试工具',
+      status: '数据工具',
       available: true
     }
   ]
@@ -259,21 +259,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
               </div>
             </div>
           ))}
-        </div>
-
-        {/* AI系统演示 */}
-        <div 
-          className="card"
-          onClick={() => onNavigate('agent-demo')}
-          style={{ 
-            backgroundColor: '#e8f5e8', 
-            borderLeft: '4px solid #28a745',
-            cursor: 'pointer'
-          }}
-        >
-          <h3>🤖 AI系统演示</h3>
-          <p>体验AI工具的强大功能</p>
-          <small>测试各种AI Agent工具</small>
         </div>
 
         {/* Progress Section */}

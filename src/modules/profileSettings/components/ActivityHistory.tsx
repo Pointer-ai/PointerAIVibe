@@ -32,7 +32,10 @@ export const ActivityHistory: React.FC = () => {
       goal_set: '🎯',
       course_view: '📚',
       code_run: '💻',
-      profile_update: '👤'
+      profile_update: '👤',
+      function_call: '🔧',
+      ai_chat: '🤖',
+      data_operation: '🗂️'
     }
     return icons[type] || '📝'
   }

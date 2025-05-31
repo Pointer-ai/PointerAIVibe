@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react'
 import { getCurrentProfile, getProfileData } from '../utils/profile'
-import { getLearningGoals, getLearningPaths, getCourseUnits, getAgentActions } from '../modules/coreData'
+import { 
+  getLearningGoals, 
+  getLearningPaths, 
+  getCourseUnits, 
+  getAgentActions,
+  deleteLearningGoal,
+  deleteLearningPath,
+  deleteCourseUnit
+} from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
+import { addActivityRecord } from '../modules/profileSettings/service'
 
 export const DataInspector: React.FC = () => {
   const [profileData, setProfileData] = useState<any>(null)
   const [coreData, setCoreData] = useState<any>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'goal' | 'path' | 'unit' | null
+    id: string
+    title: string
+  } | null>(null)
 
   const refreshData = () => {
     const profile = getCurrentProfile()
@@ -26,7 +39,6 @@ export const DataInspector: React.FC = () => {
         currentAssessment: getCurrentAssessment()
       })
     }
-    setRefreshKey(prev => prev + 1)
   }
 
   useEffect(() => {
@@ -42,6 +54,71 @@ export const DataInspector: React.FC = () => {
     alert('已复制到剪贴板')
   }
 
+  const handleDelete = async (type: 'goal' | 'path' | 'unit', id: string, title: string) => {
+    setDeleteConfirm({ type, id, title })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return
+
+    try {
+      let success = false
+      let message = ''
+
+      switch (deleteConfirm.type) {
+        case 'goal':
+          success = deleteLearningGoal(deleteConfirm.id)
+          message = success ? '学习目标删除成功' : '学习目标删除失败'
+          break
+        case 'path':
+          success = deleteLearningPath(deleteConfirm.id)
+          message = success ? '学习路径删除成功' : '学习路径删除失败'
+          break
+        case 'unit':
+          success = deleteCourseUnit(deleteConfirm.id)
+          message = success ? '课程单元删除成功' : '课程单元删除失败'
+          break
+      }
+
+      if (success) {
+        // 记录删除操作到活动历史
+        addActivityRecord({
+          type: 'data_operation',
+          action: `删除${deleteConfirm.type === 'goal' ? '学习目标' : deleteConfirm.type === 'path' ? '学习路径' : '课程单元'}`,
+          details: {
+            itemType: deleteConfirm.type,
+            itemId: deleteConfirm.id,
+            itemTitle: deleteConfirm.title,
+            success: true
+          }
+        })
+
+        alert(message)
+        refreshData()
+      } else {
+        alert(message)
+      }
+    } catch (error) {
+      const errorMessage = `删除失败: ${error instanceof Error ? error.message : '未知错误'}`
+      alert(errorMessage)
+      
+      // 记录失败的删除操作
+      addActivityRecord({
+        type: 'data_operation',
+        action: `删除${deleteConfirm.type === 'goal' ? '学习目标' : deleteConfirm.type === 'path' ? '学习路径' : '课程单元'}失败`,
+        details: {
+          itemType: deleteConfirm.type,
+          itemId: deleteConfirm.id,
+          itemTitle: deleteConfirm.title,
+          success: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      })
+    } finally {
+      setDeleteConfirm(null)
+    }
+  }
+
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ 
@@ -50,7 +127,7 @@ export const DataInspector: React.FC = () => {
         alignItems: 'center',
         marginBottom: '20px'
       }}>
-        <h1>🔍 数据检查器</h1>
+        <h1>🗂️ 数据管理</h1>
         <button
           onClick={refreshData}
           style={{
@@ -137,9 +214,9 @@ export const DataInspector: React.FC = () => {
         </div>
       </div>
 
-      {/* 详细数据查看 */}
+      {/* 数据管理区域 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* 学习目标数据 */}
+        {/* 学习目标管理 */}
         {coreData?.goals?.length > 0 && (
           <div style={{
             padding: '15px',
@@ -148,7 +225,7 @@ export const DataInspector: React.FC = () => {
             border: '1px solid #ddd'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>🎯 学习目标数据</h3>
+              <h3 style={{ margin: 0, color: '#333' }}>🎯 学习目标管理</h3>
               <button
                 onClick={() => copyToClipboard(formatJSON(coreData.goals))}
                 style={{
@@ -161,12 +238,49 @@ export const DataInspector: React.FC = () => {
                   fontSize: '12px'
                 }}
               >
-                📋 复制
+                📋 复制数据
               </button>
             </div>
+            
+            {/* 目标列表 */}
+            <div style={{ marginTop: '15px' }}>
+              {coreData.goals.map((goal: any) => (
+                <div key={goal.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px',
+                  marginBottom: '8px'
+                }}>
+                  <div>
+                    <strong>{goal.title}</strong>
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
+                      {goal.category} | {goal.status} | 优先级: {goal.priority}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDelete('goal', goal.id, goal.title)}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🗑️ 删除
+                  </button>
+                </div>
+              ))}
+            </div>
+            
             <details style={{ marginTop: '10px' }}>
               <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看 ({coreData.goals.length} 个目标)
+                展开查看完整数据 ({coreData.goals.length} 个目标)
               </summary>
               <pre style={{
                 backgroundColor: '#f8f9fa',
@@ -183,7 +297,7 @@ export const DataInspector: React.FC = () => {
           </div>
         )}
 
-        {/* 学习路径数据 */}
+        {/* 学习路径管理 */}
         {coreData?.paths?.length > 0 && (
           <div style={{
             padding: '15px',
@@ -192,7 +306,7 @@ export const DataInspector: React.FC = () => {
             border: '1px solid #ddd'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>🛤️ 学习路径数据</h3>
+              <h3 style={{ margin: 0, color: '#333' }}>🛤️ 学习路径管理</h3>
               <button
                 onClick={() => copyToClipboard(formatJSON(coreData.paths))}
                 style={{
@@ -205,12 +319,49 @@ export const DataInspector: React.FC = () => {
                   fontSize: '12px'
                 }}
               >
-                📋 复制
+                📋 复制数据
               </button>
             </div>
+            
+            {/* 路径列表 */}
+            <div style={{ marginTop: '15px' }}>
+              {coreData.paths.map((path: any) => (
+                <div key={path.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px',
+                  marginBottom: '8px'
+                }}>
+                  <div>
+                    <strong>{path.title}</strong>
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
+                      {path.nodes.length} 节点 | {path.status} | {path.totalEstimatedHours}h
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDelete('path', path.id, path.title)}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🗑️ 删除
+                  </button>
+                </div>
+              ))}
+            </div>
+            
             <details style={{ marginTop: '10px' }}>
               <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看 ({coreData.paths.length} 个路径)
+                展开查看完整数据 ({coreData.paths.length} 条路径)
               </summary>
               <pre style={{
                 backgroundColor: '#f8f9fa',
@@ -222,6 +373,87 @@ export const DataInspector: React.FC = () => {
                 marginTop: '10px'
               }}>
                 {formatJSON(coreData.paths)}
+              </pre>
+            </details>
+          </div>
+        )}
+
+        {/* 课程单元管理 */}
+        {coreData?.courseUnits?.length > 0 && (
+          <div style={{
+            padding: '15px',
+            backgroundColor: '#ffffff',
+            borderRadius: '8px',
+            border: '1px solid #ddd'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, color: '#333' }}>📚 课程单元管理</h3>
+              <button
+                onClick={() => copyToClipboard(formatJSON(coreData.courseUnits))}
+                style={{
+                  padding: '5px 10px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                📋 复制数据
+              </button>
+            </div>
+            
+            {/* 单元列表 */}
+            <div style={{ marginTop: '15px' }}>
+              {coreData.courseUnits.map((unit: any) => (
+                <div key={unit.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px',
+                  marginBottom: '8px'
+                }}>
+                  <div>
+                    <strong>{unit.title}</strong>
+                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
+                      {unit.type} | 难度: {unit.metadata?.difficulty || 'N/A'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDelete('unit', unit.id, unit.title)}
+                    style={{
+                      padding: '4px 8px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🗑️ 删除
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            <details style={{ marginTop: '10px' }}>
+              <summary style={{ cursor: 'pointer', color: '#007bff' }}>
+                展开查看完整数据 ({coreData.courseUnits.length} 个单元)
+              </summary>
+              <pre style={{
+                backgroundColor: '#f8f9fa',
+                padding: '10px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                overflow: 'auto',
+                maxHeight: '300px',
+                marginTop: '10px'
+              }}>
+                {formatJSON(coreData.courseUnits)}
               </pre>
             </details>
           </div>
@@ -254,7 +486,7 @@ export const DataInspector: React.FC = () => {
             </div>
             <details style={{ marginTop: '10px' }}>
               <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看 ({coreData.agentActions.length} 个动作)
+                展开查看 ({coreData.agentActions.length} 个动作记录)
               </summary>
               <pre style={{
                 backgroundColor: '#f8f9fa',
@@ -265,11 +497,8 @@ export const DataInspector: React.FC = () => {
                 maxHeight: '300px',
                 marginTop: '10px'
               }}>
-                {formatJSON(coreData.agentActions.slice(-10))} 
+                {formatJSON(coreData.agentActions)}
               </pre>
-              <p style={{ fontSize: '12px', color: '#666', margin: '5px 0 0 0' }}>
-                显示最近10条记录，总共{coreData.agentActions.length}条
-              </p>
             </details>
           </div>
         )}
@@ -283,7 +512,7 @@ export const DataInspector: React.FC = () => {
             border: '1px solid #ddd'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>🧠 能力评估数据</h3>
+              <h3 style={{ margin: 0, color: '#333' }}>📊 能力评估数据</h3>
               <button
                 onClick={() => copyToClipboard(formatJSON(coreData.currentAssessment))}
                 style={{
@@ -301,13 +530,12 @@ export const DataInspector: React.FC = () => {
             </div>
             <div style={{ marginTop: '10px', fontSize: '14px' }}>
               <p><strong>总体评分：</strong> {coreData.currentAssessment.overallScore}/100</p>
-              <p><strong>评估方式：</strong> {coreData.currentAssessment.metadata.assessmentMethod}</p>
-              <p><strong>评估时间：</strong> {coreData.currentAssessment.metadata.assessmentDate}</p>
+              <p><strong>评估日期：</strong> {coreData.currentAssessment.metadata.assessmentDate}</p>
               <p><strong>置信度：</strong> {Math.round(coreData.currentAssessment.metadata.confidence * 100)}%</p>
             </div>
             <details style={{ marginTop: '10px' }}>
               <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看完整数据
+                展开查看完整评估数据
               </summary>
               <pre style={{
                 backgroundColor: '#f8f9fa',
@@ -323,61 +551,84 @@ export const DataInspector: React.FC = () => {
             </details>
           </div>
         )}
+      </div>
 
-        {/* 原始Profile数据 */}
-        {profileData && (
+      {/* 删除确认对话框 */}
+      {deleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
           <div style={{
-            padding: '15px',
-            backgroundColor: '#fff3e0',
+            backgroundColor: 'white',
+            padding: '20px',
             borderRadius: '8px',
-            border: '1px solid #ffcc02'
+            maxWidth: '400px',
+            width: '90%'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#ef6c00' }}>🗄️ 完整Profile数据</h3>
+            <h3 style={{ margin: '0 0 15px 0', color: '#dc3545' }}>⚠️ 确认删除</h3>
+            <p style={{ margin: '0 0 20px 0' }}>
+              您确定要删除 <strong>"{deleteConfirm.title}"</strong> 吗？
+            </p>
+            <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#666' }}>
+              此操作不可撤销。删除学习目标会同时删除相关的学习路径和课程内容。
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
-                onClick={() => copyToClipboard(formatJSON(profileData))}
+                onClick={() => setDeleteConfirm(null)}
                 style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#ff9800',
+                  padding: '8px 16px',
+                  backgroundColor: '#6c757d',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
+                  borderRadius: '4px',
+                  cursor: 'pointer'
                 }}
               >
-                📋 复制
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                确认删除
               </button>
             </div>
-            <details style={{ marginTop: '10px' }}>
-              <summary style={{ cursor: 'pointer', color: '#f57c00' }}>
-                展开查看完整Profile数据 (包含所有模块数据)
-              </summary>
-              <pre style={{
-                backgroundColor: '#f8f9fa',
-                padding: '10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                overflow: 'auto',
-                maxHeight: '400px',
-                marginTop: '10px'
-              }}>
-                {formatJSON(profileData)}
-              </pre>
-            </details>
-            <div style={{ 
-              marginTop: '10px', 
-              padding: '10px',
-              backgroundColor: '#ffecb3',
-              borderRadius: '4px',
-              fontSize: '12px',
-              color: '#e65100'
-            }}>
-              <strong>注意：</strong> 这是存储在localStorage中的完整数据，包含所有模块的数据。
-              如果AI工具调用生效，您应该能看到对应的数据变化。
-            </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* 使用说明 */}
+      <div style={{
+        marginTop: '30px',
+        padding: '15px',
+        backgroundColor: '#fff3cd',
+        borderRadius: '8px',
+        border: '1px solid #ffeaa7'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>💡 使用说明</h4>
+        <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#856404' }}>
+          <li><strong>数据管理：</strong> 可以查看和删除学习目标、路径、课程单元</li>
+          <li><strong>级联删除：</strong> 删除学习目标会自动删除相关的路径和内容</li>
+          <li><strong>活动记录：</strong> 所有删除操作都会记录到活动历史中</li>
+          <li><strong>数据导出：</strong> 点击"复制数据"按钮可以导出JSON格式的数据</li>
+          <li><strong>实时更新：</strong> 点击"刷新数据"按钮可以获取最新的数据状态</li>
+        </ul>
       </div>
     </div>
   )

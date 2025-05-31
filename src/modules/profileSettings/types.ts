@@ -24,7 +24,7 @@ export interface APIConfig {
 
 export interface ActivityRecord {
   id: string
-  type: 'assessment' | 'goal_set' | 'course_view' | 'code_run' | 'profile_update'
+  type: 'assessment' | 'goal_set' | 'course_view' | 'code_run' | 'profile_update' | 'function_call' | 'ai_chat' | 'data_operation'
   action: string
   timestamp: string
   details?: Record<string, any>
@@ -145,5 +145,8 @@ export const ACTIVITY_TYPE_LABELS = {
   goal_set: '目标设定',
   course_view: '课程学习',
   code_run: '代码运行',
-  profile_update: '资料更新'
+  profile_update: '资料更新',
+  function_call: 'AI工具调用',
+  ai_chat: 'AI对话',
+  data_operation: '数据操作'
 } 

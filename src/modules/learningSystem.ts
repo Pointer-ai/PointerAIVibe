@@ -26,8 +26,9 @@ import {
   addCoreEvent
 } from './coreData'
 import { getCurrentAssessment } from './abilityAssess/service'
-import { getAIResponse } from '../components/AIAssistant/service'
 import { log } from '../utils/logger'
+import { getAPIConfig } from './profileSettings/service'
+import { addActivityRecord } from './profileSettings/service'
 
 /**
  * AI Agent交互历史
@@ -126,6 +127,19 @@ export class LearningSystemService {
           userMessage,
           intent: intent.type,
           toolsUsed: actionResult.toolsUsed,
+          success: actionResult.success
+        }
+      })
+
+      // 记录到活动历史
+      addActivityRecord({
+        type: 'ai_chat',
+        action: `AI对话: ${intent.type}`,
+        details: {
+          userMessageLength: userMessage.length,
+          intent: intent.type,
+          toolsUsed: actionResult.toolsUsed,
+          responseLength: response.length,
           success: actionResult.success
         }
       })
@@ -256,6 +270,20 @@ export class LearningSystemService {
           toolsUsed: result.toolCalls.map(tc => tc.name),
           toolCallsCount: result.toolCalls.length,
           success: true
+        }
+      })
+
+      // 记录到活动历史
+      addActivityRecord({
+        type: 'ai_chat',
+        action: `真实LLM对话`,
+        details: {
+          userMessageLength: userMessage.length,
+          responseLength: result.response.length,
+          toolsUsed: result.toolCalls.map(tc => tc.name),
+          toolCallsCount: result.toolCalls.length,
+          success: true,
+          model: getAPIConfig().model
         }
       })
 

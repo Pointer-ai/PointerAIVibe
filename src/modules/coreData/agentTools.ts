@@ -13,12 +13,12 @@ import {
   updateCourseUnit,
   deleteCourseUnit,
   recordAgentAction,
-  getAgentActions,
   getAbilityProfile,
   addCoreEvent
 } from './service'
 import { LearningGoal, LearningPath, PathNode, CourseUnit, AgentTool } from './types'
 import { log } from '../../utils/logger'
+import { addActivityRecord } from '../profileSettings/service'
 
 /**
  * AI Agent 可用工具定义
@@ -434,11 +434,23 @@ export class AgentToolExecutor {
           throw new Error(`Unknown tool: ${toolName}`)
       }
       
-      // 记录工具执行
+      // 记录工具执行到coreData（旧的agent actions）
       recordAgentAction({
         toolName,
         parameters,
         result
+      })
+      
+      // 记录工具执行到活动历史（新的活动记录）
+      addActivityRecord({
+        type: 'function_call',
+        action: `AI工具调用: ${toolName}`,
+        details: {
+          toolName,
+          parameterCount: Object.keys(parameters).length,
+          success: true,
+          resultKeys: result && typeof result === 'object' ? Object.keys(result) : []
+        }
       })
       
       log(`[AgentTools] Tool executed successfully: ${toolName}`)
@@ -447,11 +459,23 @@ export class AgentToolExecutor {
     } catch (error) {
       log(`[AgentTools] Tool execution failed: ${toolName}`, error)
       
-      // 记录失败的工具执行
+      // 记录失败的工具执行到coreData
       recordAgentAction({
         toolName,
         parameters,
         result: { error: error instanceof Error ? error.message : 'Unknown error' }
+      })
+      
+      // 记录失败的工具执行到活动历史
+      addActivityRecord({
+        type: 'function_call',
+        action: `AI工具调用失败: ${toolName}`,
+        details: {
+          toolName,
+          parameterCount: Object.keys(parameters).length,
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
       })
       
       throw error

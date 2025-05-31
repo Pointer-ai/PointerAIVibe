@@ -1,3 +1,3 @@
 export * from './types'
 export * from './service'
-export * from './agentTools'
+export { default as PathPlanView } from './view' 

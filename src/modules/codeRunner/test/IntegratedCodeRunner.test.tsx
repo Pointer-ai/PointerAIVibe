@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 
 // Mock service functions directly in vi.mock
@@ -108,15 +108,17 @@ describe('IntegratedCodeRunner', () => {
     vi.restoreAllMocks()
   })
 
-  it('应该渲染完整的集成组件', () => {
-    render(
-      <TestWrapper>
-        <IntegratedCodeRunner
-          language="javascript"
-          initialCode="console.log('Hello');"
-        />
-      </TestWrapper>
-    )
+  it('应该渲染完整的集成组件', async () => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <IntegratedCodeRunner
+            language="javascript"
+            initialCode="console.log('Hello');"
+          />
+        </TestWrapper>
+      )
+    })
 
     expect(screen.getByText('🚀')).toBeInTheDocument()
     expect(screen.getByText('JavaScript')).toBeInTheDocument()
@@ -124,20 +126,22 @@ describe('IntegratedCodeRunner', () => {
     expect(screen.getByTestId('monaco-editor')).toBeInTheDocument()
   })
 
-  it('应该支持自定义配置', () => {
-    render(
-      <TestWrapper>
-        <IntegratedCodeRunner
-          language="python"
-          initialCode="print('test')"
-          theme="light"
-          showLanguageLabel={false}
-          showRunButton={false}
-          showOutput={false}
-          runButtonText="自定义运行"
-        />
-      </TestWrapper>
-    )
+  it('应该支持自定义配置', async () => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <IntegratedCodeRunner
+            language="python"
+            initialCode="print('test')"
+            theme="light"
+            showLanguageLabel={false}
+            showRunButton={false}
+            showOutput={false}
+            runButtonText="自定义运行"
+          />
+        </TestWrapper>
+      )
+    })
 
     expect(screen.queryByText('🐍')).not.toBeInTheDocument()
     expect(screen.queryByText('运行')).not.toBeInTheDocument()
@@ -147,49 +151,59 @@ describe('IntegratedCodeRunner', () => {
   it('应该处理代码变更回调', async () => {
     const mockOnChange = vi.fn()
     
-    render(
-      <TestWrapper>
-        <IntegratedCodeRunner
-          language="javascript"
-          onCodeChange={mockOnChange}
-        />
-      </TestWrapper>
-    )
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <IntegratedCodeRunner
+            language="javascript"
+            onCodeChange={mockOnChange}
+          />
+        </TestWrapper>
+      )
+    })
 
-    fireEvent.click(screen.getByTestId('mock-editor-change'))
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('mock-editor-change'))
+    })
     expect(mockOnChange).toHaveBeenCalledWith('changed code')
   })
 
   it('应该处理运行按钮点击', async () => {
     const mockOnRunComplete = vi.fn()
     
-    render(
-      <TestWrapper>
-        <IntegratedCodeRunner
-          language="javascript"
-          initialCode="console.log('test')"
-          onRunComplete={mockOnRunComplete}
-        />
-      </TestWrapper>
-    )
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <IntegratedCodeRunner
+            language="javascript"
+            initialCode="console.log('test')"
+            onRunComplete={mockOnRunComplete}
+          />
+        </TestWrapper>
+      )
+    })
 
-    const runButton = screen.getByText('运行 JavaScript')
-    fireEvent.click(runButton)
+    await act(async () => {
+      const runButton = screen.getByText('运行 JavaScript')
+      fireEvent.click(runButton)
+    })
 
     await waitFor(() => {
       expect(mockOnRunComplete).toHaveBeenCalled()
     })
   })
 
-  it('应该显示运行时状态', () => {
-    render(
-      <TestWrapper>
-        <IntegratedCodeRunner
-          language="javascript"
-          initialCode="console.log('test')"
-        />
-      </TestWrapper>
-    )
+  it('应该显示运行时状态', async () => {
+    await act(async () => {
+      render(
+        <TestWrapper>
+          <IntegratedCodeRunner
+            language="javascript"
+            initialCode="console.log('test')"
+          />
+        </TestWrapper>
+      )
+    })
 
     // 应该显示就绪状态指示器
     expect(screen.getByText('JavaScript')).toBeInTheDocument()

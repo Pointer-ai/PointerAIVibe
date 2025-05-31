@@ -7,10 +7,12 @@ import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
 import { GlobalAIAssistant } from './components/AIAssistant'
+import { AgentChat } from './components/AIAgent/AgentChat'
+import AgentDemo from './demo/AgentDemo'
 import { getCurrentProfileId } from './utils/profile'
 import { TestRandomSearch } from './pages/TestRandomSearch'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -147,6 +149,32 @@ const App = () => {
                 onProfileSwitch={handleProfileSwitch}
               >
                 <TestRandomSearch />
+              </Layout>
+            )
+          
+          case 'agent-demo':
+            return (
+              <Layout 
+                title="Agent Demo" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <AgentDemo />
+              </Layout>
+            )
+          
+          case 'agent-chat':
+            return (
+              <Layout 
+                title="Agent Chat" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <AgentChat />
               </Layout>
             )
           

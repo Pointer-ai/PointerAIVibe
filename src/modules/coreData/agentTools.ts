@@ -19,6 +19,10 @@ import {
 import { LearningGoal, LearningPath, PathNode, CourseUnit, AgentTool } from './types'
 import { log } from '../../utils/logger'
 import { addActivityRecord } from '../profileSettings/service'
+import { getCurrentAssessment } from '../abilityAssess/service'
+import { setProfileData } from '../../utils/profile'
+import { callAI } from '../../utils/ai'
+import { AbilityAssessment } from '../abilityAssess/types'
 
 /**
  * AI Agent 可用工具定义
@@ -303,6 +307,120 @@ export const AGENT_TOOLS: AgentTool[] = [
       },
       goalId: { type: 'string', description: '学习目标ID' }
     }
+  },
+
+  // ========== 能力档案管理 ==========
+  {
+    name: 'update_ability_assessment',
+    description: '更新能力评估数据，修正或增强现有的技能评分和置信度',
+    parameters: {
+      dimension: { 
+        type: 'string', 
+        enum: ['programming', 'algorithm', 'project', 'systemDesign', 'communication'],
+        description: '要更新的能力维度'
+      },
+      skill: { type: 'string', description: '要更新的具体技能名称' },
+      newScore: { type: 'number', min: 0, max: 100, description: '新的技能分数', optional: true },
+      evidence: { type: 'string', description: '支持该分数的证据或经历描述' },
+      confidenceBoost: { type: 'boolean', description: '是否提升该技能的置信度', optional: true }
+    }
+  },
+  {
+    name: 'add_skill_evidence',
+    description: '为特定技能添加新的证据或经历，提升评估准确性',
+    parameters: {
+      dimension: { 
+        type: 'string', 
+        enum: ['programming', 'algorithm', 'project', 'systemDesign', 'communication'],
+        description: '技能所属维度'
+      },
+      skill: { type: 'string', description: '技能名称' },
+      evidenceType: { 
+        type: 'string',
+        enum: ['project', 'work_experience', 'education', 'certification', 'achievement'],
+        description: '证据类型'
+      },
+      description: { type: 'string', description: '详细的证据描述' },
+      impact: { 
+        type: 'string',
+        enum: ['low', 'medium', 'high'],
+        description: '该证据对技能评估的影响程度'
+      }
+    }
+  },
+  {
+    name: 'correct_ability_profile',
+    description: '用户主动修正AI评估的能力档案，提供更准确的自我评价',
+    parameters: {
+      corrections: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            dimension: { type: 'string' },
+            skill: { type: 'string' },
+            actualScore: { type: 'number', min: 0, max: 100 },
+            reason: { type: 'string' },
+            evidence: { type: 'string', optional: true }
+          }
+        },
+        description: '要修正的技能列表'
+      },
+      overallFeedback: { type: 'string', description: '对整体评估的反馈', optional: true }
+    }
+  },
+  {
+    name: 'enhance_skill_confidence',
+    description: '通过提供额外信息来增强特定技能的置信度',
+    parameters: {
+      targetSkills: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '要增强置信度的技能列表'
+      },
+      additionalInfo: { type: 'string', description: '额外的技能相关信息或经历' },
+      selfRating: {
+        type: 'object',
+        description: '用户对这些技能的自我评价',
+        optional: true
+      }
+    }
+  },
+  {
+    name: 'reassess_ability_dimension',
+    description: '重新评估特定能力维度，基于新提供的信息或反馈',
+    parameters: {
+      dimension: { 
+        type: 'string', 
+        enum: ['programming', 'algorithm', 'project', 'systemDesign', 'communication'],
+        description: '要重新评估的维度'
+      },
+      newInformation: { type: 'string', description: '新的技能相关信息' },
+      focusSkills: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '重点关注的技能列表',
+        optional: true
+      }
+    }
+  },
+  {
+    name: 'get_ability_improvement_suggestions',
+    description: '基于当前能力档案提供具体的能力提升建议',
+    parameters: {
+      targetDimension: { 
+        type: 'string', 
+        enum: ['programming', 'algorithm', 'project', 'systemDesign', 'communication', 'all'],
+        description: '想要提升的维度，默认all',
+        optional: true
+      },
+      timeFrame: {
+        type: 'string',
+        enum: ['1_month', '3_months', '6_months', '1_year'],
+        description: '期望的提升时间框架',
+        optional: true
+      }
+    }
   }
 ]
 
@@ -428,6 +546,26 @@ export class AgentToolExecutor {
 
         case 'recommend_study_schedule':
           result = await this.recommendStudyScheduleTool(parameters)
+          break
+          
+        // ========== 能力档案管理 ==========
+        case 'update_ability_assessment':
+          result = await this.updateAbilityAssessmentTool(parameters)
+          break
+        case 'add_skill_evidence':
+          result = await this.addSkillEvidenceTool(parameters)
+          break
+        case 'correct_ability_profile':
+          result = await this.correctAbilityProfileTool(parameters)
+          break
+        case 'enhance_skill_confidence':
+          result = await this.enhanceSkillConfidenceTool(parameters)
+          break
+        case 'reassess_ability_dimension':
+          result = await this.reassessAbilityDimensionTool(parameters)
+          break
+        case 'get_ability_improvement_suggestions':
+          result = await this.getAbilityImprovementSuggestionsTool(parameters)
           break
           
         default:
@@ -1673,6 +1811,762 @@ export class AgentToolExecutor {
     }
     
     return recommendations.slice(0, 3) // 返回前3条建议
+  }
+
+  // ========== 能力档案管理工具实现 ==========
+
+  private async updateAbilityAssessmentTool(params: any): Promise<any> {
+    const { dimension, skill, newScore, evidence, confidenceBoost } = params
+    
+    // 获取当前评估数据
+    const assessment = getAbilityProfile()
+    if (!assessment) {
+      return {
+        success: false,
+        message: '未找到能力评估数据，请先完成能力评估'
+      }
+    }
+    
+    // 获取完整的评估数据
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        success: false,
+        message: '未找到完整的评估数据'
+      }
+    }
+    
+    // 验证维度和技能是否存在
+    if (!currentAssessment.dimensions[dimension]) {
+      return {
+        success: false,
+        message: `未找到维度: ${dimension}`
+      }
+    }
+    
+    if (!currentAssessment.dimensions[dimension].skills[skill]) {
+      return {
+        success: false,
+        message: `在维度 ${dimension} 中未找到技能: ${skill}`
+      }
+    }
+    
+    const currentSkill = currentAssessment.dimensions[dimension].skills[skill]
+    const currentScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+    const currentConfidence = typeof currentSkill === 'number' ? 1.0 : currentSkill.confidence
+    
+    // 更新技能数据
+    const updatedSkill = {
+      score: newScore !== undefined ? newScore : currentScore,
+      confidence: confidenceBoost ? Math.min(1.0, currentConfidence + 0.2) : currentConfidence,
+      isInferred: false, // 用户提供的数据不再是推理得出
+      lastUpdated: new Date().toISOString(),
+      evidence: evidence
+    }
+    
+    // 更新评估数据
+    currentAssessment.dimensions[dimension].skills[skill] = updatedSkill
+    
+    // 重新计算维度分数
+    const dimensionSkills = Object.values(currentAssessment.dimensions[dimension].skills)
+    const averageScore = dimensionSkills.reduce((sum, skillData) => {
+      const score = typeof skillData === 'number' ? skillData : skillData.score
+      return sum + score
+    }, 0) / dimensionSkills.length
+    currentAssessment.dimensions[dimension].score = Math.round(averageScore)
+    
+    // 重新计算总分
+    const weightedSum = Object.values(currentAssessment.dimensions).reduce((sum, dim) => {
+      return sum + (dim.score * dim.weight)
+    }, 0)
+    currentAssessment.overallScore = Math.round(weightedSum)
+    
+    // 保存更新后的数据
+    setProfileData('abilityAssessment', currentAssessment)
+    
+    // 记录活动
+    addCoreEvent({
+      type: 'ability_updated',
+      data: {
+        dimension,
+        skill,
+        oldScore: currentScore,
+        newScore: updatedSkill.score,
+        evidence
+      }
+    })
+    
+    return {
+      success: true,
+      message: `已更新 ${dimension}.${skill} 的评估数据`,
+      updatedSkill: {
+        skill,
+        dimension,
+        oldScore: currentScore,
+        newScore: updatedSkill.score,
+        confidence: updatedSkill.confidence,
+        evidence
+      },
+      dimensionScore: currentAssessment.dimensions[dimension].score,
+      overallScore: currentAssessment.overallScore
+    }
+  }
+
+  private async addSkillEvidenceTool(params: any): Promise<any> {
+    const { dimension, skill, evidenceType, description, impact } = params
+    
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        success: false,
+        message: '未找到能力评估数据，请先完成能力评估'
+      }
+    }
+    
+    // 验证维度和技能
+    if (!currentAssessment.dimensions[dimension] || !currentAssessment.dimensions[dimension].skills[skill]) {
+      return {
+        success: false,
+        message: `未找到指定的技能: ${dimension}.${skill}`
+      }
+    }
+    
+    const currentSkill = currentAssessment.dimensions[dimension].skills[skill]
+    const currentScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+    const currentConfidence = typeof currentSkill === 'number' ? 0.5 : currentSkill.confidence
+    
+    // 根据证据影响程度调整分数和置信度
+    let scoreAdjustment = 0
+    let confidenceBoost = 0
+    
+    switch (impact) {
+      case 'high':
+        scoreAdjustment = 10
+        confidenceBoost = 0.3
+        break
+      case 'medium':
+        scoreAdjustment = 5
+        confidenceBoost = 0.2
+        break
+      case 'low':
+        scoreAdjustment = 2
+        confidenceBoost = 0.1
+        break
+    }
+    
+    // 根据证据类型微调
+    if (evidenceType === 'certification' || evidenceType === 'achievement') {
+      confidenceBoost += 0.1
+    }
+    
+    const newScore = Math.min(100, Math.max(0, currentScore + scoreAdjustment))
+    const newConfidence = Math.min(1.0, currentConfidence + confidenceBoost)
+    
+    // 创建或更新技能数据
+    const updatedSkill = {
+      score: newScore,
+      confidence: newConfidence,
+      isInferred: false,
+      lastUpdated: new Date().toISOString(),
+      evidences: [
+        ...(typeof currentSkill === 'object' && currentSkill.evidences ? currentSkill.evidences : []),
+        {
+          type: evidenceType,
+          description,
+          impact,
+          addedAt: new Date().toISOString()
+        }
+      ]
+    }
+    
+    // 更新评估数据
+    currentAssessment.dimensions[dimension].skills[skill] = updatedSkill
+    
+    // 重新计算维度和总分
+    this.recalculateAssessmentScores(currentAssessment)
+    
+    // 保存数据
+    setProfileData('abilityAssessment', currentAssessment)
+    
+    // 记录活动
+    addCoreEvent({
+      type: 'skill_evidence_added',
+      data: {
+        dimension,
+        skill,
+        evidenceType,
+        impact,
+        scoreChange: newScore - currentScore
+      }
+    })
+    
+    return {
+      success: true,
+      message: `已为 ${dimension}.${skill} 添加${impact === 'high' ? '高' : impact === 'medium' ? '中' : '低'}影响力证据`,
+      updatedSkill: {
+        skill,
+        dimension,
+        oldScore: currentScore,
+        newScore,
+        confidenceImprovement: confidenceBoost,
+        evidenceAdded: {
+          type: evidenceType,
+          description
+        }
+      },
+      dimensionScore: currentAssessment.dimensions[dimension].score,
+      overallScore: currentAssessment.overallScore
+    }
+  }
+
+  private async correctAbilityProfileTool(params: any): Promise<any> {
+    const { corrections, overallFeedback } = params
+    
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        success: false,
+        message: '未找到能力评估数据，请先完成能力评估'
+      }
+    }
+    
+    const correctionResults = []
+    let totalCorrections = 0
+    
+    // 处理每个修正
+    for (const correction of corrections) {
+      const { dimension, skill, actualScore, reason, evidence } = correction
+      
+      if (!currentAssessment.dimensions[dimension] || !currentAssessment.dimensions[dimension].skills[skill]) {
+        correctionResults.push({
+          skill: `${dimension}.${skill}`,
+          status: 'failed',
+          message: '技能不存在'
+        })
+        continue
+      }
+      
+      const currentSkill = currentAssessment.dimensions[dimension].skills[skill]
+      const oldScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+      
+      // 更新技能数据
+      currentAssessment.dimensions[dimension].skills[skill] = {
+        score: actualScore,
+        confidence: 1.0, // 用户修正的数据具有最高置信度
+        isInferred: false,
+        lastUpdated: new Date().toISOString(),
+        userCorrected: true,
+        correctionReason: reason,
+        evidence: evidence
+      }
+      
+      correctionResults.push({
+        skill: `${dimension}.${skill}`,
+        status: 'success',
+        oldScore,
+        newScore: actualScore,
+        change: actualScore - oldScore,
+        reason
+      })
+      
+      totalCorrections++
+    }
+    
+    // 重新计算所有分数
+    this.recalculateAssessmentScores(currentAssessment)
+    
+    // 更新元数据
+    currentAssessment.metadata.lastCorrected = new Date().toISOString()
+    currentAssessment.metadata.userFeedback = overallFeedback
+    
+    // 保存数据
+    setProfileData('abilityAssessment', currentAssessment)
+    
+    // 记录活动
+    addCoreEvent({
+      type: 'ability_profile_corrected',
+      data: {
+        correctionsCount: totalCorrections,
+        overallFeedback,
+        corrections: correctionResults
+      }
+    })
+    
+    return {
+      success: true,
+      message: `已完成 ${totalCorrections} 项能力修正`,
+      corrections: correctionResults,
+      newOverallScore: currentAssessment.overallScore,
+      feedback: overallFeedback,
+      recommendation: '感谢您的反馈！这些修正将帮助AI更好地理解您的能力现状。'
+    }
+  }
+
+  private async enhanceSkillConfidenceTool(params: any): Promise<any> {
+    const { targetSkills, additionalInfo, selfRating } = params
+    
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        success: false,
+        message: '未找到能力评估数据，请先完成能力评估'
+      }
+    }
+    
+    const enhancementResults = []
+    
+    // 处理每个目标技能
+    for (const skillPath of targetSkills) {
+      const [dimension, skill] = skillPath.includes('.') ? skillPath.split('.') : [null, skillPath]
+      
+      // 如果没有指定维度，搜索技能
+      let foundDimension = dimension
+      if (!foundDimension) {
+        for (const dimKey of Object.keys(currentAssessment.dimensions)) {
+          if (currentAssessment.dimensions[dimKey].skills[skill]) {
+            foundDimension = dimKey
+            break
+          }
+        }
+      }
+      
+      if (!foundDimension || !currentAssessment.dimensions[foundDimension].skills[skill]) {
+        enhancementResults.push({
+          skill: skillPath,
+          status: 'failed',
+          message: '技能不存在'
+        })
+        continue
+      }
+      
+      const currentSkill = currentAssessment.dimensions[foundDimension].skills[skill]
+      const currentScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+      const currentConfidence = typeof currentSkill === 'number' ? 0.5 : currentSkill.confidence
+      
+      // 基于额外信息增强置信度
+      const newConfidence = Math.min(1.0, currentConfidence + 0.25)
+      
+      // 如果有自评，适度调整分数
+      let newScore = currentScore
+      if (selfRating && selfRating[skill]) {
+        const selfScore = selfRating[skill]
+        // 取自评和当前评分的加权平均，更偏向于当前评分
+        newScore = Math.round(currentScore * 0.7 + selfScore * 0.3)
+      }
+      
+      // 更新技能数据
+      currentAssessment.dimensions[foundDimension].skills[skill] = {
+        score: newScore,
+        confidence: newConfidence,
+        isInferred: false,
+        lastUpdated: new Date().toISOString(),
+        additionalInfo,
+        selfRating: selfRating?.[skill]
+      }
+      
+      enhancementResults.push({
+        skill: `${foundDimension}.${skill}`,
+        status: 'success',
+        oldConfidence: currentConfidence,
+        newConfidence,
+        oldScore: currentScore,
+        newScore,
+        confidenceImprovement: newConfidence - currentConfidence
+      })
+    }
+    
+    // 重新计算分数
+    this.recalculateAssessmentScores(currentAssessment)
+    
+    // 保存数据
+    setProfileData('abilityAssessment', currentAssessment)
+    
+    // 记录活动
+    addCoreEvent({
+      type: 'skill_confidence_enhanced',
+      data: {
+        skillsCount: targetSkills.length,
+        additionalInfo,
+        results: enhancementResults
+      }
+    })
+    
+    return {
+      success: true,
+      message: `已增强 ${enhancementResults.filter(r => r.status === 'success').length} 个技能的置信度`,
+      enhancements: enhancementResults,
+      overallScore: currentAssessment.overallScore,
+      recommendations: [
+        '置信度的提升有助于生成更准确的学习路径',
+        '继续提供具体的项目经历可以进一步优化评估',
+        '建议定期更新技能信息以保持评估准确性'
+      ]
+    }
+  }
+
+  private async reassessAbilityDimensionTool(params: any): Promise<any> {
+    const { dimension, newInformation, focusSkills } = params
+    
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        success: false,
+        message: '未找到能力评估数据，请先完成能力评估'
+      }
+    }
+    
+    if (!currentAssessment.dimensions[dimension]) {
+      return {
+        success: false,
+        message: `未找到维度: ${dimension}`
+      }
+    }
+    
+    // 获取维度信息
+    const dimensionData = currentAssessment.dimensions[dimension]
+    const dimensionSkills = Object.keys(dimensionData.skills)
+    const targetSkills = focusSkills || dimensionSkills
+    
+    // 使用AI重新评估维度
+    try {
+      const prompt = `
+基于以下新信息，重新评估用户在 ${dimension} 维度的能力：
+
+新提供的信息：
+${newInformation}
+
+当前评估状况：
+- 维度总分：${dimensionData.score}分
+- 技能详情：${targetSkills.map(skill => {
+  const skillData = dimensionData.skills[skill]
+  const score = typeof skillData === 'number' ? skillData : skillData.score
+  return `${skill}: ${score}分`
+}).join(', ')}
+
+请根据新信息重新评估以下技能的分数(0-100)，并说明调整原因：
+${targetSkills.map(skill => `- ${skill}`).join('\n')}
+
+请以JSON格式返回：
+{
+  "reassessment": {
+    ${targetSkills.map(skill => `"${skill}": {"score": 分数, "reason": "调整原因", "confidence": 置信度}`).join(',\n    ')}
+  },
+  "dimensionSummary": "维度整体评价",
+  "confidenceLevel": 整体置信度(0-1)
+}
+`
+      
+      const aiResponse = await callAI(prompt)
+      
+      // 解析AI响应
+      let reassessmentData
+      try {
+        // 提取JSON
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          reassessmentData = JSON.parse(jsonMatch[0])
+        } else {
+          throw new Error('No JSON found in response')
+        }
+      } catch (e) {
+        // 如果解析失败，使用基于关键词的简单提升逻辑
+        reassessmentData = this.generateBasicReassessment(dimension, targetSkills, newInformation)
+      }
+      
+      const updates = []
+      
+      // 更新技能分数
+      if (reassessmentData.reassessment) {
+        for (const skill of targetSkills) {
+          if (reassessmentData.reassessment[skill]) {
+            const currentSkill = dimensionData.skills[skill]
+            const oldScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+            const newScore = reassessmentData.reassessment[skill].score
+            const reason = reassessmentData.reassessment[skill].reason
+            const confidence = reassessmentData.reassessment[skill].confidence || 0.8
+            
+            dimensionData.skills[skill] = {
+              score: newScore,
+              confidence,
+              isInferred: false,
+              lastUpdated: new Date().toISOString(),
+              reassessmentReason: reason,
+              additionalInfo: newInformation
+            }
+            
+            updates.push({
+              skill,
+              oldScore,
+              newScore,
+              change: newScore - oldScore,
+              reason
+            })
+          }
+        }
+      }
+      
+      // 重新计算分数
+      this.recalculateAssessmentScores(currentAssessment)
+      
+      // 保存数据
+      setProfileData('abilityAssessment', currentAssessment)
+      
+      // 记录活动
+      addCoreEvent({
+        type: 'dimension_reassessed',
+        data: {
+          dimension,
+          updatesCount: updates.length,
+          newInformation
+        }
+      })
+      
+      return {
+        success: true,
+        message: `已重新评估 ${dimension} 维度的 ${updates.length} 个技能`,
+        dimension,
+        updates,
+        newDimensionScore: dimensionData.score,
+        newOverallScore: currentAssessment.overallScore,
+        summary: reassessmentData.dimensionSummary || '评估已更新',
+        confidence: reassessmentData.confidenceLevel || 0.8
+      }
+      
+    } catch (error) {
+      log('[AgentTools] Error in reassessAbilityDimensionTool:', error)
+      
+      // 回退逻辑：基于关键词进行简单调整
+      const updates = this.applyBasicReassessment(dimensionData, targetSkills, newInformation)
+      
+      this.recalculateAssessmentScores(currentAssessment)
+      setProfileData('abilityAssessment', currentAssessment)
+      
+      return {
+        success: true,
+        message: `已根据新信息调整 ${dimension} 维度评估（基础模式）`,
+        dimension,
+        updates,
+        newDimensionScore: dimensionData.score,
+        newOverallScore: currentAssessment.overallScore,
+        note: '由于AI服务暂时不可用，使用了基础调整算法'
+      }
+    }
+  }
+
+  private async getAbilityImprovementSuggestionsTool(params: any): Promise<any> {
+    const { targetDimension = 'all', timeFrame = '3_months' } = params
+    
+    const currentAssessment = getCurrentAssessment()
+    if (!currentAssessment) {
+      return {
+        suggestions: [
+          '请先完成能力评估，以获得个性化的提升建议',
+          '在能力评估模块中上传简历或完成技能问卷',
+          '评估完成后，AI将为您制定专属的能力提升计划'
+        ],
+        hasAssessment: false
+      }
+    }
+    
+    const dimensions = targetDimension === 'all' 
+      ? Object.keys(currentAssessment.dimensions)
+      : [targetDimension]
+    
+    const suggestions = []
+    const weakSkills = []
+    const strengthSkills = []
+    
+    // 分析各维度的技能
+    for (const dim of dimensions) {
+      if (!currentAssessment.dimensions[dim]) continue
+      
+      const dimensionData = currentAssessment.dimensions[dim]
+      
+      Object.entries(dimensionData.skills).forEach(([skill, skillData]) => {
+        const score = typeof skillData === 'number' ? skillData : skillData.score
+        const confidence = typeof skillData === 'number' ? 1.0 : skillData.confidence
+        
+        if (score < 60) {
+          weakSkills.push({ dimension: dim, skill, score, confidence })
+        } else if (score >= 80) {
+          strengthSkills.push({ dimension: dim, skill, score, confidence })
+        }
+      })
+    }
+    
+    // 生成时间框架特定的建议
+    const timeFrameWeeks = {
+      '1_month': 4,
+      '3_months': 12,
+      '6_months': 24,
+      '1_year': 52
+    }[timeFrame] || 12
+    
+    // 基于薄弱技能生成建议
+    if (weakSkills.length > 0) {
+      const prioritySkills = weakSkills
+        .sort((a, b) => a.score - b.score)
+        .slice(0, Math.min(3, Math.ceil(timeFrameWeeks / 4)))
+      
+      suggestions.push(`在${timeFrame.replace('_', '')}内，重点提升以下技能：`)
+      
+      prioritySkills.forEach(({ dimension, skill, score }) => {
+        const improvementPlan = this.generateSkillImprovementPlan(dimension, skill, score, timeFrameWeeks)
+        suggestions.push(`📈 ${dimension}.${skill} (当前${score}分)`)
+        suggestions.push(`   ${improvementPlan}`)
+      })
+    }
+    
+    // 基于优势技能生成建议
+    if (strengthSkills.length > 0) {
+      suggestions.push('利用您的优势技能：')
+      strengthSkills.slice(0, 2).forEach(({ dimension, skill, score }) => {
+        suggestions.push(`⭐ ${dimension}.${skill} (${score}分) - 可以在项目中发挥主导作用`)
+      })
+    }
+    
+    // 生成通用建议
+    suggestions.push('通用提升建议：')
+    suggestions.push('🎯 制定具体的学习目标和里程碑')
+    suggestions.push('📚 结合理论学习和实践项目')
+    suggestions.push('🤝 参与开源项目或技术社区')
+    suggestions.push('📝 定期记录和分享学习心得')
+    
+    if (timeFrameWeeks >= 12) {
+      suggestions.push('🔄 每月回顾和调整学习计划')
+    }
+    
+    return {
+      targetDimension,
+      timeFrame,
+      currentOverallScore: currentAssessment.overallScore,
+      suggestions,
+      prioritySkills: weakSkills.slice(0, 3).map(s => `${s.dimension}.${s.skill}`),
+      strengthSkills: strengthSkills.slice(0, 2).map(s => `${s.dimension}.${s.skill}`),
+      hasAssessment: true,
+      nextSteps: [
+        '根据建议制定详细的学习计划',
+        '设定具体的学习目标',
+        '开始第一个实践项目',
+        `${timeFrameWeeks >= 8 ? '定期' : '每周'}回顾进度并调整计划`
+      ]
+    }
+  }
+
+  // 辅助方法：重新计算评估分数
+  private recalculateAssessmentScores(assessment: any): void {
+    // 重新计算每个维度的分数
+    Object.values((assessment as AbilityAssessment).dimensions).forEach((dimension: any) => {
+      const skillScores = Object.values(dimension.skills).map((skillData: any) => {
+        return typeof skillData === 'number' ? skillData : skillData.score
+      })
+      dimension.score = Math.round(skillScores.reduce((sum: number, score: number) => sum + score, 0) / skillScores.length)
+    })
+    
+    // 重新计算总分
+    const weightedSum = Object.values((assessment as AbilityAssessment).dimensions).reduce((sum: number, dim: any) => {
+      return sum + (dim.score * dim.weight)
+    }, 0)
+    assessment.overallScore = Math.round(weightedSum)
+  }
+
+  // 辅助方法：生成基础重评估结果
+  private generateBasicReassessment(dimension: string, skills: string[], newInfo: string): any {
+    const reassessment: any = {}
+    
+    // 简单的关键词匹配逻辑
+    const positiveKeywords = ['优秀', '精通', '熟练', '经验丰富', '专业', '成功', '完成', '实现']
+    const improvementKeywords = ['提升', '加强', '学习', '改进', '练习', '增强']
+    
+    const hasPositive = positiveKeywords.some(keyword => newInfo.includes(keyword))
+    const hasImprovement = improvementKeywords.some(keyword => newInfo.includes(keyword))
+    
+    skills.forEach(skill => {
+      let scoreAdjustment = 0
+      let reason = '基于新信息调整'
+      
+      if (hasPositive) {
+        scoreAdjustment = 5
+        reason = '发现了相关的优秀表现或丰富经验'
+      } else if (hasImprovement) {
+        scoreAdjustment = 3
+        reason = '识别到学习意愿和改进空间'
+      }
+      
+      reassessment[skill] = {
+        score: scoreAdjustment,
+        reason,
+        confidence: 0.6
+      }
+    })
+    
+    return { reassessment, confidenceLevel: 0.6 }
+  }
+
+  // 辅助方法：应用基础重评估
+  private applyBasicReassessment(dimensionData: any, skills: string[], newInfo: string): any[] {
+    const updates = []
+    const reassessment = this.generateBasicReassessment('', skills, newInfo)
+    
+    skills.forEach(skill => {
+      const currentSkill = dimensionData.skills[skill]
+      const oldScore = typeof currentSkill === 'number' ? currentSkill : currentSkill.score
+      const adjustment = reassessment.reassessment[skill]?.score || 0
+      const newScore = Math.min(100, Math.max(0, oldScore + adjustment))
+      
+      if (adjustment !== 0) {
+        dimensionData.skills[skill] = {
+          score: newScore,
+          confidence: 0.6,
+          isInferred: false,
+          lastUpdated: new Date().toISOString(),
+          additionalInfo: newInfo
+        }
+        
+        updates.push({
+          skill,
+          oldScore,
+          newScore,
+          change: newScore - oldScore,
+          reason: reassessment.reassessment[skill]?.reason || '基于新信息调整'
+        })
+      }
+    })
+    
+    return updates
+  }
+
+  // 辅助方法：生成技能提升计划
+  private generateSkillImprovementPlan(dimension: string, skill: string, currentScore: number, weeks: number): string {
+    const plans: Record<string, Record<string, string>> = {
+      programming: {
+        syntax: `每周练习2小时基础语法，完成${Math.ceil(weeks/2)}个小项目`,
+        dataStructures: `学习数据结构理论并实现${Math.min(weeks, 8)}种常用数据结构`,
+        errorHandling: `学习异常处理最佳实践，重构${Math.ceil(weeks/4)}个现有项目`,
+        codeQuality: `学习代码规范，使用静态分析工具，进行${Math.ceil(weeks/2)}次代码审查`,
+        tooling: `每周学习一个新工具，建立个人开发环境和工作流`
+      },
+      algorithm: {
+        recursion: `每周解决${Math.ceil(weeks/2)}道递归问题，掌握递归思维模式`,
+        dynamicProgramming: `系统学习DP理论，每周练习2-3道DP题目`,
+        graph: `学习图论基础，实现常用图算法，解决实际图问题`,
+        tree: `掌握二叉树遍历，学习平衡树，练习树形DP`,
+        sorting: `实现各种排序算法，分析时间复杂度，优化性能`,
+        searching: `掌握二分查找变形，学习高级搜索算法`
+      },
+      project: {
+        planning: `学习项目管理方法论，使用工具规划${Math.ceil(weeks/8)}个项目`,
+        architecture: `学习系统设计原则，设计${Math.ceil(weeks/12)}个系统架构`,
+        implementation: `提升编程实现能力，完成${Math.ceil(weeks/4)}个实践项目`,
+        testing: `学习测试驱动开发，为项目编写完整测试套件`,
+        deployment: `学习CI/CD，部署${Math.ceil(weeks/6)}个项目到生产环境`,
+        documentation: `提升技术写作能力，为项目编写完整文档`
+      }
+    }
+    
+    const defaultPlan = `制定${weeks}周学习计划，结合理论学习和实践项目，定期评估进度`
+    
+    return plans[dimension]?.[skill] || defaultPlan
   }
 }
 

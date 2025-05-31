@@ -1120,7 +1120,463 @@ ${context}
     }
   }
 
-  // 更新演示操作列表
+  // ========== 能力档案管理测试函数 ==========
+
+  // 演示更新能力评估
+  const demoUpdateAbilityAssessment = async () => {
+    setLoading(true)
+    addOutput('=== 📊 更新能力评估演示 ===')
+    
+    try {
+      // 检查当前能力评估
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        addOutput('💡 请先完成能力评估，然后再测试此功能')
+        return
+      }
+
+      addOutput('✅ 发现能力评估数据，开始更新测试...')
+      
+      // 更新Python技能评分
+      const updateResult = await agentToolExecutor.executeTool('update_ability_assessment', {
+        dimension: 'programming',
+        skill: 'Python',
+        newScore: 85,
+        evidence: '最近完成了一个Django项目，具有丰富的Python开发经验',
+        confidenceBoost: true
+      })
+      
+      if (updateResult.success) {
+        addOutput(`✅ 技能更新成功:`)
+        addOutput(`   技能: ${updateResult.updatedSkill.dimension}.${updateResult.updatedSkill.skill}`)
+        addOutput(`   分数变化: ${updateResult.updatedSkill.oldScore} → ${updateResult.updatedSkill.newScore}`)
+        addOutput(`   置信度: ${Math.round(updateResult.updatedSkill.confidence * 100)}%`)
+        addOutput(`   维度分数: ${updateResult.dimensionScore}`)
+        addOutput(`   总体评分: ${updateResult.overallScore}`)
+      } else {
+        addOutput(`❌ 更新失败: ${updateResult.message}`)
+      }
+
+      // 再次尝试更新算法技能
+      addOutput('\n🔄 尝试更新算法技能...')
+      const algorithmUpdate = await agentToolExecutor.executeTool('update_ability_assessment', {
+        dimension: 'algorithm',
+        skill: 'dynamicProgramming',
+        newScore: 75,
+        evidence: '通过了LeetCode动态规划专题，解决了50+道DP问题',
+        confidenceBoost: true
+      })
+
+      if (algorithmUpdate.success) {
+        addOutput(`✅ 算法技能更新成功:`)
+        addOutput(`   ${algorithmUpdate.updatedSkill.dimension}.${algorithmUpdate.updatedSkill.skill}: ${algorithmUpdate.updatedSkill.oldScore} → ${algorithmUpdate.updatedSkill.newScore}`)
+      }
+
+    } catch (error) {
+      addOutput(`❌ 更新能力评估失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示添加技能证据
+  const demoAddSkillEvidence = async () => {
+    setLoading(true)
+    addOutput('=== 📝 添加技能证据演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        addOutput('💡 请先完成能力评估')
+        return
+      }
+
+      // 为React技能添加项目证据
+      addOutput('🔄 为React技能添加项目证据...')
+      const evidenceResult = await agentToolExecutor.executeTool('add_skill_evidence', {
+        dimension: 'programming',
+        skill: 'React',
+        evidenceType: 'project',
+        description: '开发了一个电商网站，使用React + Redux + TypeScript，包含用户认证、购物车、支付等完整功能',
+        impact: 'high'
+      })
+
+      if (evidenceResult.success) {
+        addOutput(`✅ 技能证据添加成功:`)
+        addOutput(`   技能: ${evidenceResult.updatedSkill.dimension}.${evidenceResult.updatedSkill.skill}`)
+        addOutput(`   分数提升: +${evidenceResult.updatedSkill.newScore - evidenceResult.updatedSkill.oldScore}`)
+        addOutput(`   置信度提升: +${Math.round(evidenceResult.updatedSkill.confidenceImprovement * 100)}%`)
+        addOutput(`   证据类型: ${evidenceResult.updatedSkill.evidenceAdded.type}`)
+      }
+
+      // 添加认证证据
+      addOutput('\n🏆 添加认证证据...')
+      const certResult = await agentToolExecutor.executeTool('add_skill_evidence', {
+        dimension: 'ai',
+        skill: 'machineLearning',
+        evidenceType: 'certification',
+        description: '获得了Google机器学习工程师认证，完成了TensorFlow专业课程',
+        impact: 'high'
+      })
+
+      if (certResult.success) {
+        addOutput(`✅ 认证证据添加成功:`)
+        addOutput(`   证据影响: ${certResult.updatedSkill.evidenceAdded.description}`)
+        addOutput(`   分数调整: +${certResult.updatedSkill.newScore - certResult.updatedSkill.oldScore}`)
+      }
+
+    } catch (error) {
+      addOutput(`❌ 添加技能证据失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示修正能力档案
+  const demoCorrectAbilityProfile = async () => {
+    setLoading(true)
+    addOutput('=== ✏️ 修正能力档案演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        return
+      }
+
+      addOutput('🔄 用户主动修正能力档案...')
+      
+      // 批量修正技能评分
+      const corrections = [
+        {
+          dimension: 'programming',
+          skill: 'JavaScript',
+          actualScore: 92,
+          reason: '我是JavaScript专家，有8年开发经验',
+          evidence: '负责公司前端架构设计，精通ES6+、异步编程、性能优化等'
+        },
+        {
+          dimension: 'project',
+          skill: 'teamLead',
+          actualScore: 85,
+          reason: '有团队管理经验',
+          evidence: '带领过15人的开发团队，成功交付了多个大型项目'
+        },
+        {
+          dimension: 'communication',
+          skill: 'presentation',
+          actualScore: 80,
+          reason: '经常做技术分享',
+          evidence: '在公司和技术会议上做过30+次技术演讲'
+        }
+      ]
+
+      const correctionResult = await agentToolExecutor.executeTool('correct_ability_profile', {
+        corrections,
+        overallFeedback: 'AI的评估整体不错，但在某些技能上偏保守。我在JavaScript和团队管理方面的经验更丰富。'
+      })
+
+      if (correctionResult.success) {
+        addOutput(`✅ 能力档案修正完成:`)
+        addOutput(`   修正数量: ${correctionResult.message}`)
+        addOutput(`   新的总体评分: ${correctionResult.newOverallScore}`)
+        addOutput(`\n📋 修正详情:`)
+        
+        correctionResult.corrections.forEach((correction: any, index: number) => {
+          if (correction.status === 'success') {
+            addOutput(`   ${index + 1}. ${correction.skill}: ${correction.oldScore} → ${correction.newScore} (+${correction.change})`)
+            addOutput(`      原因: ${correction.reason}`)
+          } else {
+            addOutput(`   ${index + 1}. ${correction.skill}: ${correction.message}`)
+          }
+        })
+        
+        addOutput(`\n💬 用户反馈: ${correctionResult.feedback}`)
+        addOutput(`📝 建议: ${correctionResult.recommendation}`)
+      }
+
+    } catch (error) {
+      addOutput(`❌ 修正能力档案失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示增强技能置信度
+  const demoEnhanceSkillConfidence = async () => {
+    setLoading(true)
+    addOutput('=== 🚀 增强技能置信度演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        return
+      }
+
+      addOutput('🔄 增强多个技能的置信度...')
+
+      const enhanceResult = await agentToolExecutor.executeTool('enhance_skill_confidence', {
+        targetSkills: ['programming.Python', 'algorithm.dataStructures', 'project.implementation'],
+        additionalInfo: '最近完成了一个复杂的数据处理项目，使用Python实现了高效的算法，包含多种数据结构的优化使用，项目获得了团队和客户的高度认可。',
+        selfRating: {
+          'Python': 88,
+          'dataStructures': 82,
+          'implementation': 85
+        }
+      })
+
+      if (enhanceResult.success) {
+        addOutput(`✅ 技能置信度增强完成:`)
+        addOutput(`   ${enhanceResult.message}`)
+        addOutput(`   总体评分: ${enhanceResult.overallScore}`)
+        
+        addOutput(`\n📊 置信度提升详情:`)
+        enhanceResult.enhancements.forEach((enhancement: any, index: number) => {
+          if (enhancement.status === 'success') {
+            addOutput(`   ${index + 1}. ${enhancement.skill}:`)
+            addOutput(`      分数调整: ${enhancement.oldScore} → ${enhancement.newScore}`)
+            addOutput(`      置信度: ${Math.round(enhancement.oldConfidence * 100)}% → ${Math.round(enhancement.newConfidence * 100)}%`)
+            addOutput(`      提升幅度: +${Math.round(enhancement.confidenceImprovement * 100)}%`)
+          }
+        })
+
+        addOutput(`\n💡 系统推荐:`)
+        enhanceResult.recommendations.forEach((rec: string, index: number) => {
+          addOutput(`   ${index + 1}. ${rec}`)
+        })
+      }
+
+    } catch (error) {
+      addOutput(`❌ 增强技能置信度失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示重新评估维度
+  const demoReassessAbilityDimension = async () => {
+    setLoading(true)
+    addOutput('=== 🔄 重新评估维度演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        return
+      }
+
+      addOutput('🔄 基于新信息重新评估编程维度...')
+
+      const reassessResult = await agentToolExecutor.executeTool('reassess_ability_dimension', {
+        dimension: 'programming',
+        newInformation: '最近我深入学习了微服务架构，使用Spring Boot和Docker完成了企业级项目的重构。同时精进了前端技能，用Vue3 + TypeScript开发了管理后台。在代码质量方面，引入了SonarQube进行代码审查，单元测试覆盖率达到85%以上。',
+        focusSkills: ['microservices', 'Vue', 'codeQuality', 'testing']
+      })
+
+      if (reassessResult.success) {
+        addOutput(`✅ 维度重新评估完成:`)
+        addOutput(`   评估维度: ${reassessResult.dimension}`)
+        addOutput(`   更新技能数: ${reassessResult.updates.length}`)
+        addOutput(`   新维度分数: ${reassessResult.newDimensionScore}`)
+        addOutput(`   新总体评分: ${reassessResult.newOverallScore}`)
+        
+        if (reassessResult.summary) {
+          addOutput(`\n📝 评估总结: ${reassessResult.summary}`)
+        }
+        
+        if (reassessResult.confidence) {
+          addOutput(`📊 评估置信度: ${Math.round(reassessResult.confidence * 100)}%`)
+        }
+
+        addOutput(`\n🔧 技能调整详情:`)
+        reassessResult.updates.forEach((update: any, index: number) => {
+          addOutput(`   ${index + 1}. ${update.skill}: ${update.oldScore} → ${update.newScore} (${update.change >= 0 ? '+' : ''}${update.change})`)
+          addOutput(`      调整原因: ${update.reason}`)
+        })
+      }
+
+    } catch (error) {
+      addOutput(`❌ 重新评估维度失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      // 如果是API调用失败，显示回退模式信息
+      if (error instanceof Error && error.message.includes('AI')) {
+        addOutput('🔄 已切换到基础调整模式')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示获取能力提升建议
+  const demoGetAbilityImprovementSuggestions = async () => {
+    setLoading(true)
+    addOutput('=== 💡 获取能力提升建议演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据')
+        addOutput('💡 请先完成能力评估')
+        const suggestions = await agentToolExecutor.executeTool('get_ability_improvement_suggestions', {})
+        addOutput('\n📋 通用建议:')
+        suggestions.suggestions.forEach((suggestion: string) => {
+          addOutput(`   • ${suggestion}`)
+        })
+        return
+      }
+
+      // 获取全面的提升建议
+      addOutput('🔄 分析能力档案，生成提升建议...')
+      const suggestions = await agentToolExecutor.executeTool('get_ability_improvement_suggestions', {
+        targetDimension: 'all',
+        timeFrame: '3_months'
+      })
+
+      if (suggestions.hasAssessment) {
+        addOutput(`✅ 基于能力评估生成提升建议:`)
+        addOutput(`   当前总体评分: ${suggestions.currentOverallScore}/100`)
+        addOutput(`   目标维度: ${suggestions.targetDimension}`)
+        addOutput(`   时间框架: ${suggestions.timeFrame}`)
+
+        addOutput(`\n📈 个性化提升建议:`)
+        suggestions.suggestions.forEach((suggestion: string) => {
+          addOutput(`   ${suggestion}`)
+        })
+
+        if (suggestions.prioritySkills && suggestions.prioritySkills.length > 0) {
+          addOutput(`\n🎯 优先提升技能:`)
+          suggestions.prioritySkills.forEach((skill: string, index: number) => {
+            addOutput(`   ${index + 1}. ${skill}`)
+          })
+        }
+
+        if (suggestions.strengthSkills && suggestions.strengthSkills.length > 0) {
+          addOutput(`\n💪 优势技能:`)
+          suggestions.strengthSkills.forEach((skill: string, index: number) => {
+            addOutput(`   ${index + 1}. ${skill}`)
+          })
+        }
+
+        addOutput(`\n📋 下一步行动:`)
+        suggestions.nextSteps.forEach((step: string, index: number) => {
+          addOutput(`   ${index + 1}. ${step}`)
+        })
+      }
+
+      // 测试不同时间框架的建议
+      addOutput('\n🔄 获取6个月提升建议...')
+      const longTermSuggestions = await agentToolExecutor.executeTool('get_ability_improvement_suggestions', {
+        targetDimension: 'programming',
+        timeFrame: '6_months'
+      })
+
+      if (longTermSuggestions.hasAssessment) {
+        addOutput(`\n📅 6个月编程能力提升计划:`)
+        longTermSuggestions.suggestions.slice(0, 5).forEach((suggestion: string) => {
+          addOutput(`   ${suggestion}`)
+        })
+      }
+
+    } catch (error) {
+      addOutput(`❌ 获取提升建议失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 演示能力档案管理综合测试
+  const demoAbilityManagementComprehensive = async () => {
+    setLoading(true)
+    addOutput('=== 🎯 能力档案管理综合演示 ===')
+    
+    try {
+      const currentAssessment = getCurrentAssessment()
+      if (!currentAssessment) {
+        addOutput('❌ 未找到能力评估数据，无法进行完整演示')
+        addOutput('💡 请先完成能力评估，然后重新运行此演示')
+        return
+      }
+
+      addOutput('🚀 开始能力档案管理全流程演示...')
+      
+      // 1. 查看当前状态
+      addOutput('\n📊 步骤1: 分析当前能力状态')
+      addOutput(`   总体评分: ${currentAssessment.overallScore}/100`)
+      addOutput(`   评估日期: ${currentAssessment.metadata.assessmentDate}`)
+      addOutput(`   置信度: ${Math.round(currentAssessment.metadata.confidence * 100)}%`)
+
+      // 2. 更新一个技能
+      addOutput('\n✏️ 步骤2: 更新技能评分')
+      const updateResult = await agentToolExecutor.executeTool('update_ability_assessment', {
+        dimension: 'programming',
+        skill: 'JavaScript',
+        newScore: 88,
+        evidence: '综合演示：最近在项目中大量使用JavaScript，能力有显著提升',
+        confidenceBoost: true
+      })
+      if (updateResult.success) {
+        addOutput(`   ✅ JavaScript技能: ${updateResult.updatedSkill.oldScore} → ${updateResult.updatedSkill.newScore}`)
+      }
+
+      // 3. 添加证据
+      addOutput('\n📝 步骤3: 添加技能证据')
+      const evidenceResult = await agentToolExecutor.executeTool('add_skill_evidence', {
+        dimension: 'project',
+        skill: 'planning',
+        evidenceType: 'work_experience',
+        description: '综合演示：负责了3个项目的规划工作，制定了详细的项目计划和里程碑',
+        impact: 'medium'
+      })
+      if (evidenceResult.success) {
+        addOutput(`   ✅ 项目规划证据添加成功，分数提升 +${evidenceResult.updatedSkill.newScore - evidenceResult.updatedSkill.oldScore}`)
+      }
+
+      // 4. 增强置信度
+      addOutput('\n🚀 步骤4: 增强技能置信度')
+      const enhanceResult = await agentToolExecutor.executeTool('enhance_skill_confidence', {
+        targetSkills: ['communication.teamwork'],
+        additionalInfo: '综合演示：在多个跨部门协作项目中表现出色，得到同事和上级的一致好评',
+        selfRating: { 'teamwork': 85 }
+      })
+      if (enhanceResult.success) {
+        addOutput(`   ✅ 团队协作置信度增强完成`)
+      }
+
+      // 5. 获取提升建议
+      addOutput('\n💡 步骤5: 生成个性化提升建议')
+      const suggestions = await agentToolExecutor.executeTool('get_ability_improvement_suggestions', {
+        targetDimension: 'all',
+        timeFrame: '3_months'
+      })
+      if (suggestions.hasAssessment) {
+        addOutput(`   📈 新的总体评分: ${suggestions.currentOverallScore}/100`)
+        addOutput(`   🎯 建议重点提升: ${suggestions.prioritySkills?.slice(0, 2).join(', ')}`)
+        addOutput(`   💪 可利用优势: ${suggestions.strengthSkills?.slice(0, 2).join(', ')}`)
+      }
+
+      addOutput('\n🎉 能力档案管理综合演示完成！')
+      addOutput('📊 演示涵盖了所有6个核心功能:')
+      addOutput('   1. ✅ 更新能力评估 - 修正技能分数和置信度')
+      addOutput('   2. ✅ 添加技能证据 - 补充项目和工作经历')
+      addOutput('   3. ✅ 增强技能置信度 - 提供额外信息支持')
+      addOutput('   4. ✅ 获取个性化建议 - 制定提升计划')
+      addOutput('')
+      addOutput('💡 用户可以通过AI对话自然地触发这些功能：')
+      addOutput('   "我的Python能力应该更高一些"')
+      addOutput('   "我要添加一个新项目经历"')
+      addOutput('   "AI评估不够准确，我要修正"')
+      addOutput('   "给我一些能力提升建议"')
+
+    } catch (error) {
+      addOutput(`❌ 综合演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 更新演示操作列表，添加能力档案管理功能
   const demoActions = [
     {
       id: 'ai_chat',
@@ -1202,6 +1658,48 @@ ${context}
       title: '📈 系统状态',
       description: '获取完整的学习系统状态',
       action: demoSystemStatus
+    },
+    {
+      id: 'update_ability_assessment',
+      title: '📊 更新能力评估',
+      description: '演示能力评估的更新过程',
+      action: demoUpdateAbilityAssessment
+    },
+    {
+      id: 'add_skill_evidence',
+      title: '📝 添加技能证据',
+      description: '演示技能证据的添加过程',
+      action: demoAddSkillEvidence
+    },
+    {
+      id: 'correct_ability_profile',
+      title: '✏️ 修正能力档案',
+      description: '演示能力档案的修正过程',
+      action: demoCorrectAbilityProfile
+    },
+    {
+      id: 'enhance_skill_confidence',
+      title: '🚀 增强技能置信度',
+      description: '演示技能置信度的增强过程',
+      action: demoEnhanceSkillConfidence
+    },
+    {
+      id: 'reassess_ability_dimension',
+      title: '🔄 重新评估维度',
+      description: '演示能力评估的重新评估过程',
+      action: demoReassessAbilityDimension
+    },
+    {
+      id: 'get_ability_improvement_suggestions',
+      title: '💡 获取能力提升建议',
+      description: '演示能力提升建议的获取过程',
+      action: demoGetAbilityImprovementSuggestions
+    },
+    {
+      id: 'ability_management_comprehensive',
+      title: '🎯 能力档案管理综合演示',
+      description: '演示能力档案管理的综合流程',
+      action: demoAbilityManagementComprehensive
     },
   ]
 
@@ -1427,6 +1925,18 @@ ${context}
           <li><strong>完整学习流程</strong>: 演示从评估到内容生成的完整流程</li>
           <li><strong>能力评估集成</strong>: 演示能力评估系统的集成</li>
         </ul>
+        
+        <h4 style={{ marginTop: '15px', color: '#1976d2' }}>🆕 能力档案管理功能:</h4>
+        <ul>
+          <li><strong>📊 更新能力评估</strong>: 修正或增强现有的技能评分和置信度</li>
+          <li><strong>📝 添加技能证据</strong>: 为特定技能添加项目经历、认证等证据</li>
+          <li><strong>✏️ 修正能力档案</strong>: 用户主动修正AI评估的能力档案</li>
+          <li><strong>🚀 增强技能置信度</strong>: 通过提供额外信息增强技能置信度</li>
+          <li><strong>🔄 重新评估维度</strong>: 基于新信息重新评估特定能力维度</li>
+          <li><strong>💡 获取能力提升建议</strong>: 基于当前能力档案提供提升建议</li>
+          <li><strong>🎯 能力档案管理综合演示</strong>: ⭐ 完整的能力管理流程演示</li>
+        </ul>
+        
         <div style={{ 
           marginTop: '15px',
           padding: '10px',
@@ -1440,7 +1950,22 @@ ${context}
           • 智能建议和快速操作<br/>
           • 需要在Profile设置中配置API Key
         </div>
-        <p><em>注意: 除了"AI智能对话(真实LLM)"外，其他功能可能返回模拟数据。</em></p>
+        
+        <div style={{ 
+          marginTop: '10px',
+          padding: '10px',
+          backgroundColor: '#e8f5e8',
+          borderRadius: '5px',
+          border: '1px solid #c3e6c3'
+        }}>
+          <strong>✨ 能力档案管理功能特色：</strong><br/>
+          • 支持通过AI对话自然地触发能力修正功能<br/>
+          • 自动重新计算维度分数和总体评分<br/>
+          • 完整的活动记录和数据验证机制<br/>
+          • 智能建议时间框架和个性化提升计划
+        </div>
+        
+        <p><em>注意: 除了"AI智能对话(真实LLM)"外，其他功能可能返回模拟数据。能力档案管理功能需要先完成能力评估。</em></p>
       </div>
       
       {/* CSS动画 */}

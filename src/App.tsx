@@ -9,10 +9,12 @@ import { CodeRunnerView } from './modules/codeRunner'
 import { GlobalAIAssistant } from './components/AIAssistant'
 import { AgentChat } from './components/AIAgent/AgentChat'
 import AgentDemo from './demo/AgentDemo'
+import LearningPathView from './components/LearningPathView'
+import DataInspector from './components/DataInspector'
 import { getCurrentProfileId } from './utils/profile'
 import { TestRandomSearch } from './pages/TestRandomSearch'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat' | 'learning-path-view' | 'data-inspector'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -175,6 +177,32 @@ const App = () => {
                 onProfileSwitch={handleProfileSwitch}
               >
                 <AgentChat />
+              </Layout>
+            )
+          
+          case 'learning-path-view':
+            return (
+              <Layout 
+                title="学习路径管理" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <LearningPathView />
+              </Layout>
+            )
+          
+          case 'data-inspector':
+            return (
+              <Layout 
+                title="数据检查器" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <DataInspector />
               </Layout>
             )
           

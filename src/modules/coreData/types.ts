@@ -72,7 +72,7 @@ export interface LearningPath {
   createdAt: string
   updatedAt: string
   version: string
-  status: 'draft' | 'active' | 'completed' | 'archived'
+  status: 'draft' | 'active' | 'completed' | 'archived' | 'frozen' | 'paused'
 }
 
 export interface CourseUnit {

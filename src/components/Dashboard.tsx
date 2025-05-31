@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat') => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'agent-chat' | 'learning-path-view' | 'data-inspector') => void
   onHome?: () => void
 }
 
@@ -116,11 +116,39 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       description: '专业代码编辑器，支持Python/JS/C++多语言运行',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 002 2v12a2 2 0 002 2z" />
         </svg>
       ),
       color: 'from-indigo-500 to-purple-500',
       status: '已开发',
+      available: true
+    },
+    {
+      id: 'learning-path',
+      view: 'learning-path-view' as const,
+      title: '学习路径管理',
+      description: '可视化管理学习目标和路径，支持流程控制',
+      icon: (
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6m3-3l3 3-3 3" />
+        </svg>
+      ),
+      color: 'from-emerald-500 to-teal-500',
+      status: '可使用',
+      available: true
+    },
+    {
+      id: 'data-inspector',
+      view: 'data-inspector' as const,
+      title: '数据检查器',
+      description: '查看AI工具调用结果，验证数据存储状态',
+      icon: (
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+      ),
+      color: 'from-amber-500 to-orange-500',
+      status: '调试工具',
       available: true
     }
   ]

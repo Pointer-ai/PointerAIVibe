@@ -25,6 +25,8 @@ import {
   getCourseUnits,
   addCoreEvent
 } from './coreData'
+import { getCurrentAssessment } from './abilityAssess/service'
+import { getAIResponse } from '../components/AIAssistant/service'
 import { log } from '../utils/logger'
 
 /**
@@ -88,6 +90,11 @@ export class LearningSystemService {
     try {
       log(`[LearningSystem] User message: ${userMessage}`)
       
+      // 检查是否要使用真实LLM
+      if (context?.useRealLLM) {
+        return await this.chatWithRealLLM(userMessage, context)
+      }
+      
       // 分析用户意图
       const intent = await this.analyzeUserIntent(userMessage, context)
       
@@ -145,25 +152,206 @@ export class LearningSystemService {
   }
 
   /**
-   * 快速操作接口 - 让AI Agent执行特定任务
+   * 使用真实LLM进行对话
    */
-  async executeQuickAction(action: string, params?: any): Promise<any> {
-    const actionMap: Record<string, string> = {
-      'analyze_ability': 'analyze_user_ability',
-      'suggest_next': 'suggest_next_action', 
-      'track_progress': 'track_learning_progress',
-      'adjust_pace': 'adjust_learning_pace',
-      'handle_difficulty': 'handle_learning_difficulty',
-      'generate_content': 'generate_personalized_content',
-      'recommend_schedule': 'recommend_study_schedule'
-    }
+  private async chatWithRealLLM(userMessage: string, context?: any): Promise<{
+    response: string
+    toolsUsed: string[]
+    suggestions: string[]
+    systemStatus: LearningSystemStatus
+  }> {
+    try {
+      log(`[LearningSystem] Using real LLM for chat`)
+      
+      // 收集当前学习状态信息
+      const systemStatus = await this.getSystemStatus()
+      const assessment = getCurrentAssessment()
+      const abilityProfile = getAbilityProfile()
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+      
+      // 构建上下文信息
+      let contextInfo = `学习系统状态：
+当前阶段: ${systemStatus.currentPhase}
+设置完成度: ${systemStatus.setupComplete ? '已完成' : '进行中'}
+学习进度: ${Math.round(systemStatus.progress.overallProgress)}%
+活跃目标: ${systemStatus.progress.activeGoals}个
+活跃路径: ${systemStatus.progress.activePaths}个`
 
-    const toolName = actionMap[action]
-    if (!toolName) {
-      throw new Error(`Unknown action: ${action}`)
-    }
+      if (assessment) {
+        contextInfo += `\n\n能力评估信息：
+总体评分: ${assessment.overallScore}/100
+评估日期: ${assessment.metadata.assessmentDate}
+优势领域: ${assessment.report.strengths.join(', ')}
+待改进: ${assessment.report.improvements.join(', ')}`
+      }
 
-    return await agentToolExecutor.executeTool(toolName, params || {})
+      if (goals.length > 0) {
+        contextInfo += `\n\n学习目标：`
+        goals.slice(0, 3).forEach((goal, index) => {
+          contextInfo += `\n${index + 1}. ${goal.title} (${goal.category}, ${goal.status})`
+        })
+      }
+
+      if (paths.length > 0) {
+        contextInfo += `\n\n学习路径：`
+        paths.slice(0, 2).forEach((path, index) => {
+          contextInfo += `\n${index + 1}. ${path.title} (${path.nodes.length}个节点, ${path.status})`
+        })
+      }
+
+      // 添加聊天历史上下文（最近3条消息）
+      if (context?.chatHistory && context.chatHistory.length > 0) {
+        const recentMessages = context.chatHistory.slice(-3)
+        contextInfo += `\n\n对话历史：`
+        recentMessages.forEach((msg: any) => {
+          if (msg.type === 'user') {
+            contextInfo += `\n用户: ${msg.content}`
+          } else if (msg.type === 'agent') {
+            contextInfo += `\nAI: ${msg.content.substring(0, 100)}...`
+          }
+        })
+      }
+
+      // 构建AI系统提示词
+      const systemPrompt = `你是一个专业的AI学习助手，专门帮助用户进行个性化编程学习。
+
+你的能力包括：
+• 🧠 分析技能水平和能力差距
+• 🎯 设定个性化学习目标
+• 🛤️ 生成定制学习路径
+• 📚 推荐学习内容和资源
+• 📊 跟踪学习进度
+• 🔧 调整学习节奏和难度
+• 🆘 解决学习困难
+
+请根据用户的当前状态和问题，提供有针对性的建议和帮助。
+
+${contextInfo}`
+
+      // 调用真实LLM
+      const aiResponse = await getAIResponse(userMessage, systemPrompt)
+
+      // 智能分析AI响应，确定使用的工具和建议
+      const toolsUsed = this.extractToolsFromMessage(userMessage, aiResponse)
+      const suggestions = this.generateSmartSuggestions(aiResponse, systemStatus)
+
+      // 记录真实LLM交互
+      const interaction: AgentInteraction = {
+        id: `interaction_llm_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userMessage,
+        agentResponse: aiResponse,
+        toolsUsed,
+        context: { useRealLLM: true, systemStatus }
+      }
+      this.interactionHistory.push(interaction)
+
+      // 记录LLM交互事件
+      addCoreEvent({
+        type: 'llm_interaction',
+        details: {
+          userMessage,
+          responseLength: aiResponse.length,
+          toolsUsed,
+          success: true
+        }
+      })
+
+      log(`[LearningSystem] Real LLM interaction completed`)
+
+      return {
+        response: aiResponse,
+        toolsUsed,
+        suggestions,
+        systemStatus
+      }
+
+    } catch (error) {
+      log(`[LearningSystem] Real LLM chat failed:`, error)
+      
+      // LLM失败时回退到基本功能
+      const systemStatus = await this.getSystemStatus()
+      
+      return {
+        response: `抱歉，AI助手暂时不可用。错误信息：${error instanceof Error ? error.message : '未知错误'}\n\n请检查：\n1. API Key是否正确配置\n2. 网络连接是否正常\n3. API额度是否充足\n\n您可以尝试使用其他演示功能。`,
+        toolsUsed: [],
+        suggestions: ['检查API配置', '尝试其他演示功能', '查看系统状态'],
+        systemStatus
+      }
+    }
+  }
+
+  /**
+   * 从消息中提取可能使用的工具
+   */
+  private extractToolsFromMessage(userMessage: string, aiResponse: string): string[] {
+    const tools: string[] = []
+    const message = (userMessage + ' ' + aiResponse).toLowerCase()
+    
+    if (message.includes('能力') || message.includes('评估') || message.includes('技能')) {
+      tools.push('analyze_user_ability')
+    }
+    if (message.includes('目标') || message.includes('学习计划')) {
+      tools.push('create_learning_goal')
+    }
+    if (message.includes('路径') || message.includes('学习路线')) {
+      tools.push('generate_path_nodes')
+    }
+    if (message.includes('进度') || message.includes('统计')) {
+      tools.push('track_learning_progress')
+    }
+    if (message.includes('困难') || message.includes('不懂') || message.includes('问题')) {
+      tools.push('handle_learning_difficulty')
+    }
+    if (message.includes('建议') || message.includes('推荐')) {
+      tools.push('suggest_next_action')
+    }
+    if (message.includes('时间') || message.includes('计划表') || message.includes('安排')) {
+      tools.push('recommend_study_schedule')
+    }
+    
+    return tools.length > 0 ? tools : ['smart_analysis']
+  }
+
+  /**
+   * 基于AI响应生成智能建议
+   */
+  private generateSmartSuggestions(aiResponse: string, systemStatus: LearningSystemStatus): string[] {
+    const suggestions: string[] = []
+    const response = aiResponse.toLowerCase()
+    
+    // 基于AI响应内容分析
+    if (response.includes('评估') || response.includes('能力')) {
+      suggestions.push('查看详细能力分析')
+    }
+    if (response.includes('目标') || response.includes('学习')) {
+      suggestions.push('设定新的学习目标')
+    }
+    if (response.includes('路径') || response.includes('计划')) {
+      suggestions.push('生成学习路径')
+    }
+    if (response.includes('进度') || response.includes('状态')) {
+      suggestions.push('查看学习进度')
+    }
+    if (response.includes('困难') || response.includes('问题')) {
+      suggestions.push('获取学习帮助')
+    }
+    
+    // 基于系统状态补充建议
+    if (!systemStatus.progress.hasAbilityProfile) {
+      suggestions.push('完成能力评估')
+    }
+    if (systemStatus.progress.activeGoals === 0) {
+      suggestions.push('创建学习目标')
+    }
+    if (systemStatus.progress.activePaths === 0 && systemStatus.progress.activeGoals > 0) {
+      suggestions.push('生成学习路径')
+    }
+    
+    // 智能去重和限制数量
+    const uniqueSuggestions = [...new Set(suggestions)]
+    return uniqueSuggestions.slice(0, 4)
   }
 
   // ========== 完整学习流程 ==========
@@ -246,6 +434,7 @@ export class LearningSystemService {
     recommendations: string[]
   }> {
     const ability = getAbilityProfile()
+    const assessment = getCurrentAssessment()
     const goals = getLearningGoals()
     const paths = getLearningPaths()
     const units = getCourseUnits()
@@ -256,16 +445,27 @@ export class LearningSystemService {
     let needsPathGeneration = false
 
     // 检查能力评估
-    if (!ability) {
+    if (!ability && !assessment) {
       needsAbilityAssessment = true
       recommendations.push('建议先完成能力评估，了解当前技能水平')
+    } else if (assessment) {
+      // 如果有完整的评估数据，提供更详细的建议
+      if (assessment.overallScore < 40) {
+        recommendations.push('建议从基础课程开始，夯实编程基础')
+      } else if (assessment.overallScore >= 70) {
+        recommendations.push('您的基础较好，可以考虑挑战性更高的学习目标')
+      }
     }
 
     // 检查学习目标
     const activeGoals = goals.filter(g => g.status === 'active')
     if (activeGoals.length === 0) {
       needsGoalSetting = true
-      recommendations.push('设定明确的学习目标，制定学习方向')
+      if (assessment && assessment.overallScore >= 50) {
+        recommendations.push('基于您的能力评估，建议设定中级水平的学习目标')
+      } else {
+        recommendations.push('设定明确的学习目标，制定学习方向')
+      }
     }
 
     // 检查学习路径
@@ -313,6 +513,7 @@ export class LearningSystemService {
    */
   async getSystemStatus(): Promise<LearningSystemStatus> {
     const ability = getAbilityProfile()
+    const assessment = getCurrentAssessment()
     const goals = getLearningGoals()
     const paths = getLearningPaths()
     const units = getCourseUnits()
@@ -324,7 +525,7 @@ export class LearningSystemService {
 
     // 确定当前阶段
     let currentPhase: LearningSystemStatus['currentPhase'] = 'assessment'
-    if (ability && activeGoals.length === 0) {
+    if ((ability || assessment) && activeGoals.length === 0) {
       currentPhase = 'goal_setting'
     } else if (activeGoals.length > 0 && activePaths.length === 0) {
       currentPhase = 'path_planning'
@@ -338,10 +539,10 @@ export class LearningSystemService {
     const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', {})
 
     return {
-      setupComplete: !!(ability && activeGoals.length > 0 && activePaths.length > 0),
+      setupComplete: !!((ability || assessment) && activeGoals.length > 0 && activePaths.length > 0),
       currentPhase,
       progress: {
-        hasAbilityProfile: !!ability,
+        hasAbilityProfile: !!(ability || assessment),
         activeGoals: activeGoals.length,
         activePaths: activePaths.length,
         completedNodes: completedNodes.length,
@@ -723,6 +924,28 @@ export class LearningSystemService {
     }
     
     return typeMap[nodeType] || 'theory'
+  }
+
+  /**
+   * 快速操作接口 - 让AI Agent执行特定任务
+   */
+  async executeQuickAction(action: string, params?: any): Promise<any> {
+    const actionMap: Record<string, string> = {
+      'analyze_ability': 'analyze_user_ability',
+      'suggest_next': 'suggest_next_action', 
+      'track_progress': 'track_learning_progress',
+      'adjust_pace': 'adjust_learning_pace',
+      'handle_difficulty': 'handle_learning_difficulty',
+      'generate_content': 'generate_personalized_content',
+      'recommend_schedule': 'recommend_study_schedule'
+    }
+
+    const toolName = actionMap[action]
+    if (!toolName) {
+      throw new Error(`Unknown action: ${action}`)
+    }
+
+    return await agentToolExecutor.executeTool(toolName, params || {})
   }
 }
 

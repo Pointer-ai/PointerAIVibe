@@ -16,26 +16,31 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// 重构系统主入口文件
+// 重构系统统一入口文件
 
-// 页面组件导出
+// 导出页面组件
 export { default as RefactorDashboard } from './pages/Dashboard'
-export { default as GoalManagement } from './pages/GoalManagement'
+export { default as GoalManagementPage } from './pages/GoalManagement'
+export { default as UIShowcasePage } from './pages/UIShowcase'
 export { default as AssessmentPage } from './pages/Assessment'
+export { ProfileManagementPage } from './pages/ProfileManagement'
+export { SystemDiagnosticsPage } from './pages/SystemDiagnostics'
+export { DataManagementPage } from './pages/DataManagement'
 
-// UI组件导出
+// 导出UI组件
 export * from './components/ui'
 
-// 功能组件导出
-export * from './components/features/Assessment'
-
-// 服务层导出
+// 导出服务
 export { refactorAIService } from './services/aiService'
-export { refactorAssessmentService } from './services/assessmentService'
-export { refactorGoalService } from './services/goalService'
+export { refactorProfileService } from './services/profileService'
+export { legacyDataService } from './services/legacyDataService'
+export { syncManager } from './services/syncManager'
 
-// 类型定义导出
+// 导出类型
 export * from './types'
+
+// 导出hooks
+export { useProfileSync } from './hooks/useProfileSync'
 
 // 版本信息
 export const REFACTOR_VERSION = '2.0.0'

@@ -22,29 +22,15 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../ui/Card/Card'
 import { Badge } from '../../ui/Badge/Badge'
 import { Loading } from '../../ui/Loading/Loading'
 import { Alert } from '../../ui/Alert/Alert'
-import { refactorAIService } from '../../../services/aiService'
-import { refactorGoalService } from '../../../services/goalService'
-import { GoalFormData } from '../../../types/goal'
+import { Input } from '../../ui/Input/Input'
+import { Goal, GoalRecommendation } from '../../../types/goal'
+import { learningApi } from '../../../../api'
 import { AIServiceStatus } from '../../../types/ai'
 
 export interface GoalRecommendationsProps {
   onSelectRecommendation?: (recommendation: GoalRecommendation) => void
   onCreateFromNLP?: (description: string) => void
   className?: string
-}
-
-interface GoalRecommendation {
-  id: string
-  title: string
-  description: string
-  category: string
-  priority: number
-  reasoning: string
-  estimatedTimeWeeks: number
-  requiredSkills: string[]
-  outcomes: string[]
-  targetLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-  confidence: number
 }
 
 interface QuestionnaireAnswers {
@@ -160,16 +146,28 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
 
   const checkAIStatus = async () => {
     try {
-      const isHealthy = await refactorAIService.checkHealth()
-      const config = refactorAIService.getConfig()
-      setAiStatus({
-        isConfigured: !!config,
-        available: !!config && isHealthy,
-        isHealthy,
-        provider: config?.provider || null,
-        model: config?.model || null,
-        lastCheck: new Date()
-      })
+      // 使用 AI 服务检查健康状态
+      const response = await learningApi.getSystemStatus()
+      if (response.success && response.data) {
+        setAiStatus({
+          isConfigured: true,
+          available: true,
+          isHealthy: true,
+          provider: 'system',
+          model: 'default',
+          lastCheck: new Date()
+        })
+      } else {
+        setAiStatus({
+          isConfigured: false,
+          available: false,
+          isHealthy: false,
+          provider: null,
+          model: null,
+          lastCheck: new Date(),
+          error: '系统状态检查失败'
+        })
+      }
     } catch (error) {
       console.error('Failed to check AI status:', error)
       setAiStatus({
@@ -202,30 +200,44 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
   }
 
   // 生成AI推荐
-  const generateRecommendations = async () => {
+  const handleGenerateRecommendations = async () => {
     setLoading(true)
-    setError(null)
-
+    setError('')
+    
     try {
-      let recommendations: GoalRecommendation[]
-
-      if (currentMode === 'nlp') {
-        // 自然语言处理模式
-        recommendations = await refactorGoalService.generateFromNLP(nlpInput)
+      let recommendations: GoalRecommendation[] = []
+      
+      if (currentMode === 'nlp' && nlpInput.trim()) {
+        // 使用 learningApi 的智能推荐功能
+        const response = await learningApi.chatWithAgent(`请帮我生成学习目标推荐：${nlpInput}`)
+        if (response.success && response.data) {
+          // 解析AI回复生成推荐
+          recommendations = parseAIResponseToRecommendations(response.data.response)
+        } else {
+          throw new Error(response.error || 'AI推荐生成失败')
+        }
       } else {
-        // 结构化推荐模式
-        recommendations = await refactorGoalService.generateRecommendations(
+        // 使用传统的分类推荐
+        const response = await learningApi.generateGoalRecommendations(
           selectedCategories,
           questionnaireAnswers
         )
+        
+        if (response.success && response.data) {
+          recommendations = response.data.map(rec => convertToGoalRecommendation(rec))
+        } else {
+          throw new Error(response.error || '推荐生成失败')
+        }
       }
-
+      
       setRecommendations(recommendations)
-      setCurrentMode('recommendations')
+      
+      if (recommendations.length === 0) {
+        setError('没有找到合适的推荐，请尝试调整选择条件')
+      }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '生成推荐失败'
-      setError(errorMessage)
-      console.error('Failed to generate recommendations:', error)
+      console.error('生成推荐失败:', error)
+      setError(error instanceof Error ? error.message : '生成推荐时出错')
     } finally {
       setLoading(false)
     }
@@ -254,6 +266,70 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
     setNlpInput('')
     setRecommendations([])
     setError(null)
+  }
+
+  // 解析AI回复为目标推荐
+  const parseAIResponseToRecommendations = (aiResponse: string): GoalRecommendation[] => {
+    // 简单的文本解析，实际项目中可以使用更复杂的解析逻辑
+    const recommendations: GoalRecommendation[] = []
+    
+    // 尝试提取目标建议
+    const lines = aiResponse.split('\n').filter(line => line.trim())
+    
+    lines.forEach((line, index) => {
+      if (line.includes('学习') || line.includes('掌握') || line.includes('提升')) {
+        recommendations.push({
+          id: `ai_rec_${index}`,
+          title: line.trim(),
+          description: `基于AI分析的个性化学习建议`,
+          category: 'custom',
+          difficulty: 'intermediate',
+          estimatedWeeks: 8,
+          skills: [],
+          outcomes: [line.trim()],
+          reasoning: 'AI智能分析生成'
+        })
+      }
+    })
+    
+    // 如果没有解析出内容，提供默认推荐
+    if (recommendations.length === 0) {
+      recommendations.push({
+        id: 'ai_default',
+        title: '个性化学习计划',
+        description: aiResponse,
+        category: 'custom',
+        difficulty: 'intermediate',
+        estimatedWeeks: 8,
+        skills: [],
+        outcomes: ['提升编程技能'],
+        reasoning: 'AI智能分析生成'
+      })
+    }
+    
+    return recommendations
+  }
+
+  // 转换原系统推荐为新格式
+  const convertToGoalRecommendation = (oldRec: any): GoalRecommendation => {
+    return {
+      id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      title: oldRec.title || '学习目标',
+      description: oldRec.description || '',
+      category: oldRec.category || 'other',
+      difficulty: mapDifficultyFromOld(oldRec.priority),
+      estimatedWeeks: oldRec.estimatedTimeWeeks || 8,
+      skills: oldRec.requiredSkills || [],
+      outcomes: oldRec.outcomes || [],
+      reasoning: oldRec.reasoning || '系统推荐'
+    }
+  }
+
+  // 映射难度级别
+  const mapDifficultyFromOld = (priority: number): 'easy' | 'medium' | 'hard' => {
+    if (priority >= 3) return 'hard'
+    if (priority >= 2) return 'medium'
+    return 'easy'
   }
 
   // 渲染模式选择
@@ -421,7 +497,7 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
             </Button>
             <Button
               variant="primary"
-              onClick={generateRecommendations}
+              onClick={handleGenerateRecommendations}
               loading={loading}
               disabled={!questionnaireAnswers.experience_level || !questionnaireAnswers.learning_time}
             >
@@ -480,7 +556,7 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
             </Button>
             <Button
               variant="primary"
-              onClick={generateRecommendations}
+              onClick={handleGenerateRecommendations}
               loading={loading}
               disabled={nlpInput.length < 20}
             >

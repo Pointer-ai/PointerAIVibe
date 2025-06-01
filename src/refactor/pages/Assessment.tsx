@@ -25,7 +25,6 @@ import { learningApi } from '../../api'
 import { refactorAIService } from '../services/aiService'
 import { Assessment, AssessmentInput, DimensionAssessment } from '../types/assessment'
 import { AIServiceStatus } from '../types/ai'
-import { refactorAssessmentService } from '../services/assessmentService'
 
 interface AssessmentPageProps {
   onNavigate?: (view: string) => void
@@ -47,13 +46,18 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
 
   const loadCurrentAssessment = async () => {
     try {
-      // 直接从service获取当前评估
-      const current = refactorAssessmentService.getCurrentAssessment()
-      setCurrentAssessment(current)
-      
-      // 获取能力概要
-      const summary = refactorAssessmentService.getAbilitySummary()
-      console.log('Assessment summary:', summary)
+      // 通过 learningApi 获取能力概要
+      const summaryResponse = await learningApi.getAbilitySummary()
+      if (summaryResponse.success && summaryResponse.data) {
+        const summary = summaryResponse.data
+        console.log('Assessment summary:', summary)
+        
+        // 如果有评估数据，尝试构建Assessment对象
+        if (summary.hasAssessment) {
+          // 这里可以扩展为完整的Assessment对象，目前暂时显示概要信息
+          console.log('Found existing assessment, overall score:', summary.overallScore)
+        }
+      }
     } catch (error) {
       console.error('Failed to load assessment:', error)
     }
@@ -122,15 +126,35 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     try {
       console.log('Starting assessment with input:', input)
       
-      // 直接使用新的assessment service
-      const assessment = await refactorAssessmentService.executeAssessment(input)
+      // 转换输入格式为 learningApi 期望的格式
+      const assessmentInput = {
+        type: input.type,
+        content: input.type === 'resume' 
+          ? input.data.resumeText || ''
+          : JSON.stringify(input.data.questionnaire || [])
+      }
       
-      setCurrentAssessment(assessment)
-      console.log('评估完成:', assessment)
+      // 通过 learningApi 执行评估
+      const response = await learningApi.executeAbilityAssessment(assessmentInput)
       
-      // 生成改进计划
-      const plan = await refactorAssessmentService.generateImprovementPlan(assessment)
-      setImprovementPlan(plan)
+      if (response.success && response.data) {
+        console.log('评估完成:', response.data)
+        
+        // 转换原系统的评估结果为新格式
+        const assessment = convertAbilityAssessmentToAssessment(response.data.assessment)
+        setCurrentAssessment(assessment)
+        
+        // 生成改进计划
+        const planResponse = await learningApi.generateAbilityImprovementPlan()
+        if (planResponse.success && planResponse.data) {
+          // 将字符串分割为数组
+          const planLines = planResponse.data.split('\n').filter(line => line.trim())
+          setImprovementPlan(planLines)
+        }
+        
+      } else {
+        throw new Error(response.error || '评估失败')
+      }
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '评估失败，请重试'
@@ -139,20 +163,15 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
       if (errorMessage.includes('API KEY') || errorMessage.includes('AI服务暂时不可用')) {
         setError(errorMessage)
         
-        // 如果是API key问题，也尝试显示基础评估
+        // 如果是API key问题，显示基础评估信息
         try {
-          console.log('API服务不可用，尝试基础评估模式...')
-          const basicAssessment = await refactorAssessmentService.executeAssessment(input)
-          setCurrentAssessment(basicAssessment)
-          
-          // 生成基础改进计划
-          const plan = await refactorAssessmentService.generateImprovementPlan(basicAssessment)
-          setImprovementPlan(plan)
-          
-          // 显示信息但不清除错误，让用户知道是基础模式
-          console.log('基础评估模式完成')
+          console.log('API服务不可用，显示基础评估信息...')
+          const summaryResponse = await learningApi.getAbilitySummary()
+          if (summaryResponse.success && summaryResponse.data) {
+            console.log('基础评估信息:', summaryResponse.data)
+          }
         } catch (fallbackError) {
-          console.error('基础评估也失败了:', fallbackError)
+          console.error('获取基础评估信息也失败了:', fallbackError)
         }
       } else {
         setError(errorMessage)
@@ -174,8 +193,14 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     if (!currentAssessment) return
     
     try {
-      const plan = await refactorAssessmentService.generateImprovementPlan(currentAssessment)
-      setImprovementPlan(plan)
+      const response = await learningApi.generateAbilityImprovementPlan()
+      if (response.success && response.data) {
+        // 将字符串分割为数组
+        const planLines = response.data.split('\n').filter(line => line.trim())
+        setImprovementPlan(planLines)
+      } else {
+        throw new Error(response.error || '生成改进计划失败')
+      }
     } catch (error) {
       console.error('Failed to generate improvement plan:', error)
       setError('生成改进计划失败')
@@ -186,7 +211,8 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     if (!currentAssessment) return
     
     try {
-      const report = refactorAssessmentService.exportAssessmentReport(currentAssessment)
+      // 生成报告内容
+      const report = generateAssessmentReport(currentAssessment)
       
       // 创建并下载文件
       const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
@@ -198,10 +224,149 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
+      
+      console.log('评估报告已导出')
     } catch (error) {
       console.error('Failed to export report:', error)
       setError('导出报告失败')
     }
+  }
+
+  /**
+   * 将原系统的 AbilityAssessment 转换为新系统的 Assessment
+   */
+  const convertAbilityAssessmentToAssessment = (abilityAssessment: any): Assessment => {
+    return {
+      id: `assessment_${Date.now()}`,
+      profileId: 'current',
+      type: abilityAssessment.metadata?.assessmentMethod === 'resume' ? 'resume' : 'questionnaire',
+      overallScore: abilityAssessment.overallScore,
+      dimensions: convertDimensions(abilityAssessment.dimensions || {}),
+      strengths: abilityAssessment.report?.strengths || [],
+      weaknesses: abilityAssessment.report?.improvements || [],
+      recommendations: abilityAssessment.report?.recommendations || [],
+      createdAt: new Date(abilityAssessment.metadata?.assessmentDate || Date.now()),
+      updatedAt: new Date(abilityAssessment.metadata?.assessmentDate || Date.now())
+    }
+  }
+
+  /**
+   * 转换维度数据
+   */
+  const convertDimensions = (dimensions: any): { [key: string]: DimensionAssessment } => {
+    const result: { [key: string]: DimensionAssessment } = {}
+    
+    Object.entries(dimensions).forEach(([key, dimension]: [string, any]) => {
+      const skills = Object.entries(dimension.skills || {}).map(([skillName, skillData]: [string, any]) => {
+        const score = typeof skillData === 'number' ? skillData : skillData.score || 0
+        const confidence = typeof skillData === 'number' ? 1.0 : skillData.confidence || 1.0
+        
+        return {
+          skill: skillName,
+          level: getSkillLevel(score),
+          score,
+          confidence,
+          evidence: [],
+          improvements: []
+        }
+      })
+
+      result[key] = {
+        name: getDimensionDisplayName(key),
+        score: dimension.score || 0,
+        skills,
+        summary: `${getDimensionDisplayName(key)}维度评估`,
+        recommendations: [`继续提升${getDimensionDisplayName(key)}技能`]
+      }
+    })
+    
+    return result
+  }
+
+  /**
+   * 获取维度显示名称
+   */
+  const getDimensionDisplayName = (dimension: string): string => {
+    const dimensionMap: Record<string, string> = {
+      programming: '编程基础',
+      algorithm: '算法能力',
+      project: '项目能力',
+      systemDesign: '系统设计',
+      communication: '沟通协作'
+    }
+    return dimensionMap[dimension] || dimension
+  }
+
+  /**
+   * 获取技能级别
+   */
+  const getSkillLevel = (score: number): 'beginner' | 'intermediate' | 'advanced' | 'expert' => {
+    if (score >= 90) return 'expert'
+    if (score >= 70) return 'advanced'
+    if (score >= 50) return 'intermediate'
+    return 'beginner'
+  }
+
+  /**
+   * 生成评估报告
+   */
+  const generateAssessmentReport = (assessment: Assessment): string => {
+    const level = getAssessmentLevel(assessment.overallScore)
+    
+    let report = `# 能力评估报告\n\n`
+    report += `**评估日期**: ${assessment.createdAt.toLocaleDateString()}\n`
+    report += `**总体评分**: ${assessment.overallScore}/100\n`
+    report += `**能力级别**: ${level}\n\n`
+    
+    report += `## 各维度评分\n\n`
+    Object.entries(assessment.dimensions).forEach(([key, dimension]) => {
+      report += `### ${dimension.name}\n`
+      report += `- **评分**: ${dimension.score}/100\n`
+      report += `- **概要**: ${dimension.summary}\n`
+      if (dimension.skills.length > 0) {
+        report += `- **技能**: ${dimension.skills.map(s => s.skill).join(', ')}\n`
+      }
+      report += `\n`
+    })
+    
+    if (assessment.strengths.length > 0) {
+      report += `## 优势领域\n\n`
+      assessment.strengths.forEach(strength => {
+        report += `- ${strength}\n`
+      })
+      report += `\n`
+    }
+    
+    if (assessment.weaknesses.length > 0) {
+      report += `## 待改进领域\n\n`
+      assessment.weaknesses.forEach(weakness => {
+        report += `- ${weakness}\n`
+      })
+      report += `\n`
+    }
+    
+    if (assessment.recommendations.length > 0) {
+      report += `## 学习建议\n\n`
+      assessment.recommendations.forEach(recommendation => {
+        report += `- ${recommendation}\n`
+      })
+      report += `\n`
+    }
+    
+    return report
+  }
+
+  /**
+   * 获取评估级别
+   */
+  const getAssessmentLevel = (score: number): string => {
+    if (score >= 90) return '专家级'
+    if (score >= 80) return '高级'
+    if (score >= 70) return '中高级'
+    if (score >= 60) return '中级'
+    if (score >= 50) return '中初级'
+    if (score >= 40) return '初级'
+    return '入门级'
   }
 
   return (

@@ -74,4 +74,17 @@ export interface GoalFormData {
   estimatedTimeWeeks: number
   requiredSkills: string[]
   outcomes: string[]
+}
+
+// 目标推荐类型
+export interface GoalRecommendation {
+  id: string
+  title: string
+  description: string
+  category: string
+  difficulty: 'easy' | 'medium' | 'hard'
+  estimatedWeeks: number
+  skills: string[]
+  outcomes: string[]
+  reasoning: string
 } 

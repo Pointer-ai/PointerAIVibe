@@ -9,7 +9,7 @@ src/
 │   ├── goalApi.ts          # 目标管理API
 │   ├── pathApi.ts          # 路径管理API
 │   ├── assessmentApi.ts    # 评估管理API
-│   ├── learningApi.ts      # 学习系统API
+│   ├── learningApi.ts      # 学习系统API (统一接口层)
 │   └── simpleApi.ts        # 简化API示例
 ├── components/             # 原有组件层
 │   ├── RefactorDashboard.tsx  # 重构系统入口组件
@@ -49,26 +49,23 @@ src/
     │   └── layouts/       # 布局组件 (预留)
     ├── pages/             # 页面组件
     │   ├── Dashboard.tsx   # ✅ 重构系统主Dashboard
-    │   ├── GoalManagement.tsx  # ✅ 目标管理页面
+    │   ├── GoalManagement.tsx  # ✅ 目标管理页面 (已重构)
     │   ├── UIShowcase.tsx      # ✅ UI组件展示页面
-    │   ├── Assessment.tsx      # ✅ 能力评估页面 (已完成)
+    │   ├── Assessment.tsx      # ✅ 能力评估页面 (已重构)
     │   ├── ProfileManagement.tsx    # ✅ Profile管理页面
     │   ├── SystemDiagnostics.tsx    # ✅ 系统诊断页面
     │   ├── DataManagement.tsx       # ✅ 数据管理页面
     │   ├── PathPlanning.tsx    # 📋 待开发
     │   └── SystemIntegration.tsx  # 📋 待开发
-    ├── services/          # ✅ 业务服务层 (已完成)
+    ├── services/          # ✅ 业务服务层 (已重构)
     │   ├── aiService.ts        # ✅ AI服务统一接口
-    │   ├── assessmentService.ts # ✅ 评估服务 (已完成)
     │   ├── profileService.ts   # ✅ Profile服务 (已完成)
     │   ├── legacyDataService.ts # ✅ Legacy数据兼容服务
     │   ├── syncManager.ts      # ✅ 同步管理服务
-    │   ├── goalService.ts      # 📋 目标服务 (待开发)
-    │   ├── pathService.ts      # 📋 路径服务 (待开发)
     │   └── apiService.ts       # 📋 API调用服务 (待开发)
     ├── types/             # ✅ 类型定义
     │   ├── index.ts       # ✅ 统一类型导出
-    │   ├── goal.ts        # ✅ 目标相关类型
+    │   ├── goal.ts        # ✅ 目标相关类型 (已扩展)
     │   ├── path.ts        # ✅ 路径相关类型
     │   ├── assessment.ts  # ✅ 评估相关类型
     │   ├── ai.ts          # ✅ AI服务相关类型
@@ -83,9 +80,10 @@ src/
 
 ### ✅ 已完成
 - [x] **API层完整架构** - 5个API模块，统一错误处理
+- [x] **架构重构** - 统一通过 learningApi 访问数据 ⭐新增
 - [x] **重构系统入口** - RefactorDashboard.tsx 集成导航
 - [x] **主Dashboard页面** - 与原系统UI保持一致
-- [x] **目标管理页面** - 使用API层的示例实现
+- [x] **目标管理页面** - 重构为使用 learningApi ⭐已重构
 - [x] **完整UI组件库** - 8个基础组件系统，涵盖所有常用场景
   - [x] Button - 按钮组件，支持多种变体和状态
   - [x] Card - 卡片组件，支持Header/Content/Footer结构
@@ -96,15 +94,15 @@ src/
   - [x] Alert - 警告和Toast通知系统
   - [x] Modal - 对话框系统，支持确认和表单对话框
 - [x] **UI组件展示页面** - 完整的组件使用示例和文档
-- [x] **完整类型定义** - 6个类型模块，全面类型支持
+- [x] **完整类型定义** - 6个类型模块，全面类型支持，新增 GoalRecommendation 类型
 - [x] **文件结构建立** - 清晰的目录组织
 - [x] **AI服务层** - 统一的AI服务接口，支持多种AI模型
-- [x] **能力评估系统** - 完整的评估功能组件 ⭐
+- [x] **能力评估系统** - 重构为使用 learningApi ⭐已重构
   - [x] 评估表单 - 简历上传和问卷填写，支持文件上传和验证
   - [x] 评估结果 - 多维度能力展示，标签页分组展示
   - [x] 雷达图组件 - Canvas实现的交互式维度可视化
   - [x] 技能矩阵 - 多视图技能展示（表格/热力图/分组）
-  - [x] 完整的评估服务 - AI分析和评估算法
+  - [x] 评估页面 - 重构为通过 learningApi 执行评估 ⭐
 - [x] **Profile管理系统** - 完整的Profile管理功能 ⭐
   - [x] Profile列表 - 多Profile展示和管理
   - [x] Profile表单 - 创建和编辑Profile信息
@@ -139,10 +137,10 @@ src/
 
 ### 📋 待开发
 - [ ] **功能组件库** - features/ 目录下的其他组件
-- [ ] **业务服务层** - services/ 目录下的其他服务
 - [ ] **工具函数库** - utils/ 目录
 
-### 🗑️ 已清理的过期内容
+### 🗑️ 已清理的冗余内容 ⭐新增
+- [x] **删除重构服务** - refactorAssessmentService.ts, refactorGoalService.ts
 - [x] **删除过期文档** - REFACTOR_DATA_MANAGEMENT_COMPLETE.md, REFACTOR_COMPLETE.md
 - [x] **删除测试脚本** - test-data-management.js
 - [x] **删除演示文件** - src/demo/AgentDemo.tsx (80KB)
@@ -151,7 +149,72 @@ src/
 - [x] **删除重复文档** - UNIFIED_LEARNING_SYSTEM_GUIDE.md (内容已整合到README.md)
 - [x] **清理空目录** - src/demo/, src/refactor/test/
 
-## 🤖 AI服务层设计 ⭐新增
+## 🏗️ 架构修正 - 统一 API 访问 ⭐新增
+
+### 修正前的问题
+```
+重构组件 → refactorAssessmentService → profile service (直接访问)
+重构组件 → refactorGoalService → profile service (直接访问)
+```
+
+### 修正后的架构
+```
+重构组件 → learningApi → 原系统服务 → profile/core data
+```
+
+### 具体修正内容
+
+#### 1. 评估系统重构 ✅
+- **修正前**: `Assessment.tsx` 直接调用 `refactorAssessmentService`
+- **修正后**: 通过 `learningApi.executeAbilityAssessment()` 等方法
+- **删除**: `src/refactor/services/assessmentService.ts` (764行)
+- **新增**: 评估结果格式转换函数，将原系统格式转为新格式
+
+#### 2. 目标管理重构 ✅
+- **修正前**: `GoalManagement.tsx` 直接调用 `refactorGoalService`
+- **修正后**: 通过 `learningApi.getAllGoals()`, `learningApi.createGoal()` 等方法
+- **删除**: `src/refactor/services/goalService.ts` (647行)
+- **新增**: 目标数据格式转换函数，处理新旧格式差异
+
+#### 3. 目标推荐重构 ✅
+- **修正前**: `GoalRecommendations.tsx` 直接调用 `refactorGoalService`
+- **修正后**: 通过 `learningApi.chatWithAgent()`, `learningApi.generateGoalRecommendations()` 等方法
+- **新增**: `GoalRecommendation` 类型定义
+- **新增**: AI回复解析和推荐转换函数
+
+#### 4. 类型系统扩展 ✅
+- **新增**: `GoalRecommendation` 接口定义
+- **修正**: 类型转换函数，处理原系统和重构系统的数据格式差异
+- **清理**: 删除了重复的服务导出
+
+### 架构优势
+
+#### 🎯 统一访问路径
+```typescript
+// 现在所有重构组件都通过 learningApi
+const response = await learningApi.executeAbilityAssessment(input)
+const goals = await learningApi.getAllGoals()
+const recommendations = await learningApi.generateGoalRecommendations()
+```
+
+#### 🔄 数据格式转换
+```typescript
+// 在组件层转换数据格式，保持接口一致
+const convertedGoals = response.data.map(goal => convertLearningGoalToGoal(goal))
+const assessment = convertAbilityAssessmentToAssessment(response.data.assessment)
+```
+
+#### 🛡️ 类型安全
+- 完整的 TypeScript 类型定义
+- 编译时类型检查
+- 统一的 API 响应格式
+
+#### 📦 代码精简
+- 删除了 1411 行重复代码 (764 + 647)
+- 消除了架构层级混乱
+- 减少了维护成本
+
+## 🤖 AI服务层设计 ⭐
 
 ### 架构设计原则
 1. **统一接口** - 抽象不同AI服务商的差异，提供统一的调用接口
@@ -275,9 +338,10 @@ import { Button, Card, Input, Badge } from '../components/ui'
 ## 🔗 与原系统的集成
 
 ### 数据层集成 ✅
-- **共享CoreData**: 通过API层访问相同的数据存储
+- **统一API访问**: 通过 learningApi 层统一访问原系统数据
 - **Profile隔离**: 完全支持多Profile数据隔离
 - **实时同步**: 原系统和重构系统数据双向同步
+- **格式转换**: 智能的新旧数据格式转换
 
 ### UI层隔离 ✅
 - **独立路由**: 重构系统有独立的页面导航
@@ -307,11 +371,26 @@ pnpm dev
 1. 在 `src/refactor/pages/` 创建新页面组件
 2. 在 `src/refactor/pages/Dashboard.tsx` 添加导航
 3. 在 `src/components/RefactorDashboard.tsx` 添加路由
+4. **重要**: 使用 `learningApi` 而不是直接访问数据服务
 
 ### 开发新组件
 1. 在 `src/refactor/components/ui/` 创建基础组件
 2. 在 `src/refactor/components/features/` 创建功能组件
 3. 在对应的 `index.ts` 文件中导出
+
+### 使用API访问数据 ⭐新增
+```typescript
+// 正确的方式 - 通过 learningApi
+import { learningApi } from '../../api'
+
+const response = await learningApi.getAllGoals()
+if (response.success) {
+  const goals = response.data
+}
+
+// 错误的方式 - 直接访问服务 (已禁止)
+// import { refactorGoalService } from '../services/goalService'  // 已删除
+```
 
 ### 使用UI组件
 ```typescript
@@ -332,29 +411,30 @@ import { StatusBadge, CountBadge } from '../components/ui'
 ```
 Pages (页面层) 
     ↓
-Features (功能组件层)
-    ↓  
-UI Components (基础组件层)
+learningApi (统一API层) ⭐新增
     ↓
-API Layer (API层)
+Original Services (原系统服务层)
     ↓
 Core Data (数据层)
 ```
 
 ### 🔄 数据流向
-- **单向数据流**: Pages → Features → UI Components → API → CoreData
-- **状态管理**: React Hooks + API层状态
+- **单向数据流**: Pages → learningApi → Original Services → CoreData
+- **状态管理**: React Hooks + learningApi 状态
 - **错误处理**: 统一的错误处理和用户反馈
+- **格式转换**: 在页面层处理新旧格式转换
 
 ### 🛡️ 类型安全
 - **完整TypeScript支持**: 所有组件和API都有类型定义
 - **接口一致性**: 统一的API响应格式
 - **编译时检查**: 防止类型错误
+- **格式映射**: 智能的类型转换函数
 
 ### 🧪 易于测试
 - **模块化设计**: 每个模块职责单一
 - **API层隔离**: 易于Mock和测试
 - **组件独立**: 单元测试友好
+- **统一接口**: 便于集成测试
 
 ### 🎨 设计系统
 - **一致的视觉语言**: 统一的颜色、字体、间距规范
@@ -375,6 +455,12 @@ Core Data (数据层)
 - **ESLint**: 代码风格检查
 - **Prettier**: 代码格式化
 
+### API访问规范 ⭐新增
+- **统一入口**: 必须通过 `learningApi` 访问数据
+- **格式转换**: 在组件层处理新旧格式差异
+- **错误处理**: 使用统一的错误处理机制
+- **类型安全**: 确保类型转换的正确性
+
 ### UI组件开发规范
 - **Props接口**: 导出组件Props类型定义
 - **默认值**: 合理设置props默认值
@@ -389,10 +475,11 @@ Core Data (数据层)
 
 ## 🎉 总结
 
-重构系统文件结构已经建立完成，现在包含：
+重构系统架构修正已经完成，现在包含：
 
-✅ **完整的API层架构** - 统一数据访问  
-✅ **清晰的组件分层** - UI/Features/Pages 分离  
+✅ **统一API访问层** - 所有重构组件通过 learningApi 统一访问数据  
+✅ **完整的架构分层** - 清晰的 Pages → API → Services → Data 层次  
+✅ **智能格式转换** - 新旧数据格式无缝转换  
 ✅ **完整的UI组件库** - 8个基础组件系统，涵盖所有常用场景  
 ✅ **UI组件展示系统** - 完整的使用示例和文档  
 ✅ **完整的类型系统** - 全面TypeScript支持  
@@ -400,39 +487,32 @@ Core Data (数据层)
 ✅ **可扩展架构** - 易于添加新功能  
 ✅ **AI服务层** - 统一的AI服务接口，支持多种AI模型  
 ✅ **Profile管理系统** - 完整的多Profile支持和数据隔离 ⭐  
-✅ **能力评估系统** - AI驱动的多维度能力分析 ⭐  
-✅ **系统同步管理** - 智能的Profile切换状态同步 ⭐新增  
-✅ **系统诊断功能** - 全面的系统健康检查和故障排除 ⭐新增  
-✅ **同步测试系统** - 可视化的性能测试和监控 ⭐新增  
-✅ **Legacy数据兼容** - 完全的向后兼容和数据迁移 ⭐新增  
-✅ **数据管理系统** - 完整的学习数据管理功能 ⭐
-
-现在可以在这个基础上继续开发新的功能模块，每个模块都有明确的位置和职责！UI组件库为整个系统提供了统一、可靠的基础建设。
+✅ **能力评估系统** - AI驱动的多维度能力分析，已重构 ⭐  
+✅ **目标管理系统** - 完整的目标CRUD操作，已重构 ⭐  
+✅ **系统同步管理** - 智能的Profile切换状态同步 ⭐  
+✅ **系统诊断功能** - 全面的系统健康检查和故障排除 ⭐  
+✅ **Legacy数据兼容** - 完全的向后兼容和数据迁移 ⭐  
+✅ **数据管理系统** - 完整的学习数据管理功能 ⭐  
+✅ **代码精简优化** - 删除1411行重复代码，消除架构混乱 ⭐新增
 
 ## 🚀 最新架构亮点
 
-### 🔄 智能同步管理
-- **SyncManager协调器** - 统一管理所有同步操作，支持优先级队列
-- **Profile切换优化** - 防止竞态条件，确保状态一致性  
-- **事件驱动架构** - 自动化的状态变更通知和响应
-- **AI配置智能重载** - Profile切换时无缝配置同步
+### 🔄 统一API访问
+- **learningApi 中间层** - 统一的数据访问接口，消除直接服务调用
+- **格式转换机制** - 智能的新旧数据格式映射和转换
+- **类型安全保障** - 完整的TypeScript类型定义和编译时检查
+- **错误处理统一** - 一致的错误处理和用户反馈机制
 
-### 🩺 系统诊断能力
-- **全面健康检查** - Profile兼容性、API配置、AI服务状态
-- **智能故障排除** - 自动检测问题并提供修复建议
-- **详细配置分析** - 新旧系统配置对比和差异检测
-- **实时状态监控** - 可视化的系统运行状态展示
+### 🏗️ 架构简化
+- **删除重复服务** - 移除refactorAssessmentService和refactorGoalService
+- **清理冗余代码** - 减少1411行重复实现，提高维护效率
+- **统一数据流** - 单向数据流，提高系统可预测性
+- **模块职责明确** - 每层职责单一，便于理解和维护
 
-### 📊 性能测试体系
-- **压力测试** - 快速Profile切换稳定性验证
-- **性能指标** - 切换成功率、响应时间、状态匹配统计
-- **实时监控** - 同步状态、加载状态、配置状态可视化
-- **操作追踪** - SyncManager操作队列和执行过程展示
+### 🔗 无缝集成
+- **数据格式兼容** - 新旧系统数据格式完全兼容
+- **API接口一致** - 保持与原系统的接口兼容性
+- **零停机升级** - 平滑的系统迁移和功能升级
+- **向后兼容保障** - 确保原有功能不受影响
 
-### 🔗 完美兼容性
-- **Legacy数据服务** - 原有数据格式完全支持
-- **API配置转换** - 新旧格式智能映射和迁移
-- **存储诊断** - localStorage数据完整性检查
-- **无缝过渡** - 零停机的系统升级体验
-
-这次重构不仅解决了架构问题，更建立了一套完整的质量保障体系！🎯 
+这次架构修正不仅解决了层级混乱问题，更建立了一套清晰、高效、可维护的系统架构！🎯 

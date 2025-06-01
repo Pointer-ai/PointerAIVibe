@@ -18,7 +18,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { GoalFormData } from '../types/goal'
-import { refactorGoalService } from '../services/goalService'
+import { learningApi } from '../../api'
 import { GoalForm } from '../components/features/GoalManagement/GoalForm'
 
 // 导入重构系统的UI组件
@@ -64,8 +64,15 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   const loadGoals = async () => {
     setLoading(true)
     try {
-      const realGoals = refactorGoalService.getAllGoals()
-      setGoals(realGoals)
+      // 通过 learningApi 获取目标列表
+      const response = await learningApi.getAllGoals()
+      if (response.success && response.data) {
+        // 转换原系统的目标格式为重构系统格式
+        const convertedGoals = response.data.map(goal => convertLearningGoalToGoal(goal))
+        setGoals(convertedGoals)
+      } else {
+        throw new Error(response.error || '获取目标列表失败')
+      }
     } catch (error) {
       console.error('Failed to load goals:', error)
       showMessage('error', '加载目标失败')
@@ -81,14 +88,24 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
 
   // 获取目标统计
   const getGoalStats = () => {
-    const stats = refactorGoalService.getGoalStats()
+    const response = learningApi.getGoalStats()
+    if (response.success && response.data) {
+      return {
+        active: response.data.active || 0,
+        completed: response.data.completed || 0,
+        paused: response.data.paused || 0,
+        cancelled: response.data.cancelled || 0,
+        total: response.data.total || 0,
+        canActivateMore: response.data.activation?.active < response.data.activation?.maxActive
+      }
+    }
     return {
-      active: stats.active,
-      completed: stats.completed,
-      paused: stats.paused,
-      cancelled: stats.cancelled,
-      total: stats.total,
-      canActivateMore: stats.canActivateMore
+      active: 0,
+      completed: 0,
+      paused: 0,
+      cancelled: 0,
+      total: 0,
+      canActivateMore: true
     }
   }
 
@@ -96,16 +113,36 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   const handleGoalSubmit = async (formData: GoalFormData) => {
     setActionLoading(true)
     try {
+      // 转换 GoalFormData 为 learningApi 期望的格式
+      const apiFormData = {
+        title: formData.title,
+        description: formData.description,
+        category: mapCategoryToApiFormat(formData.category),
+        priority: formData.priority,
+        targetLevel: mapTargetLevelToApiFormat(formData.targetLevel),
+        estimatedTimeWeeks: formData.estimatedTimeWeeks,
+        requiredSkills: formData.requiredSkills,
+        outcomes: formData.outcomes
+      }
+
       if (editingGoal) {
-        const updatedGoal = await refactorGoalService.updateGoal(editingGoal.id, formData)
-        if (updatedGoal) {
+        // 更新目标
+        const response = await learningApi.updateGoal(editingGoal.id, apiFormData)
+        if (response.success) {
           await loadGoals()
           showMessage('success', '目标更新成功')
+        } else {
+          throw new Error(response.error || '更新目标失败')
         }
       } else {
-        const newGoal = await refactorGoalService.createGoal(formData)
-        await loadGoals()
-        showMessage('success', `成功创建目标: ${formData.title}`)
+        // 创建新目标
+        const response = await learningApi.createGoal(apiFormData)
+        if (response.success) {
+          await loadGoals()
+          showMessage('success', `成功创建目标: ${formData.title}`)
+        } else {
+          throw new Error(response.error || '创建目标失败')
+        }
       }
       setShowForm(false)
       setEditingGoal(null)
@@ -125,9 +162,13 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
 
     setActionLoading(true)
     try {
-      await refactorGoalService.deleteGoal(goalId)
-      showMessage('success', '目标删除成功')
-      await loadGoals()
+      const response = await learningApi.deleteGoal(goalId)
+      if (response.success) {
+        showMessage('success', '目标删除成功')
+        await loadGoals()
+      } else {
+        throw new Error(response.error || '删除目标失败')
+      }
     } catch (error) {
       showMessage('error', `删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -139,9 +180,13 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   const handleActivateGoal = async (goalId: string) => {
     setActionLoading(true)
     try {
-      await refactorGoalService.activateGoal(goalId)
-      showMessage('success', '目标激活成功')
-      await loadGoals()
+      const response = await learningApi.activateGoal(goalId)
+      if (response.success) {
+        showMessage('success', '目标激活成功')
+        await loadGoals()
+      } else {
+        throw new Error(response.error || '激活目标失败')
+      }
     } catch (error) {
       showMessage('error', `激活失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -153,9 +198,13 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   const handlePauseGoal = async (goalId: string) => {
     setActionLoading(true)
     try {
-      await refactorGoalService.pauseGoal(goalId)
-      showMessage('success', '目标暂停成功')
-      await loadGoals()
+      const response = await learningApi.pauseGoal(goalId)
+      if (response.success) {
+        showMessage('success', '目标暂停成功')
+        await loadGoals()
+      } else {
+        throw new Error(response.error || '暂停目标失败')
+      }
     } catch (error) {
       showMessage('error', `暂停失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -169,9 +218,13 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
     
     setActionLoading(true)
     try {
-      await refactorGoalService.completeGoal(goalId)
-      showMessage('success', '目标完成成功')
-      await loadGoals()
+      const response = await learningApi.completeGoal(goalId, achievements ? achievements.split(',').map(s => s.trim()) : undefined)
+      if (response.success) {
+        showMessage('success', '目标完成成功')
+        await loadGoals()
+      } else {
+        throw new Error(response.error || '完成目标失败')
+      }
     } catch (error) {
       showMessage('error', `完成操作失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -183,9 +236,13 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   const handleCancelGoal = async (goalId: string) => {
     setActionLoading(true)
     try {
-      await refactorGoalService.cancelGoal(goalId)
-      showMessage('success', '目标取消成功')
-      await loadGoals()
+      const response = await learningApi.cancelGoal(goalId)
+      if (response.success) {
+        showMessage('success', '目标取消成功')
+        await loadGoals()
+      } else {
+        throw new Error(response.error || '取消目标失败')
+      }
     } catch (error) {
       showMessage('error', `取消失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -202,15 +259,15 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
   // 获取类别文本
   const getCategoryText = (category: string): string => {
     const categoryMap: Record<string, string> = {
-      frontend: '前端开发',
-      backend: '后端开发',
-      fullstack: '全栈开发',
-      automation: '自动化测试',
-      ai: '人工智能',
-      mobile: '移动开发',
-      game: '游戏开发',
-      data: '数据科学',
-      custom: '自定义'
+      'frontend': '前端开发',
+      'backend': '后端开发',
+      'fullstack': '全栈开发',
+      'mobile': '移动开发',
+      'data': '数据科学',
+      'ai': '人工智能',
+      'devops': '运维开发',
+      'design': '设计',
+      'other': '其他'
     }
     return categoryMap[category] || category
   }
@@ -641,3 +698,98 @@ export const GoalManagementPage: React.FC<GoalManagementPageProps> = ({ onNaviga
 }
 
 export default GoalManagementPage 
+
+/**
+ * 将原系统的 LearningGoal 转换为重构系统的 Goal
+ */
+const convertLearningGoalToGoal = (learningGoal: any): Goal => {
+  return {
+    id: learningGoal.id,
+    title: learningGoal.title,
+    description: learningGoal.description,
+    category: mapCategoryFromOldFormat(learningGoal.category),
+    priority: learningGoal.priority || 1,
+    status: mapStatusFromOldFormat(learningGoal.status),
+    targetLevel: mapTargetLevelFromOldFormat(learningGoal.targetLevel),
+    estimatedTimeWeeks: learningGoal.estimatedTimeWeeks || 1,
+    requiredSkills: learningGoal.requiredSkills || [],
+    outcomes: learningGoal.outcomes || [],
+    progress: learningGoal.progress || 0,
+    createdAt: new Date(learningGoal.createdAt),
+    updatedAt: new Date(learningGoal.updatedAt)
+  }
+}
+
+/**
+ * 映射类别从原格式
+ */
+const mapCategoryFromOldFormat = (category: any): string => {
+  const categoryMap: Record<string, string> = {
+    'frontend': 'frontend',
+    'backend': 'backend',
+    'fullstack': 'fullstack',
+    'mobile': 'mobile',
+    'data': 'data',
+    'ai': 'ai',
+    'devops': 'devops',
+    'design': 'design',
+    'other': 'other'
+  }
+  return categoryMap[category] || 'other'
+}
+
+/**
+ * 映射类别到API格式
+ */
+const mapCategoryToApiFormat = (category: string): 'frontend' | 'backend' | 'fullstack' | 'automation' | 'ai' | 'mobile' | 'game' | 'data' | 'custom' => {
+  const categoryMap: Record<string, 'frontend' | 'backend' | 'fullstack' | 'automation' | 'ai' | 'mobile' | 'game' | 'data' | 'custom'> = {
+    'frontend': 'frontend',
+    'backend': 'backend',
+    'fullstack': 'fullstack',
+    'mobile': 'mobile',
+    'data': 'data',
+    'ai': 'ai',
+    'devops': 'automation',
+    'design': 'custom',
+    'other': 'custom'
+  }
+  return categoryMap[category] || 'custom'
+}
+
+/**
+ * 映射状态从原格式
+ */
+const mapStatusFromOldFormat = (status: any): Goal['status'] => {
+  const statusMap: Record<string, Goal['status']> = {
+    'draft': 'draft',
+    'active': 'active',
+    'paused': 'paused',
+    'completed': 'completed',
+    'cancelled': 'cancelled'
+  }
+  return statusMap[status] || 'draft'
+}
+
+/**
+ * 映射目标级别从原格式
+ */
+const mapTargetLevelFromOldFormat = (level: any): Goal['targetLevel'] => {
+  const levelMap: Record<string, Goal['targetLevel']> = {
+    'beginner': 'beginner',
+    'intermediate': 'intermediate',
+    'advanced': 'advanced'
+  }
+  return levelMap[level] || 'beginner'
+}
+
+/**
+ * 映射目标级别到API格式
+ */
+const mapTargetLevelToApiFormat = (level: string): 'beginner' | 'intermediate' | 'advanced' => {
+  const levelMap: Record<string, 'beginner' | 'intermediate' | 'advanced'> = {
+    'beginner': 'beginner',
+    'intermediate': 'intermediate',
+    'advanced': 'advanced'
+  }
+  return levelMap[level] || 'beginner'
+} 

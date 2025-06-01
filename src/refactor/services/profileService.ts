@@ -48,6 +48,19 @@ import {
 // 导入同步管理器
 import { syncManager } from './syncManager'
 
+// 导入CoreData相关功能
+import {
+  getLearningGoals,
+  getLearningPaths,
+  getCourseUnits,
+  getAgentActions,
+  deleteLearningGoal,
+  deleteLearningPath,
+  deleteCourseUnit
+} from '../../modules/coreData'
+import { getCurrentAssessment } from '../../modules/abilityAssess/service'
+import { addActivityRecord } from '../../modules/profileSettings/service'
+
 /**
  * 增强的Profile管理服务类
  * 完全兼容原系统数据格式，同时提供现代化的接口
@@ -815,6 +828,256 @@ export class RefactorProfileService {
       return data ? JSON.parse(data) : []
     } catch (error) {
       return []
+    }
+  }
+
+  /**
+   * 获取Profile的学习数据统计
+   */
+  getProfileDataStats(profileId?: string): {
+    goals: number
+    paths: number
+    courseUnits: number
+    agentActions: number
+    hasAssessment: boolean
+    goalsByStatus: Record<string, number>
+    pathsByStatus: Record<string, number>
+  } {
+    try {
+      // 如果指定了profileId，先切换到该profile（仅用于数据读取）
+      const currentProfileId = getOriginalCurrentProfileId()
+      
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+      const courseUnits = getCourseUnits()
+      const agentActions = getAgentActions()
+      const currentAssessment = getCurrentAssessment()
+
+      // 统计目标状态分布
+      const goalsByStatus = goals.reduce((acc, goal) => {
+        acc[goal.status] = (acc[goal.status] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      // 统计路径状态分布
+      const pathsByStatus = paths.reduce((acc, path) => {
+        acc[path.status] = (acc[path.status] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+
+      return {
+        goals: goals.length,
+        paths: paths.length,
+        courseUnits: courseUnits.length,
+        agentActions: agentActions.length,
+        hasAssessment: !!currentAssessment,
+        goalsByStatus,
+        pathsByStatus
+      }
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to get data stats:', error)
+      return {
+        goals: 0,
+        paths: 0,
+        courseUnits: 0,
+        agentActions: 0,
+        hasAssessment: false,
+        goalsByStatus: {},
+        pathsByStatus: {}
+      }
+    }
+  }
+
+  /**
+   * 获取Profile的完整学习数据
+   */
+  getProfileLearningData() {
+    try {
+      return {
+        goals: getLearningGoals(),
+        paths: getLearningPaths(),
+        courseUnits: getCourseUnits(),
+        agentActions: getAgentActions(),
+        currentAssessment: getCurrentAssessment()
+      }
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to get learning data:', error)
+      return {
+        goals: [],
+        paths: [],
+        courseUnits: [],
+        agentActions: [],
+        currentAssessment: null
+      }
+    }
+  }
+
+  /**
+   * 删除学习目标（级联删除相关路径和课程）
+   */
+  async deleteLearningGoal(goalId: string, title: string): Promise<ProfileOperationResult> {
+    try {
+      const success = deleteLearningGoal(goalId)
+      
+      if (success) {
+        // 记录删除操作到活动历史
+        addActivityRecord({
+          type: 'data_operation',
+          action: '删除学习目标',
+          details: {
+            itemType: 'goal',
+            itemId: goalId,
+            itemTitle: title,
+            success: true
+          }
+        })
+
+        return {
+          success: true
+        }
+      } else {
+        return {
+          success: false,
+          error: '学习目标删除失败'
+        }
+      }
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to delete goal:', error)
+      
+      // 记录失败的删除操作
+      addActivityRecord({
+        type: 'data_operation',
+        action: '删除学习目标失败',
+        details: {
+          itemType: 'goal',
+          itemId: goalId,
+          itemTitle: title,
+          success: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      })
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '删除学习目标失败'
+      }
+    }
+  }
+
+  /**
+   * 删除学习路径（级联删除相关课程）
+   */
+  async deleteLearningPath(pathId: string, title: string): Promise<ProfileOperationResult> {
+    try {
+      const success = deleteLearningPath(pathId)
+      
+      if (success) {
+        // 记录删除操作到活动历史
+        addActivityRecord({
+          type: 'data_operation',
+          action: '删除学习路径',
+          details: {
+            itemType: 'path',
+            itemId: pathId,
+            itemTitle: title,
+            success: true
+          }
+        })
+
+        return {
+          success: true
+        }
+      } else {
+        return {
+          success: false,
+          error: '学习路径删除失败'
+        }
+      }
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to delete path:', error)
+      
+      // 记录失败的删除操作
+      addActivityRecord({
+        type: 'data_operation',
+        action: '删除学习路径失败',
+        details: {
+          itemType: 'path',
+          itemId: pathId,
+          itemTitle: title,
+          success: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      })
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '删除学习路径失败'
+      }
+    }
+  }
+
+  /**
+   * 删除课程单元
+   */
+  async deleteCourseUnit(unitId: string, title: string): Promise<ProfileOperationResult> {
+    try {
+      const success = deleteCourseUnit(unitId)
+      
+      if (success) {
+        // 记录删除操作到活动历史
+        addActivityRecord({
+          type: 'data_operation',
+          action: '删除课程单元',
+          details: {
+            itemType: 'unit',
+            itemId: unitId,
+            itemTitle: title,
+            success: true
+          }
+        })
+
+        return {
+          success: true
+        }
+      } else {
+        return {
+          success: false,
+          error: '课程单元删除失败'
+        }
+      }
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to delete unit:', error)
+      
+      // 记录失败的删除操作
+      addActivityRecord({
+        type: 'data_operation',
+        action: '删除课程单元失败',
+        details: {
+          itemType: 'unit',
+          itemId: unitId,
+          itemTitle: title,
+          success: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      })
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '删除课程单元失败'
+      }
+    }
+  }
+
+  /**
+   * 导出学习数据为JSON
+   */
+  exportLearningData(): string {
+    try {
+      const data = this.getProfileLearningData()
+      return JSON.stringify(data, null, 2)
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to export learning data:', error)
+      return '{}'
     }
   }
 }

@@ -24,6 +24,8 @@ import { AssessmentPage } from '../refactor/pages/Assessment'
 import { ProfileManagementPage } from '../refactor/pages/ProfileManagement'
 import { SystemDiagnosticsPage } from '../refactor/pages/SystemDiagnostics'
 import { SyncTestPage } from '../refactor/pages/SyncTestPage'
+import { DataManagementPage } from '../refactor/pages/DataManagement'
+import { ToastContainer } from '../refactor/components/ui/Alert/Alert'
 
 // 临时占位符页面组件
 const PlaceholderPage: React.FC<{ title: string; description: string; onNavigate: (view: string) => void }> = ({ title, description, onNavigate }) => (
@@ -43,7 +45,7 @@ const PlaceholderPage: React.FC<{ title: string; description: string; onNavigate
   </div>
 )
 
-type ViewType = 'dashboard' | 'goal-management' | 'assessment' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'path-planning' | 'system-integration' | 'api-testing' | 'course-content' | 'sync-test'
+type ViewType = 'dashboard' | 'goal-management' | 'assessment' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'path-planning' | 'system-integration' | 'api-testing' | 'course-content' | 'sync-test' | 'data-management'
 
 /**
  * 重构系统入口组件
@@ -62,6 +64,8 @@ export const RefactorDashboard: React.FC = () => {
         return <RefactorDashboardPage onNavigate={handleNavigate} />
       case 'goal-management':
         return <GoalManagementPage onNavigate={handleNavigate} />
+      case 'data-management':
+        return <DataManagementPage onNavigate={handleNavigate} />
       case 'assessment':
         return <AssessmentPage onNavigate={handleNavigate} />
       case 'ui-showcase':
@@ -88,6 +92,7 @@ export const RefactorDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {renderCurrentView()}
+      <ToastContainer />
     </div>
   )
 }

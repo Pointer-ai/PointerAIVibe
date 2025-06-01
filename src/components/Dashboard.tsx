@@ -5,7 +5,7 @@ import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector') => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector' | 'refactor-dashboard') => void
   onHome: () => void
 }
 
@@ -36,6 +36,20 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       ),
       color: 'from-purple-500 to-pink-500',
       status: currentAssessment ? '已完成' : '待评估',
+      available: true
+    },
+    {
+      id: 'refactor-dashboard',
+      view: 'refactor-dashboard' as const,
+      title: '🏗️ 重构系统测试',
+      description: '体验重构后的API层架构，与原系统数据共享',
+      icon: (
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      ),
+      color: 'from-cyan-500 to-blue-500',
+      status: '🆕 重构版',
       available: true
     },
     {

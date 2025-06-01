@@ -23,6 +23,10 @@ import { getCurrentAssessment } from '../abilityAssess/service'
 import { setProfileData } from '../../utils/profile'
 import { callAI } from '../../utils/ai'
 import { AbilityAssessment } from '../abilityAssess/types'
+import { 
+  goalActivationManager,
+  getActivationStats
+} from './goalActivationManager'
 
 /**
  * AI Agent 可用工具定义
@@ -421,6 +425,68 @@ export const AGENT_TOOLS: AgentTool[] = [
         optional: true
       }
     }
+  },
+  // ========== 新增：目标激活管理工具 ==========
+  {
+    name: 'get_activation_stats_detailed',
+    description: '获取目标激活统计详细信息',
+    parameters: {}
+  },
+  {
+    name: 'activate_goal_advanced',
+    description: '高级激活目标',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      force: { type: 'boolean', description: '是否强制激活', optional: true },
+      priority: { type: 'number', description: '优先级', optional: true },
+      reason: { type: 'string', description: '激活理由' }
+    }
+  },
+  {
+    name: 'pause_goal_advanced',
+    description: '高级暂停目标',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      reason: { type: 'string', description: '暂停理由' }
+    }
+  },
+  {
+    name: 'complete_goal_advanced',
+    description: '高级完成目标',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      achievements: { type: 'array', items: { type: 'string' }, description: '成就列表' }
+    }
+  },
+  {
+    name: 'batch_activate_goals',
+    description: '批量激活目标',
+    parameters: {
+      goalIds: { type: 'array', items: { type: 'string' }, description: '目标ID列表' },
+      maxConcurrent: { type: 'number', description: '最大并发激活数量', optional: true },
+      priorityOrder: { type: 'boolean', description: '是否按优先级顺序激活', optional: true }
+    }
+  },
+  {
+    name: 'reorder_active_goals',
+    description: '重新排序激活目标',
+    parameters: {
+      priorityGoalIds: { type: 'array', items: { type: 'string' }, description: '优先级目标ID列表' }
+    }
+  },
+  {
+    name: 'get_activation_suggestions',
+    description: '获取激活建议',
+    parameters: {}
+  },
+  {
+    name: 'configure_goal_activation',
+    description: '配置目标激活设置',
+    parameters: {
+      maxActiveGoals: { type: 'number', description: '最大激活目标数量', optional: true },
+      syncRelatedPaths: { type: 'boolean', description: '是否同步相关路径', optional: true },
+      allowPriorityOverride: { type: 'boolean', description: '是否允许优先级覆盖', optional: true }
+    }
   }
 ]
 
@@ -566,6 +632,28 @@ export class AgentToolExecutor {
           break
         case 'get_ability_improvement_suggestions':
           result = await this.getAbilityImprovementSuggestionsTool(parameters)
+          break
+        // ========== 新增：目标激活管理工具 ==========
+        case 'get_activation_stats_detailed':
+          result = await this.getActivationStatsDetailedTool(parameters)
+          break
+        case 'activate_goal_advanced':
+          result = await this.activateGoalAdvancedTool(parameters)
+          break
+        case 'pause_goal_advanced':
+          result = await this.pauseGoalAdvancedTool(parameters)
+          break
+        case 'complete_goal_advanced':
+          result = await this.completeGoalAdvancedTool(parameters)
+          break
+        case 'batch_activate_goals':
+          result = await this.batchActivateGoalsTool(parameters)
+          break
+        case 'reorder_active_goals':
+          result = await this.reorderActiveGoalsTool(parameters)
+          break
+        case 'configure_goal_activation':
+          result = await this.configureGoalActivationTool(parameters)
           break
           
         default:
@@ -2583,6 +2671,137 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
     const defaultPlan = `制定${weeks}周学习计划，结合理论学习和实践项目，定期评估进度`
     
     return plans[dimension]?.[skill] || defaultPlan
+  }
+
+  // ========== 新增：目标激活管理工具 ==========
+
+  private async getActivationStatsDetailedTool(params: any): Promise<any> {
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const stats = goalActivationManager.getActivationStats()
+      
+      return {
+        stats,
+        message: `目标激活统计: ${stats.active}/${stats.maxActive} 个目标激活中`,
+        utilizationRate: `${Math.round(stats.utilizationRate)}%`,
+        completionRate: `${Math.round(stats.completionRate)}%`
+      }
+    } catch (error) {
+      throw new Error(`获取激活统计失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async activateGoalAdvancedTool(params: any): Promise<any> {
+    const { goalId, force = false, priority, reason } = params
+    
+    if (!goalId) {
+      throw new Error('目标ID不能为空')
+    }
+
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const result = await goalActivationManager.activateGoal(goalId, { force, priority, reason })
+      
+      return result
+    } catch (error) {
+      throw new Error(`激活目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async pauseGoalAdvancedTool(params: any): Promise<any> {
+    const { goalId, reason } = params
+    
+    if (!goalId) {
+      throw new Error('目标ID不能为空')
+    }
+
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const result = await goalActivationManager.pauseGoal(goalId, reason)
+      
+      return result
+    } catch (error) {
+      throw new Error(`暂停目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async completeGoalAdvancedTool(params: any): Promise<any> {
+    const { goalId, achievements = [] } = params
+    
+    if (!goalId) {
+      throw new Error('目标ID不能为空')
+    }
+
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const result = await goalActivationManager.completeGoal(goalId, achievements)
+      
+      return result
+    } catch (error) {
+      throw new Error(`完成目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async batchActivateGoalsTool(params: any): Promise<any> {
+    const { goalIds, maxConcurrent, priorityOrder = false } = params
+    
+    if (!goalIds || !Array.isArray(goalIds) || goalIds.length === 0) {
+      throw new Error('目标ID列表不能为空')
+    }
+
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const result = await goalActivationManager.activateMultipleGoals(goalIds, {
+        maxConcurrent,
+        priorityOrder
+      })
+      
+      return result
+    } catch (error) {
+      throw new Error(`批量激活目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async reorderActiveGoalsTool(params: any): Promise<any> {
+    const { priorityGoalIds } = params
+    
+    if (!priorityGoalIds || !Array.isArray(priorityGoalIds)) {
+      throw new Error('目标优先级列表不能为空')
+    }
+
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      const result = await goalActivationManager.reorderActiveGoals(priorityGoalIds)
+      
+      return result
+    } catch (error) {
+      throw new Error(`重排目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async configureGoalActivationTool(params: any): Promise<any> {
+    const { maxActiveGoals, autoDeactivateCompleted, syncRelatedPaths, allowPriorityOverride, notificationEnabled } = params
+    
+    try {
+      const { goalActivationManager } = await import('./goalActivationManager')
+      
+      const config: any = {}
+      if (maxActiveGoals !== undefined) config.maxActiveGoals = maxActiveGoals
+      if (autoDeactivateCompleted !== undefined) config.autoDeactivateCompleted = autoDeactivateCompleted
+      if (syncRelatedPaths !== undefined) config.syncRelatedPaths = syncRelatedPaths
+      if (allowPriorityOverride !== undefined) config.allowPriorityOverride = allowPriorityOverride
+      if (notificationEnabled !== undefined) config.notificationEnabled = notificationEnabled
+      
+      goalActivationManager.updateConfig(config)
+      
+      return {
+        success: true,
+        newConfig: goalActivationManager.getConfig(),
+        message: '目标激活配置已更新'
+      }
+    } catch (error) {
+      throw new Error(`配置更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
   }
 }
 

@@ -63,12 +63,6 @@ const App = () => {
   }
 
   const handleNavigate = (view: AppView) => {
-    // 确保用户已登录才能访问其他模块
-    const profileId = getCurrentProfileId()
-    if (!profileId && view !== 'landing' && view !== 'profile') {
-      setCurrentView('profile')
-      return
-    }
     setCurrentView(view)
   }
 
@@ -141,20 +135,6 @@ const App = () => {
               </Layout>
             )
           
-          {/* 已隐藏的测试随意搜界面 */}
-          {/* case 'test-random-search':
-            return (
-              <Layout 
-                title="随机搜索测试" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <TestRandomSearch />
-              </Layout>
-            ) */}
-          
           case 'agent-demo':
             return (
               <Layout 
@@ -194,7 +174,6 @@ const App = () => {
               </Layout>
             )
           
-          // 其他模块的占位符
           case 'goal-setting':
             return (
               <Layout 

@@ -56,7 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       id: 'goal',
       view: 'goal-setting' as const,
       title: '目标设定',
-      description: '设定学习目标，分析与当前能力的差距',
+      description: '设定学习目标，智能激活管理，与能力差距分析',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />

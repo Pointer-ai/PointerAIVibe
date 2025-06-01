@@ -182,6 +182,7 @@ export const getGoalStatusStats = () => {
   }
 }
 
+// 保留原有简单接口，内部使用新的激活管理器
 export const activateGoal = (goalId: string): LearningGoal | null => {
   const activeGoals = getActiveGoals()
   if (activeGoals.length >= 3) {
@@ -213,9 +214,90 @@ export const cancelGoal = (goalId: string): LearningGoal | null => {
   const result = updateLearningGoal(goalId, { status: 'cancelled' })
   if (result) {
     // 归档关联的路径
-    syncPathsWithGoalStatus(goalId, 'archived')
+    syncPathsWithGoalStatus(goalId, 'cancelled')
   }
   return result
+}
+
+// 新增：高级目标激活管理函数
+export const activateGoalAdvanced = async (goalId: string, options?: {
+  force?: boolean
+  priority?: number
+  reason?: string
+}): Promise<{
+  success: boolean
+  message: string
+  affectedPaths: string[]
+  recommendations: string[]
+}> => {
+  try {
+    // 动态导入以避免循环依赖
+    const { goalActivationManager } = await import('./goalActivationManager')
+    const result = await goalActivationManager.activateGoal(goalId, options)
+    
+    return {
+      success: result.success,
+      message: result.message,
+      affectedPaths: result.affectedPaths,
+      recommendations: result.systemRecommendations
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : '激活失败',
+      affectedPaths: [],
+      recommendations: ['检查目标状态', '确认激活限制']
+    }
+  }
+}
+
+export const getGoalActivationAdvice = async (): Promise<{
+  suggestions: Array<{
+    type: string
+    goalId: string
+    goalTitle: string
+    reason: string
+    priority: string
+  }>
+  stats: any
+  recommendations: string[]
+}> => {
+  try {
+    // 动态导入以避免循环依赖
+    const { getActivationStats } = await import('./goalActivationManager')
+    const stats = getActivationStats()
+    
+    // 移除基本建议功能，建议通过LLM生成智能建议
+    const basicRecommendations = [
+      '建议使用AI助手获取个性化的目标管理建议',
+      '通过"AI智能对话"功能获取智能的学习规划指导',
+      '可以询问AI："我应该如何管理我的学习目标？"'
+    ]
+    
+    return {
+      suggestions: [], // 移除基本建议，推荐使用LLM
+      stats,
+      recommendations: basicRecommendations
+    }
+    
+  } catch (error) {
+    log('[CoreData] Failed to get goal activation advice:', error)
+    return {
+      suggestions: [],
+      stats: {
+        total: 0,
+        active: 0,
+        paused: 0,
+        completed: 0,
+        cancelled: 0,
+        maxActive: 3,
+        availableSlots: 3,
+        utilizationRate: 0,
+        completionRate: 0
+      },
+      recommendations: ['系统错误，请稍后重试']
+    }
+  }
 }
 
 // 同步路径状态与目标状态

@@ -10,6 +10,12 @@ import {
   deleteLearningGoal,
   getGoalStatusStats 
 } from '../modules/coreData'
+import { 
+  goalActivationManager,
+  getActivationStats,
+  ActivationResult,
+  GoalActivationStats
+} from '../modules/coreData/goalActivationManager'
 import { LearningGoal } from '../modules/coreData/types'
 import { log } from '../utils/logger'
 
@@ -27,6 +33,7 @@ interface GoalFormData {
 export const GoalSetting: React.FC = () => {
   const [goals, setGoals] = useState<LearningGoal[]>([])
   const [goalStats, setGoalStats] = useState<any>(null)
+  const [activationStats, setActivationStats] = useState<GoalActivationStats | null>(null)
   const [systemStatus, setSystemStatus] = useState<LearningSystemStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string>('')
@@ -48,6 +55,7 @@ export const GoalSetting: React.FC = () => {
   const refreshData = async () => {
     setGoals(getLearningGoals())
     setGoalStats(getGoalStatusStats())
+    setActivationStats(getActivationStats())
     // 获取系统状态
     try {
       const status = await learningSystemService.getSystemStatus()
@@ -65,6 +73,21 @@ export const GoalSetting: React.FC = () => {
   const showMessage = (msg: string, isError = false) => {
     setMessage(msg)
     setTimeout(() => setMessage(''), 3000)
+  }
+
+  // 显示激活结果
+  const showActivationResult = (result: ActivationResult) => {
+    if (result.success) {
+      showMessage(`✅ ${result.message}`)
+      if (result.systemRecommendations.length > 0) {
+        log('System recommendations:', result.systemRecommendations)
+      }
+    } else {
+      showMessage(`❌ ${result.message}`, true)
+      if (result.systemRecommendations.length > 0) {
+        log('Suggestions:', result.systemRecommendations)
+      }
+    }
   }
 
   // 创建新目标 - 使用Learning System服务
@@ -140,19 +163,51 @@ export const GoalSetting: React.FC = () => {
     }
   }
 
-  // 激活目标
-  const handleActivateGoal = (goalId: string) => {
-    handleUpdateGoal(goalId, { status: 'active' })
+  // 高级激活目标
+  const handleActivateGoal = async (goalId: string) => {
+    setLoading(true)
+    try {
+      const result = await goalActivationManager.activateGoal(goalId, {
+        reason: 'user_manual_activation'
+      })
+      showActivationResult(result)
+      await refreshData()
+    } catch (error) {
+      showMessage(`❌ 激活失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // 暂停目标
-  const handlePauseGoal = (goalId: string) => {
-    handleUpdateGoal(goalId, { status: 'paused' })
+  // 高级暂停目标
+  const handlePauseGoal = async (goalId: string) => {
+    setLoading(true)
+    try {
+      const result = await goalActivationManager.pauseGoal(goalId, 'user_manual_pause')
+      showActivationResult(result)
+      await refreshData()
+    } catch (error) {
+      showMessage(`❌ 暂停失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // 完成目标
-  const handleCompleteGoal = (goalId: string) => {
-    handleUpdateGoal(goalId, { status: 'completed' })
+  // 高级完成目标
+  const handleCompleteGoal = async (goalId: string) => {
+    const achievements = prompt('请输入完成成果（可选，用逗号分隔）:')
+    const achievementList = achievements ? achievements.split(',').map(a => a.trim()).filter(Boolean) : []
+    
+    setLoading(true)
+    try {
+      const result = await goalActivationManager.completeGoal(goalId, achievementList)
+      showActivationResult(result)
+      await refreshData()
+    } catch (error) {
+      showMessage(`❌ 完成操作失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // 取消目标
@@ -460,23 +515,91 @@ export const GoalSetting: React.FC = () => {
         </div>
       )}
 
-      {/* 激活限制提示 */}
-      {goalStats && goalStats.active >= 3 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-8">
+      {/* 目标激活管理统计 */}
+      {activationStats && (
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6 mb-8">
           <div className="flex items-start gap-4">
-            <div className="text-amber-500 text-2xl flex-shrink-0">⚠️</div>
-            <div>
-              <h3 className="text-lg font-semibold text-amber-900 mb-2">目标激活限制</h3>
-              <p className="text-amber-800 mb-3">
-                您已激活了 <strong>{goalStats.active}</strong> 个目标（已达上限）。为了保持学习专注，系统限制最多同时激活3个目标。
-              </p>
-              <div className="text-amber-700 text-sm">
-                <p className="mb-1">💡 <strong>建议操作</strong>:</p>
-                <ul className="list-disc list-inside space-y-1 ml-4">
-                  <li>暂停一些正在进行的目标</li>
-                  <li>完成当前目标后再激活新目标</li>
-                  <li>将新目标创建为暂停状态，稍后激活</li>
-                </ul>
+            <div className="text-purple-500 text-2xl flex-shrink-0">🎯</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-purple-900 mb-3">目标激活管理</h3>
+              
+              {/* 激活统计 */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="bg-white rounded-lg p-3 border border-purple-100">
+                  <div className="text-sm text-purple-600 font-medium">激活中</div>
+                  <div className="text-2xl font-bold text-purple-900">
+                    {activationStats.active}/{activationStats.maxActive}
+                  </div>
+                  <div className="text-xs text-purple-500">
+                    利用率 {Math.round(activationStats.utilizationRate)}%
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <div className="text-sm text-blue-600 font-medium">可用槽位</div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    {activationStats.availableSlots}
+                  </div>
+                  <div className="text-xs text-blue-500">剩余空间</div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <div className="text-sm text-green-600 font-medium">完成率</div>
+                  <div className="text-2xl font-bold text-green-900">
+                    {Math.round(activationStats.completionRate)}%
+                  </div>
+                  <div className="text-xs text-green-500">
+                    {activationStats.completed}/{activationStats.total}
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-lg p-3 border border-orange-100">
+                  <div className="text-sm text-orange-600 font-medium">暂停中</div>
+                  <div className="text-2xl font-bold text-orange-900">
+                    {activationStats.paused}
+                  </div>
+                  <div className="text-xs text-orange-500">待激活</div>
+                </div>
+              </div>
+
+              {/* 激活限制提示 */}
+              {activationStats.availableSlots === 0 && (
+                <div className="bg-amber-100 border border-amber-300 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <span className="text-amber-500">⚠️</span>
+                    <span className="font-medium">激活槽位已满</span>
+                  </div>
+                  <p className="text-amber-700 text-sm mt-1">
+                    为保持学习专注，最多同时激活 {activationStats.maxActive} 个目标。
+                    请先暂停或完成现有目标。
+                  </p>
+                </div>
+              )}
+
+              {/* 智能建议 */}
+              <div className="text-sm text-purple-700">
+                <div className="mb-2">
+                  <span className="font-medium">💡 智能管理:</span>
+                  <span className="ml-2">
+                    {activationStats.utilizationRate < 50 
+                      ? '可以激活更多目标开始学习' 
+                      : activationStats.utilizationRate > 90 
+                      ? '目标激活率很高，注意合理分配时间'
+                      : '目标激活数量适中'}
+                  </span>
+                </div>
+                
+                {activationStats.recentActivations.length > 0 && (
+                  <div>
+                    <span className="font-medium">📅 最近激活:</span>
+                    <span className="ml-2">
+                      {activationStats.recentActivations[0].title}
+                      {activationStats.recentActivations[0].daysSinceActivation > 0 && 
+                        ` (${activationStats.recentActivations[0].daysSinceActivation}天前)`
+                      }
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -779,7 +902,7 @@ export const GoalSetting: React.FC = () => {
                     {goal.status === 'paused' && (
                       <button
                         onClick={() => handleActivateGoal(goal.id)}
-                        disabled={goalStats && !goalStats.canActivateMore}
+                        disabled={activationStats?.availableSlots === 0}
                         className="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         ▶️ 激活

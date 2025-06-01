@@ -29,6 +29,7 @@ export interface Goal {
   estimatedTimeWeeks: number
   requiredSkills: string[]
   outcomes: string[]
+  progress: number
   createdAt: Date
   updatedAt: Date
 }

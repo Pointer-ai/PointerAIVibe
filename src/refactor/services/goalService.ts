@@ -16,348 +16,487 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// 目标推荐服务实现
+// 目标管理服务 - 通过ProfileService访问数据
 
-import { refactorAIService } from './aiService'
+import { Goal, GoalFormData } from '../types/goal'
+import { refactorProfileService } from './profileService'
 
-interface GoalRecommendation {
-  id: string
-  title: string
-  description: string
-  category: string
-  priority: number
-  reasoning: string
-  estimatedTimeWeeks: number
-  requiredSkills: string[]
-  outcomes: string[]
-  targetLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert'
-  confidence: number
-}
+// 导入原有的profile工具函数来访问当前Profile的数据
+import {
+  getCurrentProfile,
+  getProfileData,
+  setProfileData
+} from '../../utils/profile'
 
-interface QuestionnaireAnswers {
-  experience_level: string
-  learning_time: string
-  learning_goal: string[]
-  project_preference: string[]
-  career_direction: string
-  current_skills: string[]
-  challenge_level: string
-}
+// 导入老系统的类型定义，用于数据格式转换
+import type { LearningGoal, CoreData } from '../../modules/coreData/types'
 
-class GoalService {
+/**
+ * 重构目标管理服务
+ * 通过ProfileService访问数据，确保数据隔离
+ */
+export class RefactorGoalService {
+  
   /**
-   * 基于自然语言生成目标推荐
+   * 获取当前Profile的CoreData
    */
-  async generateFromNLP(description: string): Promise<GoalRecommendation[]> {
-    try {
-      const prompt = this.buildNLPPrompt(description)
-      const response = await refactorAIService.chat(prompt)
-      return this.parseRecommendations(response)
-    } catch (error) {
-      console.error('Failed to generate from NLP:', error)
-      return this.getFallbackNLPRecommendations(description)
-    }
-  }
-
-  /**
-   * 基于结构化问卷生成推荐
-   */
-  async generateRecommendations(
-    selectedCategories: string[],
-    questionnaireAnswers: QuestionnaireAnswers
-  ): Promise<GoalRecommendation[]> {
-    try {
-      const prompt = this.buildStructuredPrompt(selectedCategories, questionnaireAnswers)
-      const response = await refactorAIService.chat(prompt)
-      return this.parseRecommendations(response)
-    } catch (error) {
-      console.error('Failed to generate structured recommendations:', error)
-      return this.getFallbackStructuredRecommendations(selectedCategories, questionnaireAnswers)
-    }
-  }
-
-  /**
-   * 构建自然语言处理提示词
-   */
-  private buildNLPPrompt(description: string): string {
-    return `作为专业的编程学习顾问，请分析以下用户描述并生成3个个性化的学习目标推荐：
-
-用户描述：
-"${description}"
-
-请以JSON格式返回推荐结果，数组格式，每个推荐包含：
-- id: 唯一标识符
-- title: 目标标题（简洁明确，15字内）
-- description: 详细描述（100-150字）
-- category: 类别（frontend/backend/fullstack/automation/ai/mobile/game/data）
-- priority: 优先级（1-5，5最高）
-- reasoning: 推荐理由（50-80字）
-- estimatedTimeWeeks: 预计学习周数（1-24）
-- requiredSkills: 需要掌握的技能列表（3-6个）
-- outcomes: 学习成果列表（3-5个）
-- targetLevel: 目标级别（beginner/intermediate/advanced/expert）
-- confidence: 推荐置信度（0.0-1.0）
-
-确保推荐切合用户描述的背景和目标，难度适中，循序渐进。`
-  }
-
-  /**
-   * 构建结构化推荐提示词
-   */
-  private buildStructuredPrompt(
-    categories: string[],
-    answers: QuestionnaireAnswers
-  ): string {
-    return `作为专业的编程学习顾问，请根据以下信息为用户推荐3个最合适的学习目标：
-
-选择的学习领域：${categories.join('、')}
-
-问卷回答：
-- 编程经验：${answers.experience_level}
-- 学习时间：${answers.learning_time}
-- 学习目标：${answers.learning_goal.join('、')}
-- 项目偏好：${answers.project_preference.join('、')}
-- 职业方向：${answers.career_direction}
-
-请以JSON格式返回推荐结果，数组格式，每个推荐包含：
-- id: 唯一标识符
-- title: 目标标题（简洁明确，15字内）
-- description: 详细描述（100-150字）
-- category: 类别（从用户选择的领域中选择）
-- priority: 优先级（1-5，5最高）
-- reasoning: 推荐理由（50-80字）
-- estimatedTimeWeeks: 预计学习周数（根据学习时间调整）
-- requiredSkills: 需要掌握的技能列表（3-6个）
-- outcomes: 学习成果列表（3-5个）
-- targetLevel: 目标级别（根据经验水平确定）
-- confidence: 推荐置信度（0.0-1.0）
-
-确保推荐符合用户的经验水平和时间投入，实用性强。`
-  }
-
-  /**
-   * 解析AI响应为推荐列表
-   */
-  private parseRecommendations(response: string): GoalRecommendation[] {
-    try {
-      // 尝试提取JSON
-      const jsonMatch = response.match(/\[[\s\S]*\]/)
-      if (jsonMatch) {
-        const recommendations = JSON.parse(jsonMatch[0])
-        
-        // 确保每个推荐都有必要的字段
-        return recommendations.map((rec: any, index: number) => ({
-          id: rec.id || `goal_${Date.now()}_${index}`,
-          title: rec.title || '学习目标',
-          description: rec.description || '详细的学习目标描述',
-          category: rec.category || 'frontend',
-          priority: rec.priority || 3,
-          reasoning: rec.reasoning || '基于您的需求推荐',
-          estimatedTimeWeeks: rec.estimatedTimeWeeks || 8,
-          requiredSkills: rec.requiredSkills || [],
-          outcomes: rec.outcomes || [],
-          targetLevel: rec.targetLevel || 'intermediate',
-          confidence: rec.confidence || 0.8
-        }))
+  private getCurrentCoreData(): CoreData {
+    const coreData = getProfileData('coreData')
+    if (!coreData) {
+      // 如果没有coreData，创建默认结构
+      const defaultCoreData: CoreData = {
+        events: [],
+        goals: [],
+        paths: [],
+        courseUnits: [],
+        agentActions: [],
+        metadata: {
+          version: '1.0.0',
+          lastUpdated: new Date().toISOString(),
+          totalStudyTime: 0,
+          streakDays: 0
+        }
       }
-      
-      return []
+      setProfileData('coreData', defaultCoreData)
+      return defaultCoreData
+    }
+    return coreData
+  }
+
+  /**
+   * 保存CoreData到当前Profile
+   */
+  private saveCoreData(coreData: CoreData): void {
+    coreData.metadata.lastUpdated = new Date().toISOString()
+    setProfileData('coreData', coreData)
+  }
+
+  /**
+   * 获取所有目标（转换为新格式）
+   */
+  getAllGoals(): Goal[] {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        console.warn('[RefactorGoalService] No active profile')
+        return []
+      }
+
+      const coreData = this.getCurrentCoreData()
+      return coreData.goals.map(oldGoal => this.convertToNewFormat(oldGoal))
     } catch (error) {
-      console.error('Failed to parse AI recommendations:', error)
+      console.error('[RefactorGoalService] Failed to get all goals:', error)
       return []
     }
   }
 
   /**
-   * 自然语言兜底推荐
+   * 根据ID获取目标
    */
-  private getFallbackNLPRecommendations(description: string): GoalRecommendation[] {
-    const lowerDesc = description.toLowerCase()
-    
-    // 基于关键词识别推荐
-    const recommendations: GoalRecommendation[] = []
-    
-    if (lowerDesc.includes('前端') || lowerDesc.includes('网页') || lowerDesc.includes('界面')) {
-      recommendations.push({
-        id: `nlp_frontend_${Date.now()}`,
-        title: '前端开发入门',
-        description: '学习HTML、CSS、JavaScript基础，掌握现代前端开发技能，能够构建响应式网页应用。',
-        category: 'frontend',
-        priority: 4,
-        reasoning: '基于您对前端开发的兴趣',
-        estimatedTimeWeeks: 12,
-        requiredSkills: ['HTML', 'CSS', 'JavaScript', 'React'],
-        outcomes: ['构建响应式网页', '掌握前端框架', '完成项目作品'],
-        targetLevel: 'intermediate',
-        confidence: 0.8
-      })
+  getGoalById(id: string): Goal | null {
+    try {
+      const allGoals = this.getAllGoals()
+      return allGoals.find(goal => goal.id === id) || null
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to get goal by id:', error)
+      return null
     }
-    
-    if (lowerDesc.includes('后端') || lowerDesc.includes('服务器') || lowerDesc.includes('api')) {
-      recommendations.push({
-        id: `nlp_backend_${Date.now()}`,
-        title: '后端开发实践',
-        description: '学习服务器端编程，掌握API设计、数据库操作和服务器部署技能。',
-        category: 'backend',
-        priority: 4,
-        reasoning: '适合您的后端开发需求',
-        estimatedTimeWeeks: 16,
-        requiredSkills: ['Python', 'Node.js', 'SQL', 'API设计'],
-        outcomes: ['开发REST API', '数据库设计', '服务器部署'],
-        targetLevel: 'intermediate',
-        confidence: 0.8
-      })
-    }
-    
-    if (lowerDesc.includes('python') || lowerDesc.includes('自动化') || lowerDesc.includes('脚本')) {
-      recommendations.push({
-        id: `nlp_automation_${Date.now()}`,
-        title: 'Python自动化编程',
-        description: '学习Python编程，掌握办公自动化、数据处理和脚本编写技能。',
-        category: 'automation',
-        priority: 3,
-        reasoning: '适合提高工作效率',
-        estimatedTimeWeeks: 8,
-        requiredSkills: ['Python', '数据处理', 'Excel操作', '文件处理'],
-        outcomes: ['自动化办公流程', '数据分析脚本', '提高工作效率'],
-        targetLevel: 'beginner',
-        confidence: 0.9
-      })
-    }
-    
-    // 如果没有匹配到特定技术，提供通用推荐
-    if (recommendations.length === 0) {
-      recommendations.push({
-        id: `nlp_general_${Date.now()}`,
-        title: '编程基础入门',
-        description: '从编程基础开始，学习核心概念和基本技能，为后续深入学习打下坚实基础。',
-        category: 'frontend',
-        priority: 3,
-        reasoning: '适合编程初学者',
-        estimatedTimeWeeks: 10,
-        requiredSkills: ['编程思维', '基础语法', '问题解决'],
-        outcomes: ['掌握编程基础', '培养逻辑思维', '完成入门项目'],
-        targetLevel: 'beginner',
-        confidence: 0.7
-      })
-    }
-    
-    return recommendations.slice(0, 3)
   }
 
   /**
-   * 结构化兜底推荐
+   * 创建新目标
    */
-  private getFallbackStructuredRecommendations(
-    categories: string[],
-    answers: QuestionnaireAnswers
-  ): GoalRecommendation[] {
-    const recommendations: GoalRecommendation[] = []
-    
-    // 根据经验水平确定目标级别
-    const getTargetLevel = (): 'beginner' | 'intermediate' | 'advanced' | 'expert' => {
-      switch (answers.experience_level) {
-        case 'beginner': return 'beginner'
-        case 'junior': return 'intermediate'
-        case 'intermediate': return 'intermediate'
-        case 'senior': return 'advanced'
-        default: return 'intermediate'
+  async createGoal(formData: GoalFormData): Promise<Goal> {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
       }
-    }
-    
-    // 根据学习时间确定周数
-    const getEstimatedWeeks = (): number => {
-      switch (answers.learning_time) {
-        case '5-10h': return 16
-        case '10-20h': return 12
-        case '20-30h': return 8
-        case '30h+': return 6
-        default: return 12
-      }
-    }
-    
-    const targetLevel = getTargetLevel()
-    const estimatedWeeks = getEstimatedWeeks()
-    
-    // 为每个选择的类别生成推荐
-    categories.slice(0, 3).forEach((category, index) => {
-      const categoryConfig = this.getCategoryConfig(category)
+
+      const coreData = this.getCurrentCoreData()
       
-      recommendations.push({
-        id: `structured_${category}_${Date.now()}`,
-        title: `${categoryConfig.name}学习之路`,
-        description: categoryConfig.description,
-        category,
-        priority: 5 - index,
-        reasoning: `基于您选择的${categoryConfig.name}方向和${answers.experience_level}经验水平`,
-        estimatedTimeWeeks: estimatedWeeks,
-        requiredSkills: categoryConfig.skills,
-        outcomes: categoryConfig.outcomes,
-        targetLevel,
-        confidence: 0.8
+      // 检查激活目标数量限制
+      const activeGoals = coreData.goals.filter(g => g.status === 'active')
+      if (activeGoals.length >= 3) {
+        throw new Error('最多只能同时激活3个学习目标。请先暂停或完成其他目标。')
+      }
+
+      // 创建新目标
+      const newGoal: LearningGoal = {
+        id: Date.now().toString(),
+        title: formData.title,
+        description: formData.description,
+        category: this.mapCategoryToOldFormat(formData.category),
+        priority: formData.priority,
+        status: 'active', // 新创建的目标默认激活
+        targetLevel: this.mapTargetLevelToOldFormat(formData.targetLevel),
+        estimatedTimeWeeks: formData.estimatedTimeWeeks,
+        requiredSkills: formData.requiredSkills,
+        outcomes: formData.outcomes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // 添加到coreData
+      coreData.goals.push(newGoal)
+      
+      // 记录事件
+      coreData.events.push({
+        id: Date.now().toString(),
+        type: 'goal_created',
+        timestamp: new Date().toISOString(),
+        details: { goalId: newGoal.id, title: newGoal.title, category: newGoal.category }
       })
-    })
-    
-    return recommendations
+
+      // 保存数据
+      this.saveCoreData(coreData)
+
+      // 转换回新格式返回
+      return this.convertToNewFormat(newGoal)
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to create goal:', error)
+      throw error
+    }
   }
 
   /**
-   * 获取类别配置
+   * 更新目标
    */
-  private getCategoryConfig(category: string) {
-    const configs: Record<string, any> = {
-      frontend: {
-        name: '前端开发',
-        description: '学习现代前端技术，掌握用户界面开发和交互设计技能，能够构建优秀的Web应用。',
-        skills: ['HTML', 'CSS', 'JavaScript', 'React'],
-        outcomes: ['响应式网页开发', '前端框架应用', '用户体验设计']
-      },
-      backend: {
-        name: '后端开发',
-        description: '掌握服务器端编程技术，学习API设计、数据库管理和系统架构设计。',
-        skills: ['Python', 'Node.js', 'SQL', 'API设计'],
-        outcomes: ['后端服务开发', '数据库设计', '系统架构']
-      },
-      fullstack: {
-        name: '全栈开发',
-        description: '综合前后端技术，成为全能开发者，能够独立完成完整的Web应用项目。',
-        skills: ['前端技术', '后端技术', '数据库', '部署运维'],
-        outcomes: ['全栈项目开发', '端到端解决方案', '项目管理']
-      },
-      automation: {
-        name: '自动化编程',
-        description: '学习Python自动化编程，提高工作效率，解决重复性任务和数据处理问题。',
-        skills: ['Python', '数据处理', 'Excel自动化', '脚本编程'],
-        outcomes: ['办公自动化', '数据分析', '效率提升']
-      },
-      ai: {
-        name: 'AI与机器学习',
-        description: '探索人工智能技术，学习机器学习算法和深度学习框架，构建智能应用。',
-        skills: ['Python', '机器学习', '数据科学', 'TensorFlow'],
-        outcomes: ['AI模型开发', '数据分析', '智能应用']
-      },
-      mobile: {
-        name: '移动开发',
-        description: '学习移动应用开发技术，掌握iOS和Android平台的应用开发技能。',
-        skills: ['React Native', 'Flutter', '移动UI', 'App发布'],
-        outcomes: ['移动应用开发', '跨平台技术', 'App Store发布']
-      },
-      game: {
-        name: '游戏开发',
-        description: '学习游戏开发技术，掌握游戏引擎使用和游戏逻辑编程技能。',
-        skills: ['Unity', 'C#', '游戏设计', '3D建模'],
-        outcomes: ['游戏原型开发', '游戏逻辑编程', '游戏发布']
-      },
-      data: {
-        name: '数据分析',
-        description: '学习数据科学技术，掌握数据收集、处理、分析和可视化技能。',
-        skills: ['Python', 'SQL', '数据可视化', '统计分析'],
-        outcomes: ['数据分析报告', '数据可视化', '商业洞察']
+  async updateGoal(id: string, formData: Partial<GoalFormData>): Promise<Goal | null> {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      const coreData = this.getCurrentCoreData()
+      const goalIndex = coreData.goals.findIndex(g => g.id === id)
+      
+      if (goalIndex === -1) {
+        return null
+      }
+
+      const currentGoal = coreData.goals[goalIndex]
+      
+      // 更新目标数据
+      const updates: Partial<LearningGoal> = {
+        updatedAt: new Date().toISOString()
+      }
+      
+      if (formData.title !== undefined) updates.title = formData.title
+      if (formData.description !== undefined) updates.description = formData.description
+      if (formData.category !== undefined) updates.category = this.mapCategoryToOldFormat(formData.category)
+      if (formData.priority !== undefined) updates.priority = formData.priority
+      if (formData.targetLevel !== undefined) updates.targetLevel = this.mapTargetLevelToOldFormat(formData.targetLevel)
+      if (formData.estimatedTimeWeeks !== undefined) updates.estimatedTimeWeeks = formData.estimatedTimeWeeks
+      if (formData.requiredSkills !== undefined) updates.requiredSkills = formData.requiredSkills
+      if (formData.outcomes !== undefined) updates.outcomes = formData.outcomes
+
+      // 应用更新
+      coreData.goals[goalIndex] = { ...currentGoal, ...updates }
+
+      // 记录事件
+      coreData.events.push({
+        id: Date.now().toString(),
+        type: 'goal_updated',
+        timestamp: new Date().toISOString(),
+        details: { goalId: id, title: currentGoal.title, updates: Object.keys(updates) }
+      })
+
+      // 保存数据
+      this.saveCoreData(coreData)
+
+      return this.convertToNewFormat(coreData.goals[goalIndex])
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to update goal:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 删除目标
+   */
+  async deleteGoal(id: string): Promise<boolean> {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      const coreData = this.getCurrentCoreData()
+      const goalIndex = coreData.goals.findIndex(g => g.id === id)
+      
+      if (goalIndex === -1) {
+        return false
+      }
+
+      const goal = coreData.goals[goalIndex]
+      
+      // 删除目标
+      coreData.goals.splice(goalIndex, 1)
+
+      // 记录事件
+      coreData.events.push({
+        id: Date.now().toString(),
+        type: 'goal_deleted',
+        timestamp: new Date().toISOString(),
+        details: { goalId: id, title: goal.title, category: goal.category }
+      })
+
+      // 保存数据
+      this.saveCoreData(coreData)
+
+      return true
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to delete goal:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 更改目标状态
+   */
+  async changeGoalStatus(id: string, status: Goal['status']): Promise<Goal | null> {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      const coreData = this.getCurrentCoreData()
+      const goalIndex = coreData.goals.findIndex(g => g.id === id)
+      
+      if (goalIndex === -1) {
+        return null
+      }
+
+      const currentGoal = coreData.goals[goalIndex]
+      
+      // 检查激活目标数量限制
+      if (status === 'active' && currentGoal.status !== 'active') {
+        const activeGoals = coreData.goals.filter(g => g.status === 'active')
+        if (activeGoals.length >= 3) {
+          throw new Error('最多只能同时激活3个学习目标。请先暂停或完成其他目标。')
+        }
+      }
+
+      // 映射状态
+      const oldStatus = this.mapStatusToOldFormat(status)
+      
+      // 更新状态
+      coreData.goals[goalIndex] = { 
+        ...currentGoal, 
+        status: oldStatus,
+        updatedAt: new Date().toISOString() 
+      }
+
+      // 记录事件
+      coreData.events.push({
+        id: Date.now().toString(),
+        type: 'goal_status_changed',
+        timestamp: new Date().toISOString(),
+        details: { 
+          goalId: id, 
+          oldStatus: currentGoal.status, 
+          newStatus: oldStatus,
+          title: currentGoal.title
+        }
+      })
+
+      // 保存数据
+      this.saveCoreData(coreData)
+
+      return this.convertToNewFormat(coreData.goals[goalIndex])
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to change goal status:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 激活目标
+   */
+  async activateGoal(id: string): Promise<Goal | null> {
+    return this.changeGoalStatus(id, 'active')
+  }
+
+  /**
+   * 暂停目标
+   */
+  async pauseGoal(id: string): Promise<Goal | null> {
+    return this.changeGoalStatus(id, 'paused')
+  }
+
+  /**
+   * 完成目标
+   */
+  async completeGoal(id: string): Promise<Goal | null> {
+    return this.changeGoalStatus(id, 'completed')
+  }
+
+  /**
+   * 取消目标
+   */
+  async cancelGoal(id: string): Promise<Goal | null> {
+    return this.changeGoalStatus(id, 'cancelled')
+  }
+
+  /**
+   * 获取目标统计
+   */
+  getGoalStats() {
+    try {
+      const goals = this.getAllGoals()
+      return {
+        total: goals.length,
+        active: goals.filter(g => g.status === 'active').length,
+        completed: goals.filter(g => g.status === 'completed').length,
+        paused: goals.filter(g => g.status === 'paused').length,
+        cancelled: goals.filter(g => g.status === 'cancelled').length,
+        canActivateMore: goals.filter(g => g.status === 'active').length < 3
+      }
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to get goal stats:', error)
+      return {
+        total: 0,
+        active: 0,
+        completed: 0,
+        paused: 0,
+        cancelled: 0,
+        canActivateMore: true
+      }
+    }
+  }
+
+  /**
+   * 批量操作
+   */
+  async batchUpdateStatus(goalIds: string[], status: Goal['status']): Promise<Goal[]> {
+    const updatedGoals: Goal[] = []
+    
+    for (const id of goalIds) {
+      try {
+        const result = await this.changeGoalStatus(id, status)
+        if (result) {
+          updatedGoals.push(result)
+        }
+      } catch (error) {
+        console.error(`[RefactorGoalService] Failed to update goal ${id}:`, error)
+        // 继续处理其他目标，不中断批量操作
       }
     }
     
-    return configs[category] || configs.frontend
+    return updatedGoals
+  }
+
+  /**
+   * 批量删除
+   */
+  async batchDelete(goalIds: string[]): Promise<string[]> {
+    const deletedIds: string[] = []
+    
+    for (const id of goalIds) {
+      try {
+        const success = await this.deleteGoal(id)
+        if (success) {
+          deletedIds.push(id)
+        }
+      } catch (error) {
+        console.error(`[RefactorGoalService] Failed to delete goal ${id}:`, error)
+        // 继续处理其他目标，不中断批量操作
+      }
+    }
+    
+    return deletedIds
+  }
+
+  /**
+   * 私有方法：将老格式转换为新格式
+   */
+  private convertToNewFormat(oldGoal: LearningGoal): Goal {
+    return {
+      id: oldGoal.id,
+      title: oldGoal.title,
+      description: oldGoal.description,
+      category: this.mapCategoryFromOldFormat(oldGoal.category),
+      priority: oldGoal.priority,
+      status: this.mapStatusFromOldFormat(oldGoal.status),
+      targetLevel: this.mapTargetLevelFromOldFormat(oldGoal.targetLevel),
+      estimatedTimeWeeks: oldGoal.estimatedTimeWeeks,
+      requiredSkills: oldGoal.requiredSkills,
+      outcomes: oldGoal.outcomes,
+      progress: 0, // 新字段，老系统没有，默认为0
+      createdAt: new Date(oldGoal.createdAt),
+      updatedAt: new Date(oldGoal.updatedAt)
+    }
+  }
+
+  /**
+   * 类别映射：新格式 -> 老格式
+   */
+  private mapCategoryToOldFormat(category: string): LearningGoal['category'] {
+    const mapping: Record<string, LearningGoal['category']> = {
+      'frontend': 'frontend',
+      'backend': 'backend',
+      'fullstack': 'fullstack',
+      'automation': 'automation',
+      'ai': 'ai',
+      'mobile': 'mobile',
+      'game': 'game',
+      'data': 'data'
+    }
+    return mapping[category] || 'custom'
+  }
+
+  /**
+   * 类别映射：老格式 -> 新格式
+   */
+  private mapCategoryFromOldFormat(category: LearningGoal['category']): string {
+    return category
+  }
+
+  /**
+   * 目标级别映射：新格式 -> 老格式
+   */
+  private mapTargetLevelToOldFormat(level: string): LearningGoal['targetLevel'] {
+    const mapping: Record<string, LearningGoal['targetLevel']> = {
+      'beginner': 'beginner',
+      'intermediate': 'intermediate',
+      'advanced': 'advanced'
+    }
+    return mapping[level] || 'intermediate'
+  }
+
+  /**
+   * 目标级别映射：老格式 -> 新格式
+   */
+  private mapTargetLevelFromOldFormat(level: LearningGoal['targetLevel']): Goal['targetLevel'] {
+    // 老系统可能有expert级别，新系统只有三个级别
+    if (level === 'expert') return 'advanced'
+    return level as Goal['targetLevel']
+  }
+
+  /**
+   * 状态映射：新格式 -> 老格式
+   */
+  private mapStatusToOldFormat(status: Goal['status']): LearningGoal['status'] {
+    const mapping: Record<Goal['status'], LearningGoal['status']> = {
+      'draft': 'paused', // 新系统的draft映射为老系统的paused
+      'active': 'active',
+      'paused': 'paused',
+      'completed': 'completed',
+      'cancelled': 'cancelled'
+    }
+    return mapping[status]
+  }
+
+  /**
+   * 状态映射：老格式 -> 新格式
+   */
+  private mapStatusFromOldFormat(status: LearningGoal['status']): Goal['status'] {
+    return status
   }
 }
 
-export const goalService = new GoalService() 
+// 创建单例实例
+export const refactorGoalService = new RefactorGoalService() 

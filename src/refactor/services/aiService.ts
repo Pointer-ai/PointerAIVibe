@@ -49,27 +49,56 @@ export class RefactorAIService implements AIService {
    */
   private loadConfigFromProfile(): void {
     try {
-      // 从localStorage获取当前profile的API配置
-      const currentProfile = localStorage.getItem('currentProfile')
-      if (!currentProfile) return
-
-      const profileData = localStorage.getItem(`profile_${currentProfile}`)
-      if (!profileData) return
-
-      const profile = JSON.parse(profileData)
-      const apiConfig = profile.apiConfig
-
-      if (apiConfig && apiConfig.currentService && apiConfig[apiConfig.currentService]) {
-        const serviceConfig = apiConfig[apiConfig.currentService]
+      // 方法1: 从新的profiles系统加载
+      const profiles = localStorage.getItem('profiles')
+      if (profiles) {
+        const profileStore = JSON.parse(profiles)
+        const currentProfileId = profileStore.currentProfileId
         
-        this.config = {
-          provider: this.mapServiceToProvider(apiConfig.currentService),
-          model: serviceConfig.model || this.getDefaultModel(apiConfig.currentService),
-          apiKey: serviceConfig.apiKey,
-          temperature: 0.7,
-          maxTokens: 2000
+        if (currentProfileId) {
+          const currentProfile = profileStore.profiles.find((p: any) => p.id === currentProfileId)
+          if (currentProfile && currentProfile.data && currentProfile.data.settings) {
+            const apiConfig = currentProfile.data.settings.apiConfig
+            if (apiConfig && apiConfig.key) {
+              this.config = {
+                provider: this.mapServiceToProvider(apiConfig.model),
+                model: apiConfig.specificModel || this.getDefaultModel(apiConfig.model),
+                apiKey: apiConfig.key,
+                temperature: apiConfig.params?.temperature || 0.7,
+                maxTokens: apiConfig.params?.maxTokens || 2000
+              }
+              console.log('[RefactorAIService] 成功从profiles系统加载API配置:', this.config.provider)
+              return
+            }
+          }
         }
       }
+
+      // 方法2: 从旧的profile系统加载（兼容）
+      const currentProfile = localStorage.getItem('currentProfile')
+      if (currentProfile) {
+        const profileData = localStorage.getItem(`profile_${currentProfile}`)
+        if (profileData) {
+          const profile = JSON.parse(profileData)
+          const apiConfig = profile.apiConfig
+
+          if (apiConfig && apiConfig.currentService && apiConfig[apiConfig.currentService]) {
+            const serviceConfig = apiConfig[apiConfig.currentService]
+            
+            this.config = {
+              provider: this.mapServiceToProvider(apiConfig.currentService),
+              model: serviceConfig.model || this.getDefaultModel(apiConfig.currentService),
+              apiKey: serviceConfig.apiKey,
+              temperature: 0.7,
+              maxTokens: 2000
+            }
+            console.log('[RefactorAIService] 从旧profile系统加载API配置:', this.config.provider)
+            return
+          }
+        }
+      }
+
+      console.log('[RefactorAIService] 未找到有效的API配置')
     } catch (error) {
       console.warn('[RefactorAIService] Failed to load config from profile:', error)
     }
@@ -449,6 +478,21 @@ ${JSON.stringify(context, null, 2)}
     }
     
     return advice.length > 0 ? advice : [content.trim()]
+  }
+
+  /**
+   * 重新加载配置
+   */
+  reloadConfig(): void {
+    this.config = null
+    this.loadConfigFromProfile()
+  }
+
+  /**
+   * 手动设置配置
+   */
+  setConfig(config: AIModelConfig): void {
+    this.config = config
   }
 }
 

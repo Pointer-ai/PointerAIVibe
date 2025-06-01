@@ -41,6 +41,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
   useEffect(() => {
     loadCurrentAssessment()
     checkAIStatus()
+    debugAIConfiguration()
   }, [])
 
   const loadCurrentAssessment = () => {
@@ -55,6 +56,36 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     } catch (error) {
       console.error('Failed to check AI status:', error)
     }
+  }
+
+  const debugAIConfiguration = () => {
+    console.log('=== AI配置调试信息 ===')
+    
+    // 检查profiles系统
+    const profiles = localStorage.getItem('profiles')
+    if (profiles) {
+      const profileStore = JSON.parse(profiles)
+      console.log('Profiles系统状态:', {
+        currentProfileId: profileStore.currentProfileId,
+        profilesCount: profileStore.profiles?.length || 0
+      })
+      
+      if (profileStore.currentProfileId) {
+        const currentProfile = profileStore.profiles.find((p: any) => p.id === profileStore.currentProfileId)
+        if (currentProfile) {
+          console.log('当前Profile:', currentProfile.name)
+          console.log('API配置:', currentProfile.data?.settings?.apiConfig)
+        }
+      }
+    }
+    
+    // 检查AI服务配置
+    const aiConfig = refactorAIService.getConfig()
+    console.log('AI服务配置:', aiConfig)
+    
+    // 检查旧格式
+    const oldProfile = localStorage.getItem('currentProfile')
+    console.log('旧Profile系统:', oldProfile)
   }
 
   const handleAssessmentSubmit = async (input: AssessmentInput) => {

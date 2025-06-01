@@ -253,7 +253,28 @@ ${targetAssessment.recommendations.map(r => `- ${r}`).join('\n')}
    * 私有方法：获取当前Profile ID
    */
   private getCurrentProfileId(): string {
-    return localStorage.getItem('currentProfile') || 'default'
+    try {
+      // 方法1: 从新的profiles系统获取
+      const profiles = localStorage.getItem('profiles')
+      if (profiles) {
+        const profileStore = JSON.parse(profiles)
+        if (profileStore.currentProfileId) {
+          return profileStore.currentProfileId
+        }
+      }
+
+      // 方法2: 从旧系统获取（兼容）
+      const currentProfile = localStorage.getItem('currentProfile')
+      if (currentProfile) {
+        return currentProfile
+      }
+
+      // 方法3: 默认值
+      return 'default'
+    } catch (error) {
+      console.warn('[RefactorAssessmentService] Failed to get current profile ID:', error)
+      return 'default'
+    }
   }
 
   /**

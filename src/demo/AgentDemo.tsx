@@ -5,6 +5,8 @@ import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { getAPIConfig } from '../modules/profileSettings/service'
 import { LearningGoal } from '../modules/coreData/types'
 import { RealLLMDemo } from '../components/AIAgent/RealLLMDemo'
+import { GoalStateManagerTest } from '../modules/coreData/goalStateManager.test'
+import { log } from '../utils/logger'
 
 interface ChatMessage {
   id: string
@@ -1576,6 +1578,135 @@ ${context}
     }
   }
 
+  // 演示目标状态管理
+  const demoGoalStateManager = async () => {
+    setLoading(true)
+    addOutput('=== 目标状态管理演示 ===')
+    
+    try {
+      // 1. 获取当前状态统计
+      addOutput('📊 步骤1: 获取目标状态统计')
+      const stats = await agentToolExecutor.executeTool('get_goal_status_stats', {})
+      addOutput(`   总目标数: ${stats.total}`)
+      addOutput(`   激活: ${stats.active}/3`)
+      addOutput(`   已完成: ${stats.completed}`)
+      addOutput(`   已暂停: ${stats.paused}`)
+      addOutput(`   已取消: ${stats.cancelled}`)
+      addOutput(`   可激活更多: ${stats.canActivateMore ? '是' : '否'}`)
+      
+      // 2. 测试创建目标（考虑限制）
+      addOutput('\n🎯 步骤2: 测试创建新目标')
+      try {
+        const newGoal = await agentToolExecutor.executeTool('create_learning_goal', {
+          title: '状态管理测试目标',
+          description: '测试目标状态管理功能',
+          category: 'frontend',
+          priority: 3,
+          targetLevel: 'beginner',
+          estimatedTimeWeeks: 4,
+          requiredSkills: ['HTML', 'CSS'],
+          outcomes: ['掌握基础前端技能'],
+          status: 'active'
+        })
+        
+        if (newGoal._systemMessage) {
+          addOutput(`   ⚠️ ${newGoal._systemMessage}`)
+        } else {
+          addOutput(`   ✅ 成功创建激活目标: ${newGoal.title}`)
+        }
+        
+        // 保存目标ID用于后续测试
+        setDemoGoalId(newGoal.id)
+        
+      } catch (error) {
+        addOutput(`   ❌ 创建失败: ${error instanceof Error ? error.message : '未知错误'}`)
+        
+        // 如果创建失败，尝试获取现有目标进行测试
+        const goals = await agentToolExecutor.executeTool('get_learning_goals', { status: 'all' })
+        if (goals.goals.length > 0) {
+          const testGoal = goals.goals[0]
+          setDemoGoalId(testGoal.id)
+          addOutput(`   🔄 使用现有目标进行测试: ${testGoal.title}`)
+        }
+      }
+      
+      // 3. 测试状态转换
+      if (demoGoalId) {
+        addOutput('\n🔄 步骤3: 测试目标状态转换')
+        
+        // 暂停目标
+        const pausedGoal = await agentToolExecutor.executeTool('pause_goal', {
+          goalId: demoGoalId
+        })
+        addOutput(`   ⏸️ 暂停目标: ${pausedGoal.title} (状态: ${pausedGoal.status})`)
+        
+        // 重新激活目标
+        const activatedGoal = await agentToolExecutor.executeTool('activate_goal', {
+          goalId: demoGoalId
+        })
+        addOutput(`   ▶️ 重新激活: ${activatedGoal.title} (状态: ${activatedGoal.status})`)
+      }
+      
+      // 4. 显示最终状态
+      addOutput('\n📈 步骤4: 显示最终状态统计')
+      const finalStats = await agentToolExecutor.executeTool('get_goal_status_stats', {})
+      addOutput(`   激活目标: ${finalStats.active}/3`)
+      addOutput(`   可激活更多: ${finalStats.canActivateMore ? '是' : '否'}`)
+      
+      addOutput('\n✅ 目标状态管理演示完成！')
+      addOutput('🎯 演示功能包括:')
+      addOutput('   - 📊 状态统计查询')
+      addOutput('   - 🔒 3个目标激活限制')
+      addOutput('   - 🔄 状态转换 (激活/暂停)')
+      addOutput('   - ⚠️ 智能错误处理')
+      
+    } catch (error) {
+      addOutput(`❌ 目标状态管理演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 运行目标状态管理测试套件
+  const runGoalStateTests = async () => {
+    setLoading(true)
+    addOutput('=== 🧪 目标状态管理测试套件 ===')
+    
+    try {
+      addOutput('🚀 启动完整测试套件...')
+      
+      const testResults = await GoalStateManagerTest.runAllTests()
+      
+      addOutput(`\n📊 测试结果: ${testResults.summary}`)
+      addOutput('')
+      
+      testResults.results.forEach((result, index) => {
+        const icon = result.passed ? '✅' : '❌'
+        addOutput(`${icon} 测试 ${index + 1}: ${result.name}`)
+        addOutput(`   ${result.message}`)
+      })
+      
+      if (testResults.success) {
+        addOutput('\n🎉 所有测试通过！目标状态管理系统功能正常。')
+        addOutput('')
+        addOutput('📋 测试覆盖范围:')
+        addOutput('   1. ✅ 3个目标激活限制')
+        addOutput('   2. ✅ 目标状态转换 (激活/暂停/完成/取消)')
+        addOutput('   3. ✅ 路径状态同步')
+        addOutput('   4. ✅ LLM工具集成')
+        addOutput('   5. ✅ 状态统计功能')
+        addOutput('   6. ✅ 边界条件处理')
+      } else {
+        addOutput('\n⚠️ 部分测试失败，请检查系统状态或数据一致性。')
+      }
+      
+    } catch (error) {
+      addOutput(`❌ 测试套件执行失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // 更新演示操作列表，添加能力档案管理功能
   const demoActions = [
     {
@@ -1700,6 +1831,18 @@ ${context}
       title: '🎯 能力档案管理综合演示',
       description: '演示能力档案管理的综合流程',
       action: demoAbilityManagementComprehensive
+    },
+    {
+      id: 'goal_state_manager',
+      title: '🎯 目标状态管理',
+      description: '演示目标状态管理功能',
+      action: demoGoalStateManager
+    },
+    {
+      id: 'goal_state_tests',
+      title: '🧪 目标状态管理测试',
+      description: '运行目标状态管理测试套件',
+      action: runGoalStateTests
     },
   ]
 

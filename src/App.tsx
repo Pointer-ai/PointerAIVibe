@@ -12,6 +12,7 @@ import LearningPathView from './components/LearningPathView'
 import DataInspector from './components/DataInspector'
 import { getCurrentProfileId } from './utils/profile'
 import { TestRandomSearch } from './pages/TestRandomSearch'
+import { GoalSetting } from './components/GoalSetting'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector'
 
@@ -140,7 +141,8 @@ const App = () => {
               </Layout>
             )
           
-          case 'test-random-search':
+          {/* 已隐藏的测试随意搜界面 */}
+          {/* case 'test-random-search':
             return (
               <Layout 
                 title="随机搜索测试" 
@@ -151,7 +153,7 @@ const App = () => {
               >
                 <TestRandomSearch />
               </Layout>
-            )
+            ) */}
           
           case 'agent-demo':
             return (
@@ -194,10 +196,21 @@ const App = () => {
           
           // 其他模块的占位符
           case 'goal-setting':
+            return (
+              <Layout 
+                title="目标设定" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <GoalSetting />
+              </Layout>
+            )
+          
           case 'path-plan':
           case 'course-content':
             const titles = {
-              'goal-setting': '目标设定',
               'path-plan': '路径规划',
               'course-content': '课程内容'
             }

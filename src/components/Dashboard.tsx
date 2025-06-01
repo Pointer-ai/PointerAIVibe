@@ -63,8 +63,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
         </svg>
       ),
       color: 'from-blue-500 to-cyan-500',
-      status: '待开发',
-      available: false
+      status: '可使用',
+      available: true
     },
     {
       id: 'path',
@@ -159,8 +159,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
               )}
             </div>
             <div className="flex items-center gap-4">
-              {/* 测试随意搜 - 仅开发环境显示 */}
-              {window.location.hostname === 'localhost' && (
+              {/* 测试随意搜 - 仅开发环境显示 - 已隐藏 */}
+              {/* {window.location.hostname === 'localhost' && (
                 <button 
                   onClick={() => onNavigate('test-random-search')}
                   className="text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-purple-50 border border-purple-200"
@@ -168,7 +168,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
                   <span>🧪</span>
                   测试随意搜
                 </button>
-              )}
+              )} */}
               
               {/* 设置按钮 */}
               <button

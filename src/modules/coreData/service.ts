@@ -66,6 +66,12 @@ const saveUserCoreData = (coreData: CoreData): void => {
 export const createLearningGoal = (goal: Omit<LearningGoal, 'id' | 'createdAt' | 'updatedAt'>): LearningGoal => {
   const coreData = getUserCoreData()
   
+  // 检查激活目标数量限制
+  const activeGoals = coreData.goals.filter(g => g.status === 'active')
+  if (goal.status === 'active' && activeGoals.length >= 3) {
+    throw new Error('最多只能同时激活3个学习目标。请先暂停或完成其他目标。')
+  }
+  
   const newGoal: LearningGoal = {
     id: Date.now().toString(),
     createdAt: new Date().toISOString(),
@@ -75,6 +81,12 @@ export const createLearningGoal = (goal: Omit<LearningGoal, 'id' | 'createdAt' |
   
   coreData.goals.push(newGoal)
   saveUserCoreData(coreData)
+  
+  // 记录事件
+  addCoreEvent({
+    type: 'goal_created',
+    data: { goalId: newGoal.id, title: newGoal.title, category: newGoal.category }
+  })
   
   return newGoal
 }
@@ -89,13 +101,42 @@ export const updateLearningGoal = (id: string, updates: Partial<LearningGoal>): 
   const index = coreData.goals.findIndex(g => g.id === id)
   if (index === -1) return null
   
+  const currentGoal = coreData.goals[index]
+  
+  // 检查激活目标数量限制
+  if (updates.status === 'active' && currentGoal.status !== 'active') {
+    const activeGoals = coreData.goals.filter(g => g.status === 'active')
+    if (activeGoals.length >= 3) {
+      throw new Error('最多只能同时激活3个学习目标。请先暂停或完成其他目标。')
+    }
+  }
+  
   coreData.goals[index] = { 
-    ...coreData.goals[index], 
+    ...currentGoal, 
     ...updates, 
     updatedAt: new Date().toISOString() 
   }
   
   saveUserCoreData(coreData)
+  
+  // 记录状态变更事件
+  if (updates.status && updates.status !== currentGoal.status) {
+    addCoreEvent({
+      type: 'goal_status_changed',
+      data: { 
+        goalId: id, 
+        oldStatus: currentGoal.status, 
+        newStatus: updates.status,
+        title: currentGoal.title
+      }
+    })
+    
+    // 如果目标被暂停或取消，同步更新相关路径
+    if (['paused', 'cancelled'].includes(updates.status)) {
+      syncPathsWithGoalStatus(id, updates.status)
+    }
+  }
+  
   return coreData.goals[index]
 }
 
@@ -104,9 +145,114 @@ export const deleteLearningGoal = (id: string): boolean => {
   const index = coreData.goals.findIndex(g => g.id === id)
   if (index === -1) return false
   
+  const goal = coreData.goals[index]
+  
+  // 删除关联的学习路径
+  const relatedPaths = coreData.paths.filter(p => p.goalId === id)
+  relatedPaths.forEach(path => {
+    deleteLearningPath(path.id)
+  })
+  
   coreData.goals.splice(index, 1)
   saveUserCoreData(coreData)
+  
+  // 记录删除事件
+  addCoreEvent({
+    type: 'goal_deleted',
+    data: { goalId: id, title: goal.title, category: goal.category }
+  })
+  
   return true
+}
+
+// 新增：目标状态管理功能
+export const getActiveGoals = (): LearningGoal[] => {
+  return getLearningGoals().filter(g => g.status === 'active')
+}
+
+export const getGoalStatusStats = () => {
+  const goals = getLearningGoals()
+  return {
+    total: goals.length,
+    active: goals.filter(g => g.status === 'active').length,
+    completed: goals.filter(g => g.status === 'completed').length,
+    paused: goals.filter(g => g.status === 'paused').length,
+    cancelled: goals.filter(g => g.status === 'cancelled').length,
+    canActivateMore: goals.filter(g => g.status === 'active').length < 3
+  }
+}
+
+export const activateGoal = (goalId: string): LearningGoal | null => {
+  const activeGoals = getActiveGoals()
+  if (activeGoals.length >= 3) {
+    throw new Error('最多只能同时激活3个学习目标。请先暂停或完成其他目标。')
+  }
+  
+  return updateLearningGoal(goalId, { status: 'active' })
+}
+
+export const pauseGoal = (goalId: string): LearningGoal | null => {
+  const result = updateLearningGoal(goalId, { status: 'paused' })
+  if (result) {
+    // 暂停关联的路径
+    syncPathsWithGoalStatus(goalId, 'paused')
+  }
+  return result
+}
+
+export const completeGoal = (goalId: string): LearningGoal | null => {
+  const result = updateLearningGoal(goalId, { status: 'completed' })
+  if (result) {
+    // 完成关联的路径
+    syncPathsWithGoalStatus(goalId, 'completed')
+  }
+  return result
+}
+
+export const cancelGoal = (goalId: string): LearningGoal | null => {
+  const result = updateLearningGoal(goalId, { status: 'cancelled' })
+  if (result) {
+    // 归档关联的路径
+    syncPathsWithGoalStatus(goalId, 'archived')
+  }
+  return result
+}
+
+// 同步路径状态与目标状态
+const syncPathsWithGoalStatus = (goalId: string, goalStatus: string) => {
+  const coreData = getUserCoreData()
+  const relatedPaths = coreData.paths.filter(p => p.goalId === goalId)
+  
+  relatedPaths.forEach(path => {
+    let newPathStatus: LearningPath['status'] = path.status
+    
+    switch (goalStatus) {
+      case 'paused':
+        if (path.status === 'active') {
+          newPathStatus = 'paused'
+        }
+        break
+      case 'completed':
+        if (['active', 'paused'].includes(path.status)) {
+          newPathStatus = 'completed'
+        }
+        break
+      case 'cancelled':
+        if (['active', 'paused', 'draft'].includes(path.status)) {
+          newPathStatus = 'archived'
+        }
+        break
+      case 'active':
+        if (path.status === 'paused') {
+          newPathStatus = 'active'
+        }
+        break
+    }
+    
+    if (newPathStatus !== path.status) {
+      updateLearningPath(path.id, { status: newPathStatus })
+    }
+  })
 }
 
 // 学习路径相关

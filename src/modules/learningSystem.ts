@@ -29,6 +29,9 @@ import { getCurrentAssessment } from './abilityAssess/service'
 import { log } from '../utils/logger'
 import { getAPIConfig } from './profileSettings/service'
 import { addActivityRecord } from './profileSettings/service'
+import { AbilityAssessmentService } from './abilityAssess/service'
+import { getAIResponseWithTools } from '../components/AIAssistant/service'
+import { AGENT_TOOLS } from './coreData/agentTools'
 
 /**
  * AI Agent交互历史
@@ -68,12 +71,15 @@ export class LearningSystemService {
   private goalService: GoalSettingService
   private pathService: PathPlanService
   private contentService: CourseContentService
+  private abilityService: AbilityAssessmentService
   private interactionHistory: AgentInteraction[] = []
 
   constructor() {
     this.goalService = new GoalSettingService()
     this.pathService = new PathPlanService()
     this.contentService = new CourseContentService()
+    this.abilityService = new AbilityAssessmentService()
+    log('[LearningSystem] All services initialized')
   }
 
   // ========== AI Agent 交互系统 ==========
@@ -462,8 +468,7 @@ export class LearningSystemService {
     needsPathGeneration: boolean
     recommendations: string[]
   }> {
-    const ability = getAbilityProfile()
-    const assessment = getCurrentAssessment()
+    const abilitySummary = this.abilityService.getAbilitySummary()
     const goals = getLearningGoals()
     const paths = getLearningPaths()
     const units = getCourseUnits()
@@ -474,14 +479,14 @@ export class LearningSystemService {
     let needsPathGeneration = false
 
     // 检查能力评估
-    if (!ability && !assessment) {
+    if (!abilitySummary.hasAssessment) {
       needsAbilityAssessment = true
       recommendations.push('建议先完成能力评估，了解当前技能水平')
-    } else if (assessment) {
+    } else if (abilitySummary.hasAssessment) {
       // 如果有完整的评估数据，提供更详细的建议
-      if (assessment.overallScore < 40) {
+      if (abilitySummary.overallScore < 40) {
         recommendations.push('建议从基础课程开始，夯实编程基础')
-      } else if (assessment.overallScore >= 70) {
+      } else if (abilitySummary.overallScore >= 70) {
         recommendations.push('您的基础较好，可以考虑挑战性更高的学习目标')
       }
     }
@@ -490,7 +495,7 @@ export class LearningSystemService {
     const activeGoals = goals.filter(g => g.status === 'active')
     if (activeGoals.length === 0) {
       needsGoalSetting = true
-      if (assessment && assessment.overallScore >= 50) {
+      if (abilitySummary.hasAssessment && abilitySummary.overallScore >= 50) {
         recommendations.push('基于您的能力评估，建议设定中级水平的学习目标')
       } else {
         recommendations.push('设定明确的学习目标，制定学习方向')
@@ -533,7 +538,7 @@ export class LearningSystemService {
       needsAbilityAssessment,
       needsGoalSetting,
       needsPathGeneration,
-      recommendations
+      recommendations: recommendations.slice(0, 5) // 限制建议数量
     }
   }
 
@@ -541,8 +546,7 @@ export class LearningSystemService {
    * 获取系统完整状态
    */
   async getSystemStatus(): Promise<LearningSystemStatus> {
-    const ability = getAbilityProfile()
-    const assessment = getCurrentAssessment()
+    const abilitySummary = this.abilityService.getAbilitySummary()
     const goals = getLearningGoals()
     const paths = getLearningPaths()
     const units = getCourseUnits()
@@ -554,7 +558,7 @@ export class LearningSystemService {
 
     // 确定当前阶段
     let currentPhase: LearningSystemStatus['currentPhase'] = 'assessment'
-    if ((ability || assessment) && activeGoals.length === 0) {
+    if (abilitySummary.hasAssessment && activeGoals.length === 0) {
       currentPhase = 'goal_setting'
     } else if (activeGoals.length > 0 && activePaths.length === 0) {
       currentPhase = 'path_planning'
@@ -568,10 +572,10 @@ export class LearningSystemService {
     const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', {})
 
     return {
-      setupComplete: !!((ability || assessment) && activeGoals.length > 0 && activePaths.length > 0),
+      setupComplete: !!(abilitySummary.hasAssessment && activeGoals.length > 0 && activePaths.length > 0),
       currentPhase,
       progress: {
-        hasAbilityProfile: !!(ability || assessment),
+        hasAbilityProfile: abilitySummary.hasAssessment,
         activeGoals: activeGoals.length,
         activePaths: activePaths.length,
         completedNodes: completedNodes.length,
@@ -1055,6 +1059,73 @@ export class LearningSystemService {
     }
 
     return await agentToolExecutor.executeTool(toolName, params || {})
+  }
+
+  /**
+   * 执行能力评估 - 通过统一的Learning System管理
+   */
+  async executeAbilityAssessment(input: any): Promise<any> {
+    log('[LearningSystem] Executing ability assessment')
+    
+    try {
+      const assessment = await this.abilityService.executeAssessment(input)
+      
+      // 评估完成后，检查是否需要进行下一步操作
+      const systemStatus = await this.getSystemStatus()
+      
+      return {
+        assessment,
+        systemStatus,
+        nextRecommendations: systemStatus.recommendations,
+        message: '能力评估完成！系统已为您分析当前技能水平，可以开始设定学习目标。'
+      }
+      
+    } catch (error) {
+      log('[LearningSystem] Ability assessment failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 获取能力概述 - 统一接口
+   */
+  getAbilitySummary() {
+    return this.abilityService.getAbilitySummary()
+  }
+
+  /**
+   * 更新能力评估
+   */
+  async updateAbilityAssessment(updates: any): Promise<any> {
+    log('[LearningSystem] Updating ability assessment')
+    
+    try {
+      const updatedAssessment = await this.abilityService.updateAssessment(updates)
+      
+      if (!updatedAssessment) {
+        throw new Error('No assessment found to update')
+      }
+      
+      // 重新获取系统状态
+      const systemStatus = await this.getSystemStatus()
+      
+      return {
+        assessment: updatedAssessment,
+        systemStatus,
+        message: '能力评估已更新，建议重新检查学习目标匹配度。'
+      }
+      
+    } catch (error) {
+      log('[LearningSystem] Failed to update ability assessment:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 生成能力提升计划
+   */
+  async generateAbilityImprovementPlan(): Promise<string> {
+    return await this.abilityService.generateImprovementPlan()
   }
 }
 

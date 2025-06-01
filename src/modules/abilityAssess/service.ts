@@ -2,6 +2,7 @@ import { log, error } from '../../utils/logger'
 import { callAI } from '../../utils/ai'
 import { getProfileData, setProfileData } from '../../utils/profile'
 import { addActivityRecord } from '../profileSettings/service'
+import { addCoreEvent } from '../coreData'
 import { generateAssessmentPrompt } from './prompt'
 import { 
   AbilityAssessment, 
@@ -116,7 +117,273 @@ const validateAndFixAssessment = (assessment: any): AbilityAssessment => {
 }
 
 /**
+ * 能力评估服务类
+ * 提供完整的能力评估功能，包括评估执行、数据管理、分析报告等
+ */
+export class AbilityAssessmentService {
+  constructor() {
+    log('[AbilityAssessmentService] Service initialized')
+  }
+
+  /**
+   * 执行能力评估
+   */
+  async executeAssessment(input: AssessmentInput): Promise<AbilityAssessment> {
+    log('[AbilityAssessmentService] Starting assessment execution')
+    
+    try {
+      const assessment = await this.analyzeAbility(input)
+      
+      // 记录到统一的核心事件系统
+      addCoreEvent({
+        type: 'ability_assessment_completed',
+        data: {
+          method: input.type,
+          overallScore: assessment.overallScore,
+          level: getScoreLevel(assessment.overallScore),
+          assessmentDate: assessment.metadata.assessmentDate
+        }
+      })
+      
+      log('[AbilityAssessmentService] Assessment execution completed successfully')
+      return assessment
+      
+    } catch (error) {
+      log('[AbilityAssessmentService] Assessment execution failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 获取当前评估结果
+   */
+  getCurrentAssessment(): AbilityAssessment | null {
+    return getProfileData('abilityAssessment') || null
+  }
+
+  /**
+   * 获取评估历史
+   */
+  getAssessmentHistory() {
+    return getProfileData('assessmentHistory') || []
+  }
+
+  /**
+   * 更新评估结果
+   */
+  async updateAssessment(updates: Partial<AbilityAssessment>): Promise<AbilityAssessment | null> {
+    const current = this.getCurrentAssessment()
+    if (!current) return null
+    
+    const updated = { ...current, ...updates }
+    await this.saveAssessment(updated)
+    
+    addCoreEvent({
+      type: 'ability_assessment_updated',
+      data: {
+        updatedFields: Object.keys(updates),
+        overallScore: updated.overallScore
+      }
+    })
+    
+    return updated
+  }
+
+  /**
+   * 生成能力提升建议
+   */
+  async generateImprovementPlan(assessment?: AbilityAssessment): Promise<string> {
+    const targetAssessment = assessment || this.getCurrentAssessment()
+    if (!targetAssessment) {
+      throw new Error('No assessment data available')
+    }
+    
+    return await generateImprovementPlan(targetAssessment)
+  }
+
+  /**
+   * 导出评估报告
+   */
+  exportReport(assessment?: AbilityAssessment): string {
+    const targetAssessment = assessment || this.getCurrentAssessment()
+    if (!targetAssessment) {
+      throw new Error('No assessment data available')
+    }
+    
+    return exportAssessmentReport(targetAssessment)
+  }
+
+  /**
+   * 分析薄弱领域
+   */
+  analyzeWeakAreas(assessment?: AbilityAssessment) {
+    const targetAssessment = assessment || this.getCurrentAssessment()
+    if (!targetAssessment) {
+      return []
+    }
+    
+    return findWeakAreas(targetAssessment)
+  }
+
+  /**
+   * 获取能力水平概述
+   */
+  getAbilitySummary() {
+    const assessment = this.getCurrentAssessment()
+    if (!assessment) {
+      return {
+        hasAssessment: false,
+        overallScore: 0,
+        level: 'unknown',
+        assessmentDate: null,
+        needsAssessment: true
+      }
+    }
+    
+    return {
+      hasAssessment: true,
+      overallScore: assessment.overallScore,
+      level: getScoreLevel(assessment.overallScore),
+      assessmentDate: assessment.metadata.assessmentDate,
+      strengths: assessment.report.strengths,
+      improvements: assessment.report.improvements,
+      needsAssessment: false,
+      confidence: assessment.metadata.confidence
+    }
+  }
+
+  /**
+   * 私有方法：分析用户能力
+   */
+  private async analyzeAbility(input: AssessmentInput): Promise<AbilityAssessment> {
+    log('[AbilityAssessmentService] Starting ability analysis')
+    
+    try {
+      // 生成评估内容
+      const assessmentContent = input.type === 'resume' 
+        ? input.content as string
+        : JSON.stringify(input.content, null, 2)
+      
+      // 调用 AI 进行评估
+      const prompt = generateAssessmentPrompt(assessmentContent, input.type)
+      const result = await callAI(prompt)
+      
+      // 添加调试日志 - 显示 AI 返回的原始内容
+      log('[AbilityAssessmentService] AI response received, parsing...')
+      
+      // 解析 AI 返回的 JSON 结果
+      const assessment = await this.parseAIResponse(result)
+      
+      // 保存评估结果到本地存储
+      await this.saveAssessment(assessment)
+      
+      // 记录活动
+      addActivityRecord({
+        type: 'assessment',
+        action: '完成能力评估',
+        details: {
+          method: input.type,
+          overallScore: assessment.overallScore,
+          level: getScoreLevel(assessment.overallScore)
+        }
+      })
+      
+      log('[AbilityAssessmentService] Assessment analysis completed successfully')
+      return assessment
+      
+    } catch (err) {
+      error('[AbilityAssessmentService] Failed to analyze ability:', err)
+      throw err
+    }
+  }
+
+  /**
+   * 私有方法：解析AI响应
+   */
+  private async parseAIResponse(result: string): Promise<AbilityAssessment> {
+    // 解析 AI 返回的 JSON 结果
+    const jsonMatch = result.match(/```json\n([\s\S]*?)\n```/)
+    if (!jsonMatch) {
+      // 尝试其他格式的 JSON 提取
+      const altJsonMatch = result.match(/```json([\s\S]*?)```/) || 
+                          result.match(/```\s*\{[\s\S]*?\}\s*```/) ||
+                          result.match(/\{[\s\S]*\}/)
+      
+      if (altJsonMatch) {
+        const rawJson = altJsonMatch[1] || altJsonMatch[0]
+        const cleanJson = cleanupJSONString(rawJson.trim())
+        
+        const assessment: AbilityAssessment = JSON.parse(cleanJson)
+        
+        // 验证和修复数据结构
+        const validatedAssessment = validateAndFixAssessment(assessment)
+        
+        // 计算并验证总分
+        validatedAssessment.overallScore = this.calculateOverallScore(validatedAssessment)
+        
+        return validatedAssessment
+      }
+      
+      throw new Error('No valid JSON found in AI response')
+    }
+    
+    // 标准格式的 JSON 解析
+    const rawJson = jsonMatch[1]
+    const cleanJson = cleanupJSONString(rawJson)
+    
+    const assessment: AbilityAssessment = JSON.parse(cleanJson)
+    
+    // 验证和修复数据结构
+    const validatedAssessment = validateAndFixAssessment(assessment)
+    
+    // 计算并验证总分
+    validatedAssessment.overallScore = this.calculateOverallScore(validatedAssessment)
+    
+    return validatedAssessment
+  }
+
+  /**
+   * 私有方法：计算总体评分
+   */
+  private calculateOverallScore(assessment: AbilityAssessment): number {
+    const { dimensions } = assessment
+    
+    // 计算各维度的维度总分（如果 AI 没有正确计算）
+    Object.values(dimensions).forEach(dimension => {
+      const skills = Object.values(dimension.skills)
+      const scores = skills.map(skill => getSkillScoreValue(skill))
+      dimension.score = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+    })
+    
+    // 计算加权总分
+    const weightedSum = Object.values(dimensions).reduce((sum, dim) => {
+      return sum + (dim.score * dim.weight)
+    }, 0)
+    
+    return Math.round(weightedSum)
+  }
+
+  /**
+   * 私有方法：保存评估结果
+   */
+  private async saveAssessment(assessment: AbilityAssessment): Promise<void> {
+    // 保存当前评估
+    setProfileData('abilityAssessment', assessment)
+    
+    // 保存到历史记录
+    const history = getProfileData('assessmentHistory') || []
+    history.push({
+      date: assessment.metadata.assessmentDate,
+      overallScore: assessment.overallScore,
+      level: getScoreLevel(assessment.overallScore)
+    })
+    setProfileData('assessmentHistory', history)
+  }
+}
+
+/**
  * 分析用户能力 - 支持简历和问卷两种方式
+ * @deprecated 使用 AbilityAssessmentService.executeAssessment 替代
  */
 export const analyzeAbility = async (input: AssessmentInput): Promise<AbilityAssessment> => {
   log('[abilityAssess] Starting ability analysis')

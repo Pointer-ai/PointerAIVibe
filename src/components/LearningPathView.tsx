@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getLearningGoals, getLearningPaths, updateLearningGoal, updateLearningPath } from '../modules/coreData'
+import { getLearningGoals, getLearningPaths, updateLearningGoal, updateLearningPath, getGoalStatusStats } from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { agentToolExecutor } from '../modules/coreData'
 import { LearningGoal, LearningPath } from '../modules/coreData/types'
@@ -11,11 +11,13 @@ export const LearningPathView: React.FC = () => {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string>('')
+  const [goalStats, setGoalStats] = useState<any>(null)
 
   // 刷新数据
   const refreshData = () => {
     setGoals(getLearningGoals())
     setPaths(getLearningPaths())
+    setGoalStats(getGoalStatusStats())
   }
 
   useEffect(() => {
@@ -243,6 +245,97 @@ export const LearningPathView: React.FC = () => {
           marginBottom: '20px'
         }}>
           ⏳ 处理中...
+        </div>
+      )}
+
+      {/* 目标状态统计卡片 */}
+      {goalStats && (
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          border: '1px solid #dee2e6'
+        }}>
+          <h3 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            📊 目标状态统计
+            {!goalStats.canActivateMore && (
+              <span style={{
+                padding: '4px 8px',
+                backgroundColor: '#ff6b6b',
+                color: 'white',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: 'normal'
+              }}>
+                已达上限
+              </span>
+            )}
+          </h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+            gap: '15px' 
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4CAF50' }}>
+                {goalStats.active}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>激活中</div>
+              <div style={{ fontSize: '10px', color: '#999' }}>最多3个</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2196F3' }}>
+                {goalStats.completed}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已完成</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FF9800' }}>
+                {goalStats.paused}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已暂停</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f44336' }}>
+                {goalStats.cancelled}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已取消</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#6c757d' }}>
+                {goalStats.total}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>总计</div>
+            </div>
+          </div>
+          
+          {/* 激活限制提醒 */}
+          {!goalStats.canActivateMore && (
+            <div style={{
+              marginTop: '15px',
+              padding: '10px',
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffeaa7',
+              borderRadius: '5px',
+              color: '#856404'
+            }}>
+              <strong>⚠️ 提醒：</strong> 您已激活3个目标（上限）。要激活新目标，请先暂停或完成现有目标。
+            </div>
+          )}
+          
+          {goalStats.canActivateMore && goalStats.active > 0 && (
+            <div style={{
+              marginTop: '15px',
+              padding: '10px',
+              backgroundColor: '#d1ecf1',
+              border: '1px solid #bee5eb',
+              borderRadius: '5px',
+              color: '#0c5460'
+            }}>
+              <strong>💡 提示：</strong> 您还可以激活 {3 - goalStats.active} 个目标。
+            </div>
+          )}
         </div>
       )}
 

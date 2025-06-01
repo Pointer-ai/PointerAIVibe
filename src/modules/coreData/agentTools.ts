@@ -50,7 +50,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     name: 'create_learning_goal',
-    description: '创建新的学习目标，用于定义用户的学习方向和期望成果',
+    description: '创建新的学习目标，支持设置目标状态',
     parameters: {
       title: { type: 'string', description: '目标标题' },
       description: { type: 'string', description: '目标详细描述' },
@@ -59,15 +59,15 @@ export const AGENT_TOOLS: AgentTool[] = [
         enum: ['frontend', 'backend', 'fullstack', 'automation', 'ai', 'mobile', 'game', 'data', 'custom'],
         description: '目标类别' 
       },
-      priority: { type: 'number', min: 1, max: 5, description: '优先级(1-5)' },
+      priority: { type: 'number', description: '优先级 (1-5)' },
       targetLevel: { 
         type: 'string', 
         enum: ['beginner', 'intermediate', 'advanced', 'expert'],
-        description: '目标级别' 
+        description: '目标水平' 
       },
       estimatedTimeWeeks: { type: 'number', description: '预计完成时间（周）' },
       requiredSkills: { type: 'array', items: { type: 'string' }, description: '需要的技能列表' },
-      outcomes: { type: 'array', items: { type: 'string' }, description: '预期学习成果' }
+      outcomes: { type: 'array', items: { type: 'string' }, description: '预期学习成果' },
     }
   },
   {
@@ -623,18 +623,29 @@ export class AgentToolExecutor {
   // ========== 工具实现 ==========
   
   private async createLearningGoalTool(params: any): Promise<LearningGoal> {
-    const goal = createLearningGoal({
-      title: params.title,
-      description: params.description,
-      category: params.category,
-      priority: params.priority || 3,
-      targetLevel: params.targetLevel,
-      estimatedTimeWeeks: params.estimatedTimeWeeks,
-      requiredSkills: params.requiredSkills || [],
-      outcomes: params.outcomes || [],
-      status: 'active'
+    // 检查当前激活目标数量
+    const allGoals = getLearningGoals()
+    const activeGoals = allGoals.filter(g => g.status === 'active')
+    const requestedStatus = 'active' // 默认为active
+    
+    if (requestedStatus === 'active' && activeGoals.length >= 3) {
+      // 如果超出限制，创建为暂停状态
+      const goal = createLearningGoal({
+        ...params,
+        status: 'paused'
+      })
+      
+      // 返回带有系统消息的扩展对象
+      return Object.assign(goal, {
+        _systemMessage: `由于已有3个激活目标，新目标已创建为暂停状态。可以手动激活。`
+      })
+    }
+    
+    // 正常创建
+    return createLearningGoal({
+      ...params,
+      status: requestedStatus
     })
-    return goal
   }
   
   private async updateLearningGoalTool(params: any): Promise<LearningGoal | null> {
@@ -1668,27 +1679,30 @@ export class AgentToolExecutor {
   }
   
   private async getCourseUnitTool(params: any): Promise<any> {
-    const units = getCourseUnits()
-    const unit = units.find(u => u.id === params.unitId)
+    const { unitId } = params
+    const unit = getCourseUnits().find(u => u.id === unitId)
     
     if (!unit) {
-      return null
+      return {
+        success: false,
+        message: `课程单元 ${unitId} 不存在`,
+        unit: null
+      }
     }
-    
-    // 获取关联信息
-    const paths = getLearningPaths()
-    const relatedPath = paths.find(p => 
-      p.nodes.some(node => node.id === unit.nodeId)
+
+    // 获取相关路径信息
+    const relatedPath = getLearningPaths().find(p => 
+      p.nodes.some(n => n.id === unit.nodeId)
     )
     
-    let nodeInfo = null
+    let nodeInfo: any = null
     if (relatedPath) {
       const node = relatedPath.nodes.find(n => n.id === unit.nodeId)
       nodeInfo = node ? {
         title: node.title,
         status: node.status,
         estimatedHours: node.estimatedHours
-      } : null
+      } : undefined
     }
     
     return {
@@ -1698,7 +1712,7 @@ export class AgentToolExecutor {
         title: relatedPath.title,
         goalId: relatedPath.goalId
       } : null,
-      nodeInfo: nodeInfo as any
+      nodeInfo
     }
   }
   
@@ -2075,7 +2089,9 @@ export class AgentToolExecutor {
     this.recalculateAssessmentScores(currentAssessment)
     
     // 更新元数据
-    (currentAssessment.metadata as any).lastCorrected = new Date().toISOString()
+    if (currentAssessment.metadata) {
+      (currentAssessment.metadata as any).lastCorrected = new Date().toISOString();
+    }
     (currentAssessment.metadata as any).userFeedback = overallFeedback
     
     // 保存数据
@@ -2382,8 +2398,8 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
       const dimensionData = currentAssessment.dimensions[dim]
       
       Object.entries(dimensionData.skills).forEach(([skill, skillData]) => {
-        const score = typeof skillData === 'number' ? skillData : skillData.score
-        const confidence = typeof skillData === 'number' ? 1.0 : skillData.confidence
+        const score = typeof skillData === 'number' ? skillData : (skillData as any).score
+        const confidence = typeof skillData === 'number' ? 1.0 : (skillData as any).confidence
         
         if (score < 60) {
           weakSkills.push({ dimension: dim, skill, score, confidence })
@@ -2454,19 +2470,20 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
 
   // 辅助方法：重新计算评估分数
   private recalculateAssessmentScores(assessment: any): void {
-    // 重新计算每个维度的分数
-    Object.values((assessment as AbilityAssessment).dimensions).forEach((dimension: any) => {
-      const skillScores = Object.values(dimension.skills).map((skillData: any) => {
-        return typeof skillData === 'number' ? skillData : skillData.score
-      })
-      dimension.score = Math.round(skillScores.reduce((sum: number, score: number) => sum + score, 0) / skillScores.length)
+    // 重新计算维度分数
+    Object.values(assessment.dimensions).forEach((dimension: any) => {
+      const skills = Object.values(dimension.skills)
+      const totalScore = skills.reduce((sum: number, skill: any) => {
+        return sum + (typeof skill === 'number' ? skill : skill.score)
+      }, 0)
+      dimension.score = Math.round(totalScore / skills.length)
     })
     
     // 重新计算总分
-    const weightedSum = Object.values((assessment as AbilityAssessment).dimensions).reduce((sum: number, dim: any) => {
-      return sum + (dim.score * dim.weight)
-    }, 0)
-    assessment.overallScore = Math.round(weightedSum)
+    const dimensionScores = Object.values(assessment.dimensions).map((dim: any) => dim.score)
+    assessment.overallScore = Math.round(
+      dimensionScores.reduce((sum: number, score: number) => sum + score, 0) / dimensionScores.length
+    )
   }
 
   // 辅助方法：生成基础重评估结果

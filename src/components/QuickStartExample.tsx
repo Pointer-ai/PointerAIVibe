@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { goalApi, pathApi, simpleApi, isApiSuccess, handleApiError } from '../api'
+import React, { useState, useEffect } from 'react'
+import { learningApi, simpleApi, isApiSuccess, handleApiError, type LearningGoal } from '../api'
 
 /**
  * 快速开始示例组件
@@ -7,57 +7,55 @@ import { goalApi, pathApi, simpleApi, isApiSuccess, handleApiError } from '../ap
  * 展示如何正确使用新的API层进行常见操作
  */
 export const QuickStartExample: React.FC = () => {
+  const [goals, setGoals] = useState<LearningGoal[]>([])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [goals, setGoals] = useState<any[]>([])
 
-  const showMessage = (msg: string, isError = false) => {
+  const showMessage = (msg: string) => {
     setMessage(msg)
     setTimeout(() => setMessage(''), 3000)
   }
 
-  // 示例1: 获取所有目标
-  const handleGetGoals = () => {
+  const loadGoals = async () => {
     setLoading(true)
     try {
-      const result = goalApi.getAllGoals()
+      const result = learningApi.getAllGoals()
       if (isApiSuccess(result)) {
-        setGoals(result.data)
-        showMessage(`✅ 获取到 ${result.data.length} 个目标`)
+        setGoals(result.data as LearningGoal[])
+        showMessage(`✅ 获取到 ${(result.data as LearningGoal[]).length} 个目标`)
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${handleApiError(result)}`)
       }
     } catch (error) {
-      showMessage('❌ 获取目标失败', true)
+      showMessage('❌ 加载目标失败')
     } finally {
       setLoading(false)
     }
   }
 
-  // 示例2: 创建新目标
-  const handleCreateGoal = async () => {
+  const createSampleGoal = async () => {
     setLoading(true)
     try {
-      const result = await goalApi.createGoal({
-        title: '学习TypeScript',
-        description: '掌握TypeScript的高级特性',
-        category: 'frontend',
-        priority: 3,
-        targetLevel: 'intermediate',
-        estimatedTimeWeeks: 8,
-        requiredSkills: ['JavaScript', 'ES6+'],
-        outcomes: ['掌握TypeScript语法', '能够编写类型安全的代码']
-      })
-      
+      const goalData = {
+        title: '学习React高级特性',
+        description: '深入学习React Hooks、Context API和性能优化',
+        category: 'frontend' as const,
+        priority: 1,
+        targetLevel: 'advanced' as const,
+        estimatedTimeWeeks: 6,
+        requiredSkills: ['JavaScript', 'React基础'],
+        outcomes: ['掌握Hooks', '理解Context', '会性能优化']
+      }
+
+      const result = await learningApi.createGoal(goalData)
       if (isApiSuccess(result)) {
-        showMessage(`✅ 目标创建成功: ${result.data.title}`)
-        // 刷新目标列表
-        handleGetGoals()
+        showMessage(`✅ 目标创建成功: ${(result.data as LearningGoal).title}`)
+        loadGoals() // 重新加载目标列表
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${handleApiError(result)}`)
       }
     } catch (error) {
-      showMessage('❌ 创建目标失败', true)
+      showMessage('❌ 创建目标失败')
     } finally {
       setLoading(false)
     }
@@ -66,22 +64,22 @@ export const QuickStartExample: React.FC = () => {
   // 示例3: 生成学习路径
   const handleGeneratePath = async () => {
     if (goals.length === 0) {
-      showMessage('❌ 请先创建一个目标', true)
+      showMessage('❌ 请先创建一个目标')
       return
     }
 
     setLoading(true)
     try {
       const firstGoal = goals[0]
-      const result = await pathApi.generatePathForGoal(firstGoal.id)
+      const result = await learningApi.generatePathForGoal(firstGoal.id)
       
       if (isApiSuccess(result)) {
         showMessage(`✅ 为目标"${firstGoal.title}"生成学习路径成功`)
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${handleApiError(result)}`)
       }
     } catch (error) {
-      showMessage('❌ 生成路径失败', true)
+      showMessage('❌ 生成路径失败')
     } finally {
       setLoading(false)
     }
@@ -96,10 +94,10 @@ export const QuickStartExample: React.FC = () => {
         const stats = result.data
         showMessage(`📊 统计: ${stats.totalGoals}个目标, ${stats.totalPaths}个路径`)
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${handleApiError(result)}`)
       }
     } catch (error) {
-      showMessage('❌ 获取统计失败', true)
+      showMessage('❌ 获取统计失败')
     } finally {
       setLoading(false)
     }
@@ -127,7 +125,7 @@ export const QuickStartExample: React.FC = () => {
       {/* 操作按钮 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <button
-          onClick={handleGetGoals}
+          onClick={loadGoals}
           disabled={loading}
           className="bg-blue-600 text-white p-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
@@ -135,7 +133,7 @@ export const QuickStartExample: React.FC = () => {
         </button>
 
         <button
-          onClick={handleCreateGoal}
+          onClick={createSampleGoal}
           disabled={loading}
           className="bg-green-600 text-white p-4 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
@@ -190,26 +188,30 @@ export const QuickStartExample: React.FC = () => {
         <h2 className="text-lg font-semibold mb-3">💻 代码示例</h2>
         <pre className="bg-gray-800 text-green-400 p-4 rounded text-sm overflow-x-auto">
 {`// 1. 导入API
-import { goalApi, pathApi, isApiSuccess, handleApiError } from '../api'
+import { learningApi, isApiSuccess, handleApiError } from '../api'
 
 // 2. 获取数据
-const result = goalApi.getAllGoals()
+const result = learningApi.getAllGoals()
 if (isApiSuccess(result)) {
-  setGoals(result.data)
+  setGoals(result.data as LearningGoal[])
 } else {
   showError(handleApiError(result))
 }
 
 // 3. 创建目标
-const createResult = await goalApi.createGoal({
-  title: '学习React',
-  description: '掌握React基础',
-  category: 'frontend',
-  priority: 3
+const createResult = await learningApi.createGoal({
+  title: '学习React高级特性',
+  description: '深入学习React Hooks、Context API和性能优化',
+  category: 'frontend' as const,
+  priority: 1,
+  targetLevel: 'advanced' as const,
+  estimatedTimeWeeks: 6,
+  requiredSkills: ['JavaScript', 'React基础'],
+  outcomes: ['掌握Hooks', '理解Context', '会性能优化']
 })
 
 // 4. 生成路径
-const pathResult = await pathApi.generatePathForGoal(goalId)`}
+const pathResult = await learningApi.generatePathForGoal(goalId)`}
         </pre>
       </div>
 

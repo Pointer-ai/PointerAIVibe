@@ -21,9 +21,9 @@ import { Button } from '../components/ui/Button/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card/Card'
 import { Alert } from '../components/ui/Alert/Alert'
 import { AssessmentForm, AssessmentResult } from '../components/features/Assessment'
-import { refactorAssessmentService } from '../services/assessmentService'
+import { learningApi } from '../../api'
 import { refactorAIService } from '../services/aiService'
-import { Assessment, AssessmentInput } from '../types/assessment'
+import { Assessment, AssessmentInput, DimensionAssessment } from '../types/assessment'
 import { AIServiceStatus } from '../types/ai'
 
 interface AssessmentPageProps {
@@ -44,9 +44,17 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     debugAIConfiguration()
   }, [])
 
-  const loadCurrentAssessment = () => {
-    const assessment = refactorAssessmentService.getCurrentAssessment()
-    setCurrentAssessment(assessment)
+  const loadCurrentAssessment = async () => {
+    try {
+      const result = await learningApi.getAbilitySummary()
+      if (result.success && result.data?.hasAssessment) {
+        // 这里需要从系统中获取完整的评估数据
+        // 目前先设置为null，表示需要重新评估
+        setCurrentAssessment(null)
+      }
+    } catch (error) {
+      console.error('Failed to load assessment:', error)
+    }
   }
 
   const checkAIStatus = async () => {
@@ -93,12 +101,44 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     setError(null)
 
     try {
-      // 执行评估
-      const assessment = await refactorAssessmentService.executeAssessment(input)
-      setCurrentAssessment(assessment)
+      // 转换为API期望的格式
+      const apiInput = {
+        type: input.type,
+        content: input.type === 'resume' ? input.data.resumeText || '' : JSON.stringify(input.data.questionnaire || {})
+      }
       
-      // 显示成功消息
-      console.log('评估完成:', assessment)
+      // 使用统一的learningApi执行评估
+      const result = await learningApi.executeAbilityAssessment(apiInput)
+      
+      if (result.success && result.data) {
+        // 转换为Assessment格式
+        const assessment: Assessment = {
+          id: `assessment_${Date.now()}`,
+          profileId: 'current',
+          type: input.type,
+          overallScore: result.data.assessment.overallScore,
+          dimensions: Object.entries(result.data.assessment.dimensions).reduce((acc, [key, value]: [string, any]) => {
+            acc[key] = {
+              name: key,
+              score: value.score,
+              skills: [], // 暂时设为空数组
+              summary: `${key}维度评估`,
+              recommendations: [`继续提升${key}技能`]
+            }
+            return acc
+          }, {} as { [key: string]: DimensionAssessment }),
+          strengths: result.data.assessment.report?.strengths || [],
+          weaknesses: result.data.assessment.report?.improvements || [],
+          recommendations: result.data.assessment.report?.recommendations || [],
+          createdAt: new Date(result.data.assessment.metadata.assessmentDate),
+          updatedAt: new Date()
+        }
+        
+        setCurrentAssessment(assessment)
+        console.log('评估完成:', assessment)
+      } else {
+        throw new Error(result.error || '评估失败')
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '评估失败，请重试'
       setError(errorMessage)
@@ -118,8 +158,14 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     if (!currentAssessment) return
 
     try {
-      const plan = await refactorAssessmentService.generateImprovementPlan(currentAssessment)
-      setImprovementPlan(plan)
+      const result = await learningApi.generateAbilityImprovementPlan()
+      if (result.success && result.data) {
+        // 将字符串分割成数组
+        const planArray = result.data.split('\n').filter(line => line.trim())
+        setImprovementPlan(planArray)
+      } else {
+        throw new Error(result.error || '生成改进计划失败')
+      }
     } catch (error) {
       console.error('Failed to generate improvement plan:', error)
       setError('生成改进计划失败，请重试')
@@ -129,7 +175,32 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
   const handleExportReport = () => {
     if (!currentAssessment) return
 
-    const report = refactorAssessmentService.exportAssessmentReport(currentAssessment)
+    // 生成Markdown格式的报告
+    const report = [
+      `# 能力评估报告`,
+      ``,
+      `**评估时间**: ${new Date(currentAssessment.createdAt).toLocaleDateString('zh-CN')}`,
+      `**总体评分**: ${currentAssessment.overallScore}/100`,
+      ``,
+      `## 维度评分`,
+      ``,
+      ...Object.entries(currentAssessment.dimensions).map(([key, dimension]) => 
+        `- **${key}**: ${dimension.score}/100`
+      ),
+      ``,
+      `## 优势领域`,
+      ``,
+      ...currentAssessment.strengths.map(strength => `- ${strength}`),
+      ``,
+      `## 待改进项`,
+      ``,
+      ...currentAssessment.weaknesses.map(weakness => `- ${weakness}`),
+      ``,
+      `## 发展建议`,
+      ``,
+      ...currentAssessment.recommendations.map(rec => `- ${rec}`),
+      ``
+    ].join('\n')
     
     // 创建并下载文件
     const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
@@ -244,6 +315,25 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
           />
         )}
 
+        {/* 改进计划显示 */}
+        {improvementPlan && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>💡 个性化改进计划</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {improvementPlan.map((item, index) => (
+                  <div key={index} className="flex items-start space-x-3">
+                    <span className="text-blue-500 mt-1">•</span>
+                    <span className="text-gray-700">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 系统特性说明 */}
         {!currentAssessment && (
           <Card className="mt-8">
@@ -285,18 +375,18 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="text-cyan-600 text-xl">📋</div>
-                  <h4 className="font-semibold">详细报告</h4>
+                  <div className="text-red-600 text-xl">🎯</div>
+                  <h4 className="font-semibold">精准定位</h4>
                   <p className="text-sm text-gray-600">
-                    生成详细的评估报告，支持导出和分享
+                    准确识别技能优势和薄弱环节，为学习规划提供科学依据
                   </p>
                 </div>
                 
                 <div className="space-y-2">
-                  <div className="text-red-600 text-xl">🔒</div>
-                  <h4 className="font-semibold">数据安全</h4>
+                  <div className="text-indigo-600 text-xl">📝</div>
+                  <h4 className="font-semibold">报告导出</h4>
                   <p className="text-sm text-gray-600">
-                    所有评估数据本地存储，保护您的隐私和数据安全
+                    支持评估报告导出，便于保存和分享评估结果
                   </p>
                 </div>
               </div>

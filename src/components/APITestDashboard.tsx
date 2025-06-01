@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  learningApi, 
-  goalApi, 
-  pathApi, 
-  assessmentApi, 
-  simpleApi,
-  handleApiError,
-  handleApiSuccess,
-  isApiSuccess
+  learningApi,
+  simpleApi, 
+  isApiSuccess, 
+  handleApiError, 
+  type LearningGoal,
+  type LearningPath 
 } from '../api'
 
 /**
@@ -49,13 +47,13 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试获取所有目标
-      const goalsResult = goalApi.getAllGoals()
+      const goalsResult = learningApi.getAllGoals()
       
       // 测试激活状态统计
-      const statsResult = goalApi.getActivationStats()
+      const statsResult = learningApi.getActivationStats()
       
       // 测试目标类别
-      const categoriesResult = goalApi.getGoalCategories()
+      const categoriesResult = learningApi.getGoalCategories()
 
       if (isApiSuccess(goalsResult) && isApiSuccess(statsResult) && isApiSuccess(categoriesResult)) {
         setResults(prev => ({
@@ -80,13 +78,13 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试获取所有路径
-      const pathsResult = pathApi.getAllPaths()
+      const pathsResult = learningApi.getAllPaths()
       
       // 测试路径进度统计
-      const progressResult = pathApi.getAllPathsProgress()
+      const progressResult = learningApi.getAllPathsProgress()
       
       // 测试路径建议
-      const recommendationsResult = pathApi.getPathRecommendations()
+      const recommendationsResult = learningApi.getPathRecommendations()
 
       if (isApiSuccess(pathsResult) && isApiSuccess(progressResult) && isApiSuccess(recommendationsResult)) {
         setResults(prev => ({
@@ -111,20 +109,16 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试能力概要
-      const summaryResult = assessmentApi.getAbilitySummary()
+      const summaryResult = learningApi.getAbilitySummary()
       
-      // 测试当前评估
-      const assessmentResult = assessmentApi.getCurrentAssessment()
-      
-      // 测试评估建议
-      const recommendationsResult = assessmentApi.getAssessmentRecommendations()
+      // 测试智能推荐
+      const recommendationsResult = await learningApi.getSmartRecommendations()
 
       if (isApiSuccess(summaryResult) && isApiSuccess(recommendationsResult)) {
         setResults(prev => ({
           ...prev,
           abilitySummary: summaryResult.data,
-          currentAssessment: assessmentResult.data,
-          assessmentRecommendations: recommendationsResult.data
+          smartRecommendations: recommendationsResult.data
         }))
         showMessage('✅ 评估API测试完成')
       } else {
@@ -244,7 +238,7 @@ export const APITestDashboard: React.FC = () => {
         </button>
         
         <div className="text-sm text-gray-500">
-          已完成修复: learningApi, goalApi, pathApi, assessmentApi, simpleApi
+          已完成修复: learningApi, simpleApi
         </div>
       </div>
 
@@ -368,7 +362,7 @@ export const APITestDashboard: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'assessment' && (results.abilitySummary || results.assessmentRecommendations) && (
+        {activeTab === 'assessment' && (results.abilitySummary || results.smartRecommendations) && (
           <div className="space-y-4">
             {results.abilitySummary && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -395,11 +389,11 @@ export const APITestDashboard: React.FC = () => {
               </div>
             )}
             
-            {results.assessmentRecommendations && (
+            {results.smartRecommendations && (
               <div>
-                <h3 className="font-medium mb-2">评估建议</h3>
+                <h3 className="font-medium mb-2">智能推荐</h3>
                 <div className="space-y-1">
-                  {results.assessmentRecommendations.recommendations.map((rec: string, index: number) => (
+                  {results.smartRecommendations.recommendations.map((rec: string, index: number) => (
                     <div key={index} className="text-sm text-blue-700 bg-blue-50 p-2 rounded">
                       💡 {rec}
                     </div>

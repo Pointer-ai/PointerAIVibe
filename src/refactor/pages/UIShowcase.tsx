@@ -52,7 +52,11 @@ import {
  * 
  * 展示所有重构后的UI组件及其用法
  */
-export const UIShowcase: React.FC = () => {
+interface UIShowcaseProps {
+  onNavigate?: (view: string) => void
+}
+
+export const UIShowcase: React.FC<UIShowcaseProps> = ({ onNavigate }) => {
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [formModalOpen, setFormModalOpen] = useState(false)
@@ -67,6 +71,19 @@ export const UIShowcase: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
+      {/* 返回按钮 */}
+      {onNavigate && (
+        <div className="mb-6">
+          <Button 
+            variant="secondary" 
+            onClick={() => onNavigate('main')}
+            className="mb-4"
+          >
+            ← 返回主页
+          </Button>
+        </div>
+      )}
+      
       <Card>
         <CardHeader>
           <CardTitle>🎨 重构系统UI组件库</CardTitle>

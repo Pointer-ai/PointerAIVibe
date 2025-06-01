@@ -23,27 +23,24 @@
  * 
  * 使用方式：
  * ```typescript
- * import { learningApi, goalApi, pathApi, assessmentApi } from '@/api'
+ * import { learningApi, simpleApi, isApiSuccess, handleApiError } from '@/api'
  * 
  * // 获取系统状态
  * const statusResult = await learningApi.getSystemStatus()
  * 
  * // 创建目标
- * const goalResult = await goalApi.createGoal(formData)
+ * const goalResult = await learningApi.createGoal(formData)
  * 
  * // 生成路径
- * const pathResult = await pathApi.generatePathForGoal(goalId)
+ * const pathResult = await learningApi.generatePathForGoal(goalId)
  * 
  * // 执行评估
- * const assessmentResult = await assessmentApi.executeAssessment(input)
+ * const assessmentResult = await learningApi.executeAbilityAssessment(input)
  * ```
  */
 
 // 导出API实例
 export { learningApi } from './learningApi'
-export { goalApi } from './goalApi'
-export { pathApi } from './pathApi'
-export { assessmentApi } from './assessmentApi'
 export { simpleApi } from './simpleApi'
 
 // 导出核心类型
@@ -62,17 +59,13 @@ export type {
   LearningPath, 
   CourseUnit,
   AbilityAssessment, 
-  AssessmentInput 
+  AssessmentInput,
+  GoalFormData,
+  PathProgressStats,
+  AbilitySummary,
+  ActivationResult,
+  GoalActivationStats
 } from './learningApi'
-
-// 导出目标相关类型
-export type { GoalFormData } from './goalApi'
-
-// 导出路径相关类型  
-export type { PathProgressStats } from './pathApi'
-
-// 导出评估相关类型
-export type { AbilitySummary } from './assessmentApi'
 
 /**
  * API使用工具函数

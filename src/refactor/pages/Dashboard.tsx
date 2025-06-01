@@ -25,10 +25,9 @@ import { getCurrentProfile } from '../../utils/profile'
 import { getCurrentAssessment } from '../../modules/abilityAssess'
 import { ProfileManagementPage } from './ProfileManagement'
 import { SystemDiagnosticsPage } from './SystemDiagnostics'
-import { SyncTestPage } from './SyncTestPage'
 
 interface RefactorDashboardProps {
-  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'sync-test' | 'data-management') => void
+  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'data-management') => void
 }
 
 /**
@@ -323,13 +322,13 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('sync-test')}>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('data-management')}>
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
-                <div className="text-4xl">🔄</div>
+                <div className="text-4xl">🗂️</div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">同步测试</h3>
-                  <p className="text-sm text-gray-600">测试Profile切换同步性能</p>
+                  <h3 className="text-lg font-semibold text-gray-900">数据管理</h3>
+                  <p className="text-sm text-gray-600">管理学习数据和功能</p>
                 </div>
               </div>
             </CardContent>

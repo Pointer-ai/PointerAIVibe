@@ -7,15 +7,13 @@ import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
 import { GlobalAIAssistant } from './components/AIAssistant'
-import AgentDemo from './demo/AgentDemo'
 import LearningPathView from './components/LearningPathView'
 import DataInspector from './components/DataInspector'
 import RefactorDashboard from './components/RefactorDashboard'
 import { getCurrentProfileId } from './utils/profile'
-import { TestRandomSearch } from './pages/TestRandomSearch'
 import { GoalSetting } from './components/GoalSetting'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector' | 'refactor-dashboard'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'learning-path-view' | 'data-inspector' | 'refactor-dashboard'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -133,19 +131,6 @@ const App = () => {
                 onProfileSwitch={handleProfileSwitch}
               >
                 <CodeRunnerView />
-              </Layout>
-            )
-          
-          case 'agent-demo':
-            return (
-              <Layout 
-                title="Agent Demo" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <AgentDemo />
               </Layout>
             )
           

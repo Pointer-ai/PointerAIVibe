@@ -13,8 +13,6 @@ src/
 │   └── simpleApi.ts        # 简化API示例
 ├── components/             # 原有组件层
 │   ├── RefactorDashboard.tsx  # 重构系统入口组件
-│   ├── QuickStartExample.tsx  # API使用示例
-│   ├── APITestDashboard.tsx   # API测试组件
 │   └── ...                    # 其他原有组件
 └── refactor/               # ✅ 重构系统目录 (新建)
     ├── README.md           # 重构系统说明文档
@@ -54,11 +52,17 @@ src/
     │   ├── GoalManagement.tsx  # ✅ 目标管理页面
     │   ├── UIShowcase.tsx      # ✅ UI组件展示页面
     │   ├── Assessment.tsx      # ✅ 能力评估页面 (已完成)
+    │   ├── ProfileManagement.tsx    # ✅ Profile管理页面
+    │   ├── SystemDiagnostics.tsx    # ✅ 系统诊断页面
+    │   ├── DataManagement.tsx       # ✅ 数据管理页面
     │   ├── PathPlanning.tsx    # 📋 待开发
     │   └── SystemIntegration.tsx  # 📋 待开发
     ├── services/          # ✅ 业务服务层 (已完成)
     │   ├── aiService.ts        # ✅ AI服务统一接口
     │   ├── assessmentService.ts # ✅ 评估服务 (已完成)
+    │   ├── profileService.ts   # ✅ Profile服务 (已完成)
+    │   ├── legacyDataService.ts # ✅ Legacy数据兼容服务
+    │   ├── syncManager.ts      # ✅ 同步管理服务
     │   ├── goalService.ts      # 📋 目标服务 (待开发)
     │   ├── pathService.ts      # 📋 路径服务 (待开发)
     │   └── apiService.ts       # 📋 API调用服务 (待开发)
@@ -69,7 +73,8 @@ src/
     │   ├── assessment.ts  # ✅ 评估相关类型
     │   ├── ai.ts          # ✅ AI服务相关类型
     │   └── system.ts      # ✅ 系统相关类型
-    ├── hooks/             # 自定义Hooks (预留)
+    ├── hooks/             # 自定义Hooks
+    │   └── useProfileSync.ts   # ✅ Profile同步Hook
     ├── utils/             # 工具函数 (预留)
     └── constants/         # 常量定义 (预留)
 ```
@@ -106,29 +111,28 @@ src/
   - [x] Profile设置 - AI配置、通知、隐私、学习设置
   - [x] Profile服务 - 完整的CRUD操作和数据隔离
   - [x] 数据兼容性 - 与原系统Profile格式兼容
-- [x] **系统同步管理** - Profile切换状态同步优化 ⭐新完成
+- [x] **系统同步管理** - Profile切换状态同步优化 ⭐
   - [x] SyncManager - 统一的同步操作协调器，支持优先级队列
   - [x] useProfileSync Hook - 稳定的Profile状态管理和事件处理
   - [x] Profile切换锁机制 - 防止并发操作和竞态条件
   - [x] 事件驱动通知 - 自动化的Profile切换事件广播
   - [x] AI配置自动重载 - Profile切换时智能配置同步
-- [x] **系统诊断功能** - 完整的系统状态检查和故障排除 ⭐新完成
+- [x] **系统诊断功能** - 完整的系统状态检查和故障排除 ⭐
   - [x] 系统诊断页面 - 全面的系统健康检查界面
   - [x] Profile兼容性测试 - 重构系统与Legacy系统数据一致性验证
   - [x] API配置分析 - 详细的配置对比和问题诊断
   - [x] AI服务健康检查 - 实时API连接和响应测试
   - [x] 配置自动修复 - 智能故障检测和修复建议
-- [x] **同步测试系统** - Profile切换性能测试和监控 ⭐新完成
-  - [x] 同步测试页面 - 可视化的同步状态监控界面
-  - [x] 快速切换压力测试 - 多轮Profile切换稳定性验证
-  - [x] 性能指标统计 - 切换成功率、耗时、状态匹配分析
-  - [x] 实时状态监控 - 加载状态、同步状态、AI配置状态展示
-  - [x] 同步操作可视化 - SyncManager操作队列和执行状态显示
-- [x] **Legacy数据兼容服务** - 原有数据格式完全兼容 ⭐新完成
+- [x] **Legacy数据兼容服务** - 原有数据格式完全兼容 ⭐
   - [x] Legacy数据服务 - 原系统数据格式读取和转换
   - [x] API配置兼容 - 新旧API配置格式无缝转换
   - [x] 存储状态诊断 - localStorage数据完整性检查
   - [x] 数据格式转换 - 智能的新旧格式映射和迁移
+- [x] **数据管理系统** - 完整的学习数据管理功能 ⭐
+  - [x] 数据统计展示 - 实时显示目标、路径、课程、AI动作数量
+  - [x] 数据删除功能 - 支持级联删除和安全确认
+  - [x] 数据导出功能 - 一键导出JSON格式学习数据
+  - [x] 活动记录系统 - 自动记录所有数据操作历史
 
 ### 🔄 开发中
 - [ ] **路径规划页面** - PathPlanning.tsx 基础框架搭建中
@@ -137,6 +141,15 @@ src/
 - [ ] **功能组件库** - features/ 目录下的其他组件
 - [ ] **业务服务层** - services/ 目录下的其他服务
 - [ ] **工具函数库** - utils/ 目录
+
+### 🗑️ 已清理的过期内容
+- [x] **删除过期文档** - REFACTOR_DATA_MANAGEMENT_COMPLETE.md, REFACTOR_COMPLETE.md
+- [x] **删除测试脚本** - test-data-management.js
+- [x] **删除演示文件** - src/demo/AgentDemo.tsx (80KB)
+- [x] **删除测试页面** - src/pages/TestRandomSearch.tsx, src/refactor/pages/SyncTestPage.tsx
+- [x] **删除过期测试** - src/refactor/test/assessmentErrorHandling.test.ts
+- [x] **删除重复文档** - UNIFIED_LEARNING_SYSTEM_GUIDE.md (内容已整合到README.md)
+- [x] **清理空目录** - src/demo/, src/refactor/test/
 
 ## 🤖 AI服务层设计 ⭐新增
 
@@ -392,6 +405,7 @@ Core Data (数据层)
 ✅ **系统诊断功能** - 全面的系统健康检查和故障排除 ⭐新增  
 ✅ **同步测试系统** - 可视化的性能测试和监控 ⭐新增  
 ✅ **Legacy数据兼容** - 完全的向后兼容和数据迁移 ⭐新增  
+✅ **数据管理系统** - 完整的学习数据管理功能 ⭐
 
 现在可以在这个基础上继续开发新的功能模块，每个模块都有明确的位置和职责！UI组件库为整个系统提供了统一、可靠的基础建设。
 

@@ -17,81 +17,105 @@
  */
 
 import React, { useState } from 'react'
-import { RefactorDashboard as RefactorDashboardPage } from '../refactor/pages/Dashboard'
+import { Button } from '../refactor/components/ui/Button/Button'
+import DashboardPage from '../refactor/pages/Dashboard'
 import { GoalManagementPage } from '../refactor/pages/GoalManagement'
-import { UIShowcase } from '../refactor/pages/UIShowcase'
 import { AssessmentPage } from '../refactor/pages/Assessment'
+import UIShowcase from '../refactor/pages/UIShowcase'
 import { ProfileManagementPage } from '../refactor/pages/ProfileManagement'
 import { SystemDiagnosticsPage } from '../refactor/pages/SystemDiagnostics'
-import { SyncTestPage } from '../refactor/pages/SyncTestPage'
 import { DataManagementPage } from '../refactor/pages/DataManagement'
 import { ToastContainer } from '../refactor/components/ui/Alert/Alert'
 
-// 临时占位符页面组件
-const PlaceholderPage: React.FC<{ title: string; description: string; onNavigate: (view: string) => void }> = ({ title, description, onNavigate }) => (
-  <div className="max-w-4xl mx-auto p-6">
-    <div className="text-center">
-      <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
-      <p className="text-gray-600 mb-8">{description}</p>
-      <div className="flex justify-center gap-4">
-        <button 
-          onClick={() => onNavigate('dashboard')}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          返回Dashboard
-        </button>
-      </div>
-    </div>
-  </div>
-)
+type ViewType = 'dashboard' | 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'data-management'
 
-type ViewType = 'dashboard' | 'goal-management' | 'assessment' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'path-planning' | 'system-integration' | 'api-testing' | 'course-content' | 'sync-test' | 'data-management'
+interface RefactorDashboardProps {
+  onBack?: () => void
+}
 
 /**
  * 重构系统入口组件
- * 提供导航和页面路由功能
+ * 负责管理重构系统内的页面导航
  */
-export const RefactorDashboard: React.FC = () => {
+export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onBack }) => {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard')
 
-  const handleNavigate = (view: string) => {
-    setCurrentView(view as ViewType)
+  const handleNavigate = (view: ViewType) => {
+    setCurrentView(view)
   }
 
-  const renderCurrentView = () => {
+  const handleBack = () => {
+    if (currentView === 'dashboard') {
+      onBack?.()
+    } else {
+      setCurrentView('dashboard')
+    }
+  }
+
+  const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <RefactorDashboardPage onNavigate={handleNavigate} />
+        return <DashboardPage onNavigate={handleNavigate} />
       case 'goal-management':
-        return <GoalManagementPage onNavigate={handleNavigate} />
-      case 'data-management':
-        return <DataManagementPage onNavigate={handleNavigate} />
+        return <GoalManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'assessment':
-        return <AssessmentPage onNavigate={handleNavigate} />
+        return <AssessmentPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'ui-showcase':
-        return <UIShowcase onNavigate={handleNavigate} />
+        return <UIShowcase onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'profile-management':
-        return <ProfileManagementPage onNavigate={handleNavigate} />
+        return <ProfileManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'system-diagnostics':
-        return <SystemDiagnosticsPage onNavigate={handleNavigate} />
+        return <SystemDiagnosticsPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
+      case 'data-management':
+        return <DataManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'path-planning':
-        return <PlaceholderPage title="路径规划" description="智能化学习路径生成和管理功能正在开发中..." onNavigate={handleNavigate} />
+        return (
+          <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">🛤️ 路径规划</h1>
+            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
+            <Button onClick={() => setCurrentView('dashboard')}>
+              返回Dashboard
+            </Button>
+          </div>
+        )
       case 'system-integration':
-        return <PlaceholderPage title="系统集成" description="与原系统的深度集成功能正在开发中..." onNavigate={handleNavigate} />
+        return (
+          <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">🔗 系统集成</h1>
+            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
+            <Button onClick={() => setCurrentView('dashboard')}>
+              返回Dashboard
+            </Button>
+          </div>
+        )
       case 'api-testing':
-        return <PlaceholderPage title="API测试" description="API接口测试和调试工具正在开发中..." onNavigate={handleNavigate} />
+        return (
+          <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">🧪 API测试</h1>
+            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
+            <Button onClick={() => setCurrentView('dashboard')}>
+              返回Dashboard
+            </Button>
+          </div>
+        )
       case 'course-content':
-        return <PlaceholderPage title="课程内容" description="个性化课程内容生成功能正在开发中..." onNavigate={handleNavigate} />
-      case 'sync-test':
-        return <SyncTestPage onNavigate={handleNavigate} />
+        return (
+          <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">📚 课程内容</h1>
+            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
+            <Button onClick={() => setCurrentView('dashboard')}>
+              返回Dashboard
+            </Button>
+          </div>
+        )
       default:
-        return <RefactorDashboardPage onNavigate={handleNavigate} />
+        return <DashboardPage onNavigate={handleNavigate} />
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {renderCurrentView()}
+    <div className="h-full">
+      {renderView()}
       <ToastContainer />
     </div>
   )

@@ -24,6 +24,7 @@ import { APITestDashboard } from './APITestDashboard'
 import RefactorDashboardMain from '../refactor/pages/Dashboard'
 import GoalManagement from '../refactor/pages/GoalManagement'
 import UIShowcase from '../refactor/pages/UIShowcase'
+import AssessmentPage from '../refactor/pages/Assessment'
 
 /**
  * 重构系统Dashboard
@@ -262,6 +263,32 @@ export const RefactorDashboard: React.FC = () => {
           </div>
         )
 
+      case 'assessment':
+        return (
+          <div className="space-y-6">
+            {/* 导航栏 */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={handleBackToMain}
+                    className="text-blue-600 hover:text-blue-800 flex items-center space-x-2"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span>返回重构Dashboard</span>
+                  </button>
+                </div>
+                <div className="text-sm text-gray-500">
+                  能力评估
+                </div>
+              </div>
+            </div>
+            <AssessmentPage />
+          </div>
+        )
+
       // 其他页面暂时显示开发中状态
       default:
         return (
@@ -287,7 +314,6 @@ export const RefactorDashboard: React.FC = () => {
               <div className="text-center">
                 <h2 className="text-3xl font-bold text-gray-900 mb-4">
                   {activeView === 'path-planning' && '🛤️ 路径规划'}
-                  {activeView === 'assessment' && '📊 能力评估'}
                   {activeView === 'course-content' && '📚 课程内容'}
                 </h2>
                 <p className="text-gray-600 mb-6">该模块正在重构开发中...</p>

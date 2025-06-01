@@ -16,12 +16,22 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// 重构系统类型定义
+// 重构系统类型定义统一导出
 
-export * from './goal'
-export * from './path'
-export * from './assessment'
+// 基础系统类型
 export * from './system'
+
+// 学习目标相关类型
+export * from './goal'
+
+// 学习路径相关类型  
+export * from './path'
+
+// 能力评估相关类型
+export * from './assessment'
+
+// AI服务相关类型
+export * from './ai'
 
 // 基础类型
 export interface APIResponse<T = any> {

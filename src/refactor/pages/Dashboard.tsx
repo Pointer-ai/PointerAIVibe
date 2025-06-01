@@ -92,8 +92,8 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
         </svg>
       ),
       color: 'from-purple-500 to-pink-500',
-      status: '📋 规划中',
-      available: false
+      status: '✅ 可用',
+      available: true
     },
     {
       id: 'system-integration',

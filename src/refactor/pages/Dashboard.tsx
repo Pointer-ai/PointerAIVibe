@@ -57,14 +57,14 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
       id: 'goal-management',
       view: 'goal-management' as const,
       title: '🎯 目标管理',
-      description: '重构版目标管理系统，优化的CRUD操作和状态管理',
+      description: '重构版目标管理系统，包含完整的CRUD操作、统计分析和批量管理功能',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         </svg>
       ),
       color: 'from-blue-500 to-cyan-500',
-      status: '🔄 开发中',
+      status: '✅ 可用',
       available: true
     },
     {

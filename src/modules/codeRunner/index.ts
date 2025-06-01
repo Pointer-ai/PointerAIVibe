@@ -1,31 +1,26 @@
-// CodeRunner 模块主要导出
+// CodeRunner 模块主要导出 - 重定向到 refactor 系统
 
-// 原有组件导出
-export { CodeRunnerView } from './view'
-export { CodeEditor } from './components/CodeEditor'
-export { OutputPanel } from './components/OutputPanel'
-
-// 新增集成组件导出
-export { 
+// 从 refactor 系统导入所有组件和功能
+export {
+  // 核心组件
+  CodeEditor,
+  OutputPanel,
+  ExecutionOutputPanel,
   IntegratedCodeRunner,
   PythonRunner,
-  JavaScriptRunner, 
+  JavaScriptRunner,
   CppRunner,
   CompactCodeRunner,
-  CodeDisplay
-} from './components/IntegratedCodeRunner'
-
-// Runtime Context 导出
-export {
+  CodeDisplay,
+  
+  // Runtime Context
   RuntimeProvider,
   useRuntime,
   useRuntimeStatus,
   useCodeExecution,
-  useLanguageRuntime
-} from './context/RuntimeContext'
-
-// 服务层导出
-export {
+  useLanguageRuntime,
+  
+  // 服务层
   initRuntime,
   runCode,
   runPython,
@@ -33,18 +28,28 @@ export {
   runJavaScript,
   getRuntimeStatus,
   getLanguageExecutionHistory,
+  getExecutionHistory,
+  clearExecutionHistory,
   cleanup,
   preloadRuntime,
-  preloadAllRuntimes
-} from './service'
+  preloadAllRuntimes,
+  
+  // 类型
+  type CodeExecution,
+  type RuntimeStatus,
+  type SupportedLanguage,
+  type CodeEditorProps,
+  type OutputPanelProps,
+  type IntegratedCodeRunnerProps,
+  type CodeExample,
+  type RuntimeContextValue,
+  
+  // 常量
+  CODE_EXAMPLES
+} from '../../refactor/components/features/CodeRunner'
 
-// 类型导出
-export type {
-  CodeExecution,
-  RuntimeStatus
-} from './types'
+// 保持向后兼容的原有导出
+export { CodeRunnerView } from './view'
 
-export type { IntegratedCodeRunnerProps } from './components/IntegratedCodeRunner'
-
-// 定义支持的语言类型
-export type SupportedLanguage = 'python' | 'cpp' | 'javascript' 
+// 默认导出
+export { default } from '../../refactor/components/features/CodeRunner' 

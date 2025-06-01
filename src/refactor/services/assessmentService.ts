@@ -16,52 +16,172 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// 能力评估服务实现
+// 能力评估服务实现 - 通过Profile Service访问数据
 
 import { Assessment, AssessmentInput, SkillAssessment, DimensionAssessment } from '../types/assessment'
-import { refactorAIService } from './aiService'
+
+// 导入原有的profile工具函数来访问当前Profile的数据
+import {
+  getCurrentProfile,
+  getProfileData,
+  setProfileData
+} from '../../utils/profile'
+
+// 导入原系统的评估类型和服务，用于数据格式转换
+import type { AbilityAssessment } from '../../modules/abilityAssess/types'
+import { analyzeAbility } from '../../modules/abilityAssess/service'
 
 /**
- * 评估服务类
- * 复刻原有评估系统的完整功能
+ * 重构评估服务类
+ * 通过ProfileService访问数据，确保数据隔离和与原系统兼容
  */
 export class RefactorAssessmentService {
-  private readonly STORAGE_KEY = 'refactor_assessments'
-  private readonly CURRENT_KEY = 'refactor_current_assessment'
+  
+  /**
+   * 获取当前Profile的评估数据（原系统格式）
+   */
+  private getCurrentAbilityAssessment(): AbilityAssessment | null {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        console.warn('[RefactorAssessmentService] No active profile')
+        return null
+      }
+
+      return getProfileData('abilityAssessment') || null
+    } catch (error) {
+      console.error('[RefactorAssessmentService] Failed to get ability assessment:', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取评估历史（原系统格式）
+   */
+  private getAssessmentHistoryFromProfile(): any[] {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        console.warn('[RefactorAssessmentService] No active profile')
+        return []
+      }
+
+      return getProfileData('assessmentHistory') || []
+    } catch (error) {
+      console.error('[RefactorAssessmentService] Failed to get assessment history:', error)
+      return []
+    }
+  }
+
+  /**
+   * 保存评估数据到当前Profile（原系统格式）
+   */
+  private saveAbilityAssessment(assessment: AbilityAssessment): void {
+    try {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      // 保存当前评估
+      setProfileData('abilityAssessment', assessment)
+      
+      // 保存到历史记录
+      const history = this.getAssessmentHistoryFromProfile()
+      history.push({
+        date: assessment.metadata.assessmentDate,
+        overallScore: assessment.overallScore,
+        level: this.getScoreLevel(assessment.overallScore)
+      })
+      setProfileData('assessmentHistory', history)
+
+      console.log('[RefactorAssessmentService] Assessment saved to profile:', profile.name)
+    } catch (error) {
+      console.error('[RefactorAssessmentService] Failed to save assessment:', error)
+      throw error
+    }
+  }
 
   /**
    * 执行能力评估
    */
   async executeAssessment(input: AssessmentInput): Promise<Assessment> {
     try {
-      // 使用AI服务进行评估
-      const assessment = await refactorAIService.assessAbility(input)
-      
-      // 保存评估结果
-      this.saveAssessment(assessment)
-      this.setCurrentAssessment(assessment)
-      
-      return assessment
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      // 转换输入格式为原系统格式
+      const originalInput: import('../../modules/abilityAssess/types').AssessmentInput = {
+        type: input.type,
+        content: input.type === 'resume' 
+          ? input.data.resumeText || ''
+          : JSON.stringify(input.data.questionnaire || [])
+      }
+
+      try {
+        // 尝试使用原系统的AI评估服务
+        const abilityAssessment = await analyzeAbility(originalInput)
+        
+        // 数据已经由原系统保存，这里只需要转换格式
+        return this.convertToNewFormat(abilityAssessment)
+      } catch (aiError) {
+        // AI评估失败，检查是否是API配置问题
+        console.warn('[RefactorAssessmentService] AI assessment failed, using fallback:', aiError)
+        
+        // 检查是否是API key相关问题
+        const errorMessage = aiError instanceof Error ? aiError.message : String(aiError)
+        const isApiKeyIssue = errorMessage.toLowerCase().includes('api') || 
+                             errorMessage.toLowerCase().includes('key') ||
+                             errorMessage.toLowerCase().includes('unauthorized') ||
+                             errorMessage.toLowerCase().includes('forbidden')
+        
+        if (isApiKeyIssue) {
+          throw new Error('AI服务暂时不可用，请检查API KEY配置。系统将使用基础评估模式继续为您服务。')
+        }
+        
+        // 其他AI服务问题
+        console.log('[RefactorAssessmentService] Generating fallback assessment due to AI service error')
+        const fallbackAssessment = this.createFallbackAssessment(originalInput)
+        this.saveAbilityAssessment(fallbackAssessment)
+        
+        return this.convertToNewFormat(fallbackAssessment)
+      }
     } catch (error) {
       console.error('[RefactorAssessmentService] Assessment execution failed:', error)
       
-      // 如果AI评估失败，返回基础模拟评估
-      const fallbackAssessment = this.createFallbackAssessment(input)
-      this.saveAssessment(fallbackAssessment)
-      this.setCurrentAssessment(fallbackAssessment)
+      // 如果是我们抛出的API key错误，直接重新抛出
+      if (error instanceof Error && error.message.includes('API KEY')) {
+        throw error
+      }
       
-      return fallbackAssessment
+      // 其他错误，提供基础评估
+      const originalInput: import('../../modules/abilityAssess/types').AssessmentInput = {
+        type: input.type,
+        content: input.type === 'resume' 
+          ? input.data.resumeText || ''
+          : JSON.stringify(input.data.questionnaire || [])
+      }
+      
+      const fallbackAssessment = this.createFallbackAssessment(originalInput)
+      this.saveAbilityAssessment(fallbackAssessment)
+      
+      return this.convertToNewFormat(fallbackAssessment)
     }
   }
 
   /**
-   * 获取当前评估结果
+   * 获取当前评估结果（转换为新格式）
    */
   getCurrentAssessment(): Assessment | null {
     try {
-      const currentProfile = this.getCurrentProfileId()
-      const data = localStorage.getItem(`${this.CURRENT_KEY}_${currentProfile}`)
-      return data ? JSON.parse(data) : null
+      const abilityAssessment = this.getCurrentAbilityAssessment()
+      if (!abilityAssessment) {
+        return null
+      }
+
+      return this.convertToNewFormat(abilityAssessment)
     } catch (error) {
       console.error('[RefactorAssessmentService] Failed to get current assessment:', error)
       return null
@@ -69,13 +189,19 @@ export class RefactorAssessmentService {
   }
 
   /**
-   * 获取评估历史
+   * 获取评估历史（转换为新格式）
    */
   getAssessmentHistory(): Assessment[] {
     try {
-      const currentProfile = this.getCurrentProfileId()
-      const data = localStorage.getItem(`${this.STORAGE_KEY}_${currentProfile}`)
-      return data ? JSON.parse(data) : []
+      const profile = getCurrentProfile()
+      if (!profile) {
+        return []
+      }
+
+      // 目前只返回当前评估作为历史的一部分
+      // 后续可以扩展为完整的历史记录
+      const current = this.getCurrentAssessment()
+      return current ? [current] : []
     } catch (error) {
       console.error('[RefactorAssessmentService] Failed to get assessment history:', error)
       return []
@@ -87,29 +213,34 @@ export class RefactorAssessmentService {
    */
   async updateAssessment(assessmentId: string, updates: Partial<Assessment>): Promise<Assessment | null> {
     try {
-      const history = this.getAssessmentHistory()
-      const assessmentIndex = history.findIndex(a => a.id === assessmentId)
-      
-      if (assessmentIndex === -1) {
+      const profile = getCurrentProfile()
+      if (!profile) {
+        throw new Error('没有活跃的Profile')
+      }
+
+      const currentAbilityAssessment = this.getCurrentAbilityAssessment()
+      if (!currentAbilityAssessment) {
         throw new Error('Assessment not found')
       }
 
-      const updatedAssessment = {
-        ...history[assessmentIndex],
-        ...updates,
-        updatedAt: new Date()
+      // 应用更新到原系统格式
+      const updatedAbilityAssessment: AbilityAssessment = {
+        ...currentAbilityAssessment,
+        metadata: {
+          ...currentAbilityAssessment.metadata,
+          // 注意：这里需要小心更新，确保不破坏原系统结构
+        }
       }
 
-      history[assessmentIndex] = updatedAssessment
-      this.saveAssessmentHistory(history)
-
-      // 如果更新的是当前评估，也更新当前评估
-      const current = this.getCurrentAssessment()
-      if (current && current.id === assessmentId) {
-        this.setCurrentAssessment(updatedAssessment)
+      // 如果有评分更新，需要更新
+      if (updates.overallScore !== undefined) {
+        updatedAbilityAssessment.overallScore = updates.overallScore
       }
 
-      return updatedAssessment
+      // 保存更新后的数据
+      this.saveAbilityAssessment(updatedAbilityAssessment)
+
+      return this.convertToNewFormat(updatedAbilityAssessment)
     } catch (error) {
       console.error('[RefactorAssessmentService] Failed to update assessment:', error)
       return null
@@ -121,20 +252,16 @@ export class RefactorAssessmentService {
    */
   deleteAssessment(assessmentId: string): boolean {
     try {
-      const history = this.getAssessmentHistory()
-      const filteredHistory = history.filter(a => a.id !== assessmentId)
+      const profile = getCurrentProfile()
+      if (!profile) {
+        return false
+      }
+
+      // 清空当前评估
+      setProfileData('abilityAssessment', null)
       
-      if (filteredHistory.length === history.length) {
-        return false // 没有找到要删除的评估
-      }
-
-      this.saveAssessmentHistory(filteredHistory)
-
-      // 如果删除的是当前评估，清空当前评估
-      const current = this.getCurrentAssessment()
-      if (current && current.id === assessmentId) {
-        this.clearCurrentAssessment()
-      }
+      // 清空历史记录
+      setProfileData('assessmentHistory', [])
 
       return true
     } catch (error) {
@@ -153,13 +280,40 @@ export class RefactorAssessmentService {
         throw new Error('No assessment available for improvement plan')
       }
 
-      const context = {
-        assessment: targetAssessment,
-        weaknesses: targetAssessment.weaknesses,
-        currentLevel: this.getAssessmentLevel(targetAssessment.overallScore)
+      // 基于评估结果生成建议，暂时使用静态建议
+      const suggestions: string[] = []
+      
+      // 基于弱点生成建议
+      targetAssessment.weaknesses.forEach(weakness => {
+        if (weakness.includes('算法')) {
+          suggestions.push('建议多做算法练习，推荐使用LeetCode等平台')
+        } else if (weakness.includes('项目')) {
+          suggestions.push('建议参与更多实际项目，积累项目经验')
+        } else if (weakness.includes('基础')) {
+          suggestions.push('建议加强编程基础，多做基础练习')
+        } else if (weakness.includes('系统设计')) {
+          suggestions.push('建议学习系统设计相关知识，了解大型系统架构')
+        } else {
+          suggestions.push(`针对"${weakness}"，建议制定专门的学习计划`)
+        }
+      })
+
+      // 基于评分生成建议
+      if (targetAssessment.overallScore < 50) {
+        suggestions.push('建议从基础开始，制定系统的学习计划')
+      } else if (targetAssessment.overallScore < 70) {
+        suggestions.push('建议在现有基础上深入学习，提升实战经验')
+      } else {
+        suggestions.push('建议向更高级的技能领域挑战，如架构设计等')
       }
 
-      return await refactorAIService.generateLearningAdvice(context)
+      return suggestions.length > 0 ? suggestions : [
+        '建议加强编程基础练习',
+        '多做算法和数据结构题目',
+        '参与开源项目提升实战经验',
+        '学习系统设计相关知识',
+        '提升代码审查和团队协作能力'
+      ]
     } catch (error) {
       console.error('[RefactorAssessmentService] Failed to generate improvement plan:', error)
       return [
@@ -184,9 +338,9 @@ export class RefactorAssessmentService {
     weakPoints: string[]
     needsAssessment: boolean
   } {
-    const current = this.getCurrentAssessment()
+    const abilityAssessment = this.getCurrentAbilityAssessment()
     
-    if (!current) {
+    if (!abilityAssessment) {
       return {
         hasAssessment: false,
         overallScore: 0,
@@ -200,12 +354,12 @@ export class RefactorAssessmentService {
 
     return {
       hasAssessment: true,
-      overallScore: current.overallScore,
-      level: this.getAssessmentLevel(current.overallScore),
-      lastUpdate: current.updatedAt.toISOString(),
-      strongPoints: current.strengths,
-      weakPoints: current.weaknesses,
-      needsAssessment: this.checkIfReassessmentNeeded(current)
+      overallScore: abilityAssessment.overallScore,
+      level: this.getAssessmentLevel(abilityAssessment.overallScore),
+      lastUpdate: abilityAssessment.metadata.assessmentDate,
+      strongPoints: abilityAssessment.report?.strengths || [],
+      weakPoints: abilityAssessment.report?.improvements || [],
+      needsAssessment: this.checkIfReassessmentNeeded(abilityAssessment)
     }
   }
 
@@ -215,204 +369,396 @@ export class RefactorAssessmentService {
   exportAssessmentReport(assessment?: Assessment): string {
     const targetAssessment = assessment || this.getCurrentAssessment()
     if (!targetAssessment) {
-      return '暂无评估数据可导出'
+      return '暂无评估数据'
     }
 
     const level = this.getAssessmentLevel(targetAssessment.overallScore)
     
-    return `# 能力评估报告
-
-## 基本信息
-- 评估时间：${new Date(targetAssessment.createdAt).toLocaleDateString('zh-CN')}
-- 评估类型：${targetAssessment.type === 'resume' ? '简历分析' : '问卷评估'}
-- 总体评分：${targetAssessment.overallScore}/100
-- 能力等级：${level}
-
-## 维度评分
-${Object.entries(targetAssessment.dimensions).map(([key, dimension]) => `
-### ${dimension.name}
-- 评分：${dimension.score}/100
-- 概述：${dimension.summary}
-${dimension.skills.map(skill => `- ${skill.skill}: ${skill.score}分 (${skill.level})`).join('\n')}
-`).join('')}
-
-## 优势领域
-${targetAssessment.strengths.map(s => `- ${s}`).join('\n')}
-
-## 待改进领域
-${targetAssessment.weaknesses.map(w => `- ${w}`).join('\n')}
-
-## 发展建议
-${targetAssessment.recommendations.map(r => `- ${r}`).join('\n')}
-
----
-*报告生成时间：${new Date().toLocaleString('zh-CN')}*`
-  }
-
-  /**
-   * 私有方法：获取当前Profile ID
-   */
-  private getCurrentProfileId(): string {
-    try {
-      // 方法1: 从新的profiles系统获取
-      const profiles = localStorage.getItem('profiles')
-      if (profiles) {
-        const profileStore = JSON.parse(profiles)
-        if (profileStore.currentProfileId) {
-          return profileStore.currentProfileId
-        }
-      }
-
-      // 方法2: 从旧系统获取（兼容）
-      const currentProfile = localStorage.getItem('currentProfile')
-      if (currentProfile) {
-        return currentProfile
-      }
-
-      // 方法3: 默认值
-      return 'default'
-    } catch (error) {
-      console.warn('[RefactorAssessmentService] Failed to get current profile ID:', error)
-      return 'default'
-    }
-  }
-
-  /**
-   * 私有方法：保存评估结果
-   */
-  private saveAssessment(assessment: Assessment): void {
-    const history = this.getAssessmentHistory()
+    let report = `# 能力评估报告\n\n`
+    report += `**评估日期**: ${targetAssessment.createdAt.toLocaleDateString()}\n`
+    report += `**总体评分**: ${targetAssessment.overallScore}/100\n`
+    report += `**能力级别**: ${level}\n\n`
     
-    // 检查是否已存在相同ID的评估
-    const existingIndex = history.findIndex(a => a.id === assessment.id)
-    if (existingIndex >= 0) {
-      history[existingIndex] = assessment
-    } else {
-      history.unshift(assessment) // 新评估放在最前面
+    report += `## 各维度评分\n\n`
+    Object.entries(targetAssessment.dimensions).forEach(([key, dimension]) => {
+      report += `### ${dimension.name}\n`
+      report += `- **评分**: ${dimension.score}/100\n`
+      report += `- **概要**: ${dimension.summary}\n`
+      if (dimension.skills.length > 0) {
+        report += `- **技能**: ${dimension.skills.map(s => s.skill).join(', ')}\n`
+      }
+      report += `\n`
+    })
+    
+    if (targetAssessment.strengths.length > 0) {
+      report += `## 优势领域\n\n`
+      targetAssessment.strengths.forEach(strength => {
+        report += `- ${strength}\n`
+      })
+      report += `\n`
     }
-
-    // 保持最多10个历史记录
-    if (history.length > 10) {
-      history.splice(10)
+    
+    if (targetAssessment.weaknesses.length > 0) {
+      report += `## 待改进领域\n\n`
+      targetAssessment.weaknesses.forEach(weakness => {
+        report += `- ${weakness}\n`
+      })
+      report += `\n`
     }
-
-    this.saveAssessmentHistory(history)
+    
+    if (targetAssessment.recommendations.length > 0) {
+      report += `## 学习建议\n\n`
+      targetAssessment.recommendations.forEach(recommendation => {
+        report += `- ${recommendation}\n`
+      })
+      report += `\n`
+    }
+    
+    return report
   }
 
+  // ========== 私有方法 ==========
+
   /**
-   * 私有方法：保存评估历史
+   * 将原系统的AbilityAssessment转换为新系统的Assessment
    */
-  private saveAssessmentHistory(history: Assessment[]): void {
-    const currentProfile = this.getCurrentProfileId()
-    localStorage.setItem(`${this.STORAGE_KEY}_${currentProfile}`, JSON.stringify(history))
+  private convertToNewFormat(abilityAssessment: AbilityAssessment): Assessment {
+    const profile = getCurrentProfile()
+    
+    return {
+      id: `assessment_${Date.now()}`,
+      profileId: profile?.id || 'unknown',
+      type: abilityAssessment.metadata.assessmentMethod === 'resume' ? 'resume' : 'questionnaire',
+      overallScore: abilityAssessment.overallScore,
+      dimensions: this.convertDimensions(abilityAssessment.dimensions),
+      strengths: abilityAssessment.report?.strengths || [],
+      weaknesses: abilityAssessment.report?.improvements || [],
+      recommendations: abilityAssessment.report?.recommendations || [],
+      createdAt: new Date(abilityAssessment.metadata.assessmentDate),
+      updatedAt: new Date(abilityAssessment.metadata.assessmentDate)
+    }
   }
 
   /**
-   * 私有方法：设置当前评估
+   * 转换维度数据
    */
-  private setCurrentAssessment(assessment: Assessment): void {
-    const currentProfile = this.getCurrentProfileId()
-    localStorage.setItem(`${this.CURRENT_KEY}_${currentProfile}`, JSON.stringify(assessment))
+  private convertDimensions(dimensions: AbilityAssessment['dimensions']): { [key: string]: DimensionAssessment } {
+    const result: { [key: string]: DimensionAssessment } = {}
+    
+    Object.entries(dimensions).forEach(([key, dimension]) => {
+      const skills: SkillAssessment[] = Object.entries(dimension.skills).map(([skillName, skillData]) => {
+        const score = typeof skillData === 'number' ? skillData : skillData.score || 0
+        const confidence = typeof skillData === 'number' ? 1.0 : skillData.confidence || 1.0
+        
+        return {
+          skill: skillName,
+          level: this.getSkillLevel(score),
+          score,
+          confidence,
+          evidence: [],
+          improvements: []
+        }
+      })
+
+      result[key] = {
+        name: this.getDimensionDisplayName(key),
+        score: dimension.score,
+        skills,
+        summary: `${this.getDimensionDisplayName(key)}维度评估`,
+        recommendations: [`继续提升${this.getDimensionDisplayName(key)}技能`]
+      }
+    })
+    
+    return result
   }
 
   /**
-   * 私有方法：清空当前评估
+   * 获取维度显示名称
    */
-  private clearCurrentAssessment(): void {
-    const currentProfile = this.getCurrentProfileId()
-    localStorage.removeItem(`${this.CURRENT_KEY}_${currentProfile}`)
+  private getDimensionDisplayName(dimension: string): string {
+    const dimensionMap: Record<string, string> = {
+      programming: '编程基础',
+      algorithm: '算法能力',
+      project: '项目能力',
+      systemDesign: '系统设计',
+      communication: '沟通协作'
+    }
+    return dimensionMap[dimension] || dimension
   }
 
   /**
-   * 私有方法：获取评估等级
+   * 获取技能级别
+   */
+  private getSkillLevel(score: number): 'beginner' | 'intermediate' | 'advanced' | 'expert' {
+    if (score >= 90) return 'expert'
+    if (score >= 70) return 'advanced'
+    if (score >= 50) return 'intermediate'
+    return 'beginner'
+  }
+
+  /**
+   * 获取评估级别
    */
   private getAssessmentLevel(score: number): string {
-    if (score >= 90) return '专家'
-    if (score >= 75) return '高级'
+    if (score >= 90) return '专家级'
+    if (score >= 80) return '高级'
+    if (score >= 70) return '中高级'
     if (score >= 60) return '中级'
+    if (score >= 50) return '中初级'
     if (score >= 40) return '初级'
-    return '入门'
+    return '入门级'
   }
 
   /**
-   * 私有方法：检查是否需要重新评估
+   * 获取评分级别（原系统兼容）
    */
-  private checkIfReassessmentNeeded(assessment: Assessment): boolean {
-    const daysSinceUpdate = Math.floor(
-      (Date.now() - new Date(assessment.updatedAt).getTime()) / (1000 * 60 * 60 * 24)
-    )
-    return daysSinceUpdate > 90 // 90天后建议重新评估
+  private getScoreLevel(score: number): string {
+    if (score >= 80) return 'advanced'
+    if (score >= 60) return 'intermediate'
+    if (score >= 40) return 'beginner'
+    return 'novice'
   }
 
   /**
-   * 私有方法：创建回退评估结果
+   * 检查是否需要重新评估
    */
-  private createFallbackAssessment(input: AssessmentInput): Assessment {
-    const baseScore = 50 // 基础分数
+  private checkIfReassessmentNeeded(assessment: AbilityAssessment | Assessment): boolean {
+    let assessmentDate: Date
+    
+    if ('metadata' in assessment) {
+      // AbilityAssessment类型
+      assessmentDate = new Date(assessment.metadata.assessmentDate)
+    } else {
+      // Assessment类型
+      assessmentDate = assessment.createdAt
+    }
+    
+    const now = new Date()
+    const daysDiff = (now.getTime() - assessmentDate.getTime()) / (1000 * 60 * 60 * 24)
+    
+    // 30天后建议重新评估
+    return daysDiff > 30
+  }
 
-    // 创建基础维度评估
-    const dimensions: { [key: string]: DimensionAssessment } = {
-      programming: {
-        name: '编程基础',
-        score: baseScore,
-        skills: [
-          this.createSkillAssessment('语法基础', baseScore),
-          this.createSkillAssessment('数据结构', baseScore - 10),
-          this.createSkillAssessment('代码质量', baseScore + 5)
-        ],
-        summary: '编程基础能力中等，有一定的代码编写经验',
-        recommendations: ['加强语法练习', '深入学习数据结构']
-      },
-      algorithm: {
-        name: '算法能力',
-        score: baseScore - 15,
-        skills: [
-          this.createSkillAssessment('排序算法', baseScore - 20),
-          this.createSkillAssessment('搜索算法', baseScore - 15),
-          this.createSkillAssessment('动态规划', baseScore - 25)
-        ],
-        summary: '算法能力有待提升，建议多做练习',
-        recommendations: ['刷算法题', '学习经典算法']
+  /**
+   * 创建兜底评估（原系统格式）
+   */
+  private createFallbackAssessment(input: import('../../modules/abilityAssess/types').AssessmentInput): AbilityAssessment {
+    const now = new Date().toISOString()
+    
+    // 基于输入内容进行简单分析，提供更有意义的基础评估
+    let baseScore = 45 // 默认基础分数
+    let analysisText = ''
+    
+    if (input.type === 'resume') {
+      // 确保content是字符串类型
+      const contentStr = typeof input.content === 'string' ? input.content : String(input.content)
+      analysisText = contentStr.toLowerCase()
+      
+      // 简单的关键词分析来调整评分
+      const keywords = {
+        // 编程语言
+        programming: ['javascript', 'python', 'java', 'react', 'vue', 'node', 'html', 'css', 'typescript'],
+        // 算法相关
+        algorithm: ['算法', 'algorithm', 'leetcode', '数据结构', 'data structure'],
+        // 项目经验
+        project: ['项目', 'project', '开发', 'develop', '实现', 'implement'],
+        // 系统设计
+        system: ['架构', 'architecture', '设计', 'design', '系统', 'system'],
+        // 工作经验
+        experience: ['年', 'year', '经验', 'experience', '工作', 'work']
+      }
+      
+      let foundKeywords = 0
+      Object.values(keywords).forEach(keywordList => {
+        if (keywordList.some(keyword => analysisText.includes(keyword))) {
+          foundKeywords++
+          baseScore += 8 // 每个领域增加8分
+        }
+      })
+      
+      // 经验年限分析
+      const experienceMatches = analysisText.match(/(\d+)\s*年|(\d+)\s*year/g)
+      if (experienceMatches) {
+        const years = Math.max(...experienceMatches.map(match => parseInt(match.match(/\d+/)?.[0] || '0')))
+        if (years >= 3) baseScore += 15
+        else if (years >= 1) baseScore += 10
+      }
+    } else {
+      // 问卷评估
+      try {
+        const contentStr = typeof input.content === 'string' ? input.content : String(input.content)
+        const questionnaire = JSON.parse(contentStr)
+        if (Array.isArray(questionnaire) && questionnaire.length > 0) {
+          // 根据问卷回答质量调整分数
+          const answerQuality = questionnaire.length * 5 // 每个回答增加5分
+          baseScore += Math.min(answerQuality, 25) // 最多增加25分
+        }
+      } catch (e) {
+        console.warn('Failed to parse questionnaire content')
       }
     }
-
+    
+    // 确保分数在合理范围内
+    baseScore = Math.max(30, Math.min(75, baseScore))
+    
+    // 根据总分调整各维度评分
+    const scoreFactor = baseScore / 50 // 基准分数50
+    
     return {
-      id: `fallback_${Date.now()}`,
-      profileId: this.getCurrentProfileId(),
-      type: input.type,
       overallScore: baseScore,
-      dimensions,
-      strengths: ['基础扎实', '学习态度良好'],
-      weaknesses: ['算法能力不足', '缺乏实战经验'],
-      recommendations: ['多做项目实践', '加强算法学习', '参与开源贡献'],
-      createdAt: new Date(),
-      updatedAt: new Date()
+      dimensions: {
+        programming: {
+          score: Math.round(baseScore * 1.1), // 编程基础稍高
+          weight: 0.3,
+          skills: {
+            syntax: Math.round(baseScore * 1.0),
+            dataStructures: Math.round(baseScore * 0.9),
+            errorHandling: Math.round(baseScore * 0.95),
+            codeQuality: Math.round(baseScore * 0.9),
+            tooling: Math.round(baseScore * 0.85)
+          }
+        },
+        algorithm: {
+          score: Math.round(baseScore * 0.8), // 算法相对较低
+          weight: 0.25,
+          skills: {
+            stringProcessing: Math.round(baseScore * 0.9),
+            recursion: Math.round(baseScore * 0.7),
+            dynamicProgramming: Math.round(baseScore * 0.6),
+            graph: Math.round(baseScore * 0.65),
+            tree: Math.round(baseScore * 0.75),
+            sorting: Math.round(baseScore * 0.8),
+            searching: Math.round(baseScore * 0.8),
+            greedy: Math.round(baseScore * 0.65)
+          }
+        },
+        project: {
+          score: Math.round(baseScore * 0.95),
+          weight: 0.25,
+          skills: {
+            planning: Math.round(baseScore * 0.9),
+            architecture: Math.round(baseScore * 0.8),
+            implementation: Math.round(baseScore * 0.95),
+            testing: Math.round(baseScore * 0.75),
+            deployment: Math.round(baseScore * 0.7),
+            documentation: Math.round(baseScore * 0.85)
+          }
+        },
+        systemDesign: {
+          score: Math.round(baseScore * 0.7), // 系统设计较难
+          weight: 0.15,
+          skills: {
+            scalability: Math.round(baseScore * 0.6),
+            reliability: Math.round(baseScore * 0.7),
+            performance: Math.round(baseScore * 0.7),
+            security: Math.round(baseScore * 0.6),
+            databaseDesign: Math.round(baseScore * 0.75)
+          }
+        },
+        communication: {
+          score: Math.round(baseScore * 1.15), // 沟通能力稍高
+          weight: 0.05,
+          skills: {
+            codeReview: Math.round(baseScore * 1.0),
+            technicalWriting: Math.round(baseScore * 1.0),
+            teamCollaboration: Math.round(baseScore * 1.2),
+            mentoring: Math.round(baseScore * 0.9),
+            presentation: Math.round(baseScore * 1.0)
+          }
+        }
+      },
+      metadata: {
+        assessmentDate: now,
+        assessmentMethod: input.type,
+        confidence: 0.6 // 基础评估置信度较低
+      },
+      report: {
+        summary: input.type === 'resume' ? 
+          '基于简历内容的基础评估，建议配置AI服务获得更精准的分析' :
+          '基于问卷回答的基础评估，建议配置AI服务获得更精准的分析',
+        strengths: this.generateBasicStrengths(baseScore),
+        improvements: this.generateBasicImprovements(baseScore),
+        recommendations: this.generateBasicRecommendations(baseScore, input.type)
+      }
     }
   }
 
   /**
-   * 私有方法：创建技能评估
+   * 生成基础优势点
    */
-  private createSkillAssessment(skill: string, score: number): SkillAssessment {
-    let level: 'beginner' | 'intermediate' | 'advanced' | 'expert'
+  private generateBasicStrengths(score: number): string[] {
+    const strengths: string[] = []
     
-    if (score >= 80) level = 'expert'
-    else if (score >= 65) level = 'advanced'
-    else if (score >= 45) level = 'intermediate'
-    else level = 'beginner'
-
-    return {
-      skill,
-      level,
-      score: Math.max(0, Math.min(100, score)),
-      confidence: 0.7,
-      evidence: ['基于输入信息推断'],
-      improvements: ['需要更多实践']
+    if (score >= 60) {
+      strengths.push('具备良好的编程基础')
+      strengths.push('学习能力和适应性强')
+    } else if (score >= 45) {
+      strengths.push('具备基本的编程概念理解')
+      strengths.push('有一定的学习积极性')
+    } else {
+      strengths.push('学习态度积极')
+      strengths.push('有编程学习的基础动机')
     }
+    
+    if (score >= 50) {
+      strengths.push('具备一定的问题解决能力')
+    }
+    
+    return strengths
+  }
+
+  /**
+   * 生成基础改进建议
+   */
+  private generateBasicImprovements(score: number): string[] {
+    const improvements: string[] = []
+    
+    if (score < 60) {
+      improvements.push('需要加强编程基础知识')
+      improvements.push('建议多做基础算法练习')
+    }
+    
+    if (score < 50) {
+      improvements.push('需要系统学习数据结构')
+      improvements.push('建议从简单项目开始实践')
+    }
+    
+    improvements.push('需要提升系统设计思维')
+    improvements.push('建议增加实际项目经验')
+    
+    return improvements
+  }
+
+  /**
+   * 生成基础学习建议
+   */
+  private generateBasicRecommendations(score: number, assessmentType: string): string[] {
+    const recommendations: string[] = []
+    
+    if (assessmentType === 'resume') {
+      recommendations.push('建议完善简历中的技术细节')
+      recommendations.push('可以尝试填写问卷评估获得更全面的分析')
+    } else {
+      recommendations.push('基于问卷回答，建议制定系统的学习计划')
+    }
+    
+    if (score < 50) {
+      recommendations.push('从编程基础开始，建议学习一门主流编程语言')
+      recommendations.push('每天坚持编程练习，培养编程思维')
+    } else if (score < 70) {
+      recommendations.push('在现有基础上，重点提升算法和数据结构')
+      recommendations.push('尝试参与开源项目或完成实际项目')
+    } else {
+      recommendations.push('继续深入学习，可以考虑系统设计和架构')
+      recommendations.push('分享技术经验，提升影响力')
+    }
+    
+    recommendations.push('配置AI服务后可获得更精准的个性化建议')
+    
+    return recommendations
   }
 }
 
-/**
- * 默认评估服务实例
- */
+// 导出单例实例
 export const refactorAssessmentService = new RefactorAssessmentService() 

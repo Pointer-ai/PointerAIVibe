@@ -411,6 +411,151 @@ export class RefactorGoalService {
   }
 
   /**
+   * 从自然语言生成目标推荐
+   */
+  async generateFromNLP(nlpInput: string): Promise<any[]> {
+    try {
+      // 这里应该调用AI服务来解析自然语言并生成推荐
+      // 暂时返回模拟数据
+      console.log('[RefactorGoalService] Generating recommendations from NLP:', nlpInput)
+      
+      return [
+        {
+          id: `nlp_${Date.now()}`,
+          title: '基于描述的学习目标',
+          description: `根据您的描述"${nlpInput}"生成的个性化学习目标`,
+          category: 'custom',
+          priority: 2,
+          reasoning: '基于自然语言分析生成',
+          estimatedTimeWeeks: 8,
+          requiredSkills: ['基础编程', '学习能力'],
+          outcomes: ['掌握相关技能', '完成实际项目'],
+          targetLevel: 'intermediate' as const,
+          confidence: 0.8
+        }
+      ]
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to generate from NLP:', error)
+      return []
+    }
+  }
+
+  /**
+   * 生成结构化推荐
+   */
+  async generateRecommendations(
+    selectedCategories: string[],
+    questionnaireAnswers: any
+  ): Promise<any[]> {
+    try {
+      console.log('[RefactorGoalService] Generating structured recommendations:', {
+        categories: selectedCategories,
+        answers: questionnaireAnswers
+      })
+      
+      // 基于选择的类别和问卷答案生成推荐
+      const recommendations = selectedCategories.map((category, index) => ({
+        id: `rec_${category}_${Date.now()}_${index}`,
+        title: `${this.getCategoryDisplayName(category)}学习目标`,
+        description: `基于您选择的${this.getCategoryDisplayName(category)}领域生成的学习目标`,
+        category,
+        priority: index + 1,
+        reasoning: `根据您的经验水平(${questionnaireAnswers.experience_level})和学习时间(${questionnaireAnswers.learning_time})推荐`,
+        estimatedTimeWeeks: this.getEstimatedWeeks(questionnaireAnswers.learning_time),
+        requiredSkills: this.getRequiredSkills(category),
+        outcomes: this.getExpectedOutcomes(category),
+        targetLevel: this.mapExperienceToLevel(questionnaireAnswers.experience_level),
+        confidence: 0.9
+      }))
+      
+      return recommendations
+    } catch (error) {
+      console.error('[RefactorGoalService] Failed to generate recommendations:', error)
+      return []
+    }
+  }
+
+  // ========== 私有辅助方法 ==========
+
+  /**
+   * 获取类别显示名称
+   */
+  private getCategoryDisplayName(category: string): string {
+    const categoryMap: Record<string, string> = {
+      'frontend': '前端开发',
+      'backend': '后端开发',
+      'fullstack': '全栈开发',
+      'mobile': '移动开发',
+      'ai': 'AI/机器学习',
+      'data': '数据科学',
+      'game': '游戏开发',
+      'automation': '自动化测试'
+    }
+    return categoryMap[category] || category
+  }
+
+  /**
+   * 根据学习时间估算周数
+   */
+  private getEstimatedWeeks(learningTime: string): number {
+    const timeMap: Record<string, number> = {
+      '1-2小时/天': 12,
+      '2-4小时/天': 8,
+      '4-6小时/天': 6,
+      '6+小时/天': 4
+    }
+    return timeMap[learningTime] || 8
+  }
+
+  /**
+   * 获取类别所需技能
+   */
+  private getRequiredSkills(category: string): string[] {
+    const skillsMap: Record<string, string[]> = {
+      'frontend': ['HTML', 'CSS', 'JavaScript', 'React/Vue'],
+      'backend': ['编程语言', '数据库', 'API设计', '服务器部署'],
+      'fullstack': ['前端技术', '后端技术', '数据库', '部署运维'],
+      'mobile': ['移动开发框架', 'UI设计', '原生开发'],
+      'ai': ['Python', '机器学习', '数据处理', '算法'],
+      'data': ['Python/R', '数据分析', '统计学', '可视化'],
+      'game': ['游戏引擎', '图形编程', '物理引擎'],
+      'automation': ['测试框架', '脚本编程', 'CI/CD']
+    }
+    return skillsMap[category] || ['基础编程']
+  }
+
+  /**
+   * 获取预期成果
+   */
+  private getExpectedOutcomes(category: string): string[] {
+    const outcomesMap: Record<string, string[]> = {
+      'frontend': ['构建响应式网站', '掌握现代前端框架', '优化用户体验'],
+      'backend': ['开发API服务', '设计数据库', '部署应用'],
+      'fullstack': ['独立开发完整应用', '前后端协调', '项目部署'],
+      'mobile': ['发布移动应用', '跨平台开发', '用户界面设计'],
+      'ai': ['构建机器学习模型', '数据分析项目', 'AI应用开发'],
+      'data': ['数据分析报告', '可视化仪表板', '预测模型'],
+      'game': ['完成游戏项目', '掌握游戏机制', '发布作品'],
+      'automation': ['自动化测试套件', 'CI/CD流程', '提升开发效率']
+    }
+    return outcomesMap[category] || ['掌握相关技能']
+  }
+
+  /**
+   * 将经验水平映射为目标级别
+   */
+  private mapExperienceToLevel(experience: string): 'beginner' | 'intermediate' | 'advanced' {
+    const levelMap: Record<string, 'beginner' | 'intermediate' | 'advanced'> = {
+      '完全新手': 'beginner',
+      '有一些基础': 'beginner',
+      '中等水平': 'intermediate',
+      '比较熟练': 'intermediate',
+      '专家级别': 'advanced'
+    }
+    return levelMap[experience] || 'intermediate'
+  }
+
+  /**
    * 私有方法：将老格式转换为新格式
    */
   private convertToNewFormat(oldGoal: LearningGoal): Goal {

@@ -23,7 +23,7 @@ import { Badge } from '../../ui/Badge/Badge'
 import { Loading } from '../../ui/Loading/Loading'
 import { Alert } from '../../ui/Alert/Alert'
 import { refactorAIService } from '../../../services/aiService'
-import { goalService } from '../../../services/goalService'
+import { refactorGoalService } from '../../../services/goalService'
 import { GoalFormData } from '../../../types/goal'
 import { AIServiceStatus } from '../../../types/ai'
 
@@ -160,10 +160,27 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
 
   const checkAIStatus = async () => {
     try {
-      const status = await refactorAIService.getStatus()
-      setAiStatus(status)
+      const isHealthy = await refactorAIService.checkHealth()
+      const config = refactorAIService.getConfig()
+      setAiStatus({
+        isConfigured: !!config,
+        available: !!config && isHealthy,
+        isHealthy,
+        provider: config?.provider || null,
+        model: config?.model || null,
+        lastCheck: new Date()
+      })
     } catch (error) {
       console.error('Failed to check AI status:', error)
+      setAiStatus({
+        isConfigured: false,
+        available: false,
+        isHealthy: false,
+        provider: null,
+        model: null,
+        lastCheck: new Date(),
+        error: error instanceof Error ? error.message : '检查状态失败'
+      })
     }
   }
 
@@ -194,10 +211,10 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
 
       if (currentMode === 'nlp') {
         // 自然语言处理模式
-        recommendations = await goalService.generateFromNLP(nlpInput)
+        recommendations = await refactorGoalService.generateFromNLP(nlpInput)
       } else {
         // 结构化推荐模式
-        recommendations = await goalService.generateRecommendations(
+        recommendations = await refactorGoalService.generateRecommendations(
           selectedCategories,
           questionnaireAnswers
         )

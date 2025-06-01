@@ -25,6 +25,7 @@ import { learningApi } from '../../api'
 import { refactorAIService } from '../services/aiService'
 import { Assessment, AssessmentInput, DimensionAssessment } from '../types/assessment'
 import { AIServiceStatus } from '../types/ai'
+import { refactorAssessmentService } from '../services/assessmentService'
 
 interface AssessmentPageProps {
   onNavigate?: (view: string) => void
@@ -46,12 +47,13 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
 
   const loadCurrentAssessment = async () => {
     try {
-      const result = await learningApi.getAbilitySummary()
-      if (result.success && result.data?.hasAssessment) {
-        // 这里需要从系统中获取完整的评估数据
-        // 目前先设置为null，表示需要重新评估
-        setCurrentAssessment(null)
-      }
+      // 直接从service获取当前评估
+      const current = refactorAssessmentService.getCurrentAssessment()
+      setCurrentAssessment(current)
+      
+      // 获取能力概要
+      const summary = refactorAssessmentService.getAbilitySummary()
+      console.log('Assessment summary:', summary)
     } catch (error) {
       console.error('Failed to load assessment:', error)
     }
@@ -59,10 +61,27 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
 
   const checkAIStatus = async () => {
     try {
-      const status = await refactorAIService.getStatus()
-      setAiStatus(status)
+      const isHealthy = await refactorAIService.checkHealth()
+      const config = refactorAIService.getConfig()
+      setAiStatus({
+        isConfigured: !!config,
+        available: !!config && isHealthy,
+        isHealthy,
+        provider: config?.provider || null,
+        model: config?.model || null,
+        lastCheck: new Date()
+      })
     } catch (error) {
       console.error('Failed to check AI status:', error)
+      setAiStatus({
+        isConfigured: false,
+        available: false,
+        isHealthy: false,
+        provider: null,
+        model: null,
+        lastCheck: new Date(),
+        error: error instanceof Error ? error.message : '检查状态失败'
+      })
     }
   }
 
@@ -101,47 +120,44 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     setError(null)
 
     try {
-      // 转换为API期望的格式
-      const apiInput = {
-        type: input.type,
-        content: input.type === 'resume' ? input.data.resumeText || '' : JSON.stringify(input.data.questionnaire || {})
-      }
+      console.log('Starting assessment with input:', input)
       
-      // 使用统一的learningApi执行评估
-      const result = await learningApi.executeAbilityAssessment(apiInput)
+      // 直接使用新的assessment service
+      const assessment = await refactorAssessmentService.executeAssessment(input)
       
-      if (result.success && result.data) {
-        // 转换为Assessment格式
-        const assessment: Assessment = {
-          id: `assessment_${Date.now()}`,
-          profileId: 'current',
-          type: input.type,
-          overallScore: result.data.assessment.overallScore,
-          dimensions: Object.entries(result.data.assessment.dimensions).reduce((acc, [key, value]: [string, any]) => {
-            acc[key] = {
-              name: key,
-              score: value.score,
-              skills: [], // 暂时设为空数组
-              summary: `${key}维度评估`,
-              recommendations: [`继续提升${key}技能`]
-            }
-            return acc
-          }, {} as { [key: string]: DimensionAssessment }),
-          strengths: result.data.assessment.report?.strengths || [],
-          weaknesses: result.data.assessment.report?.improvements || [],
-          recommendations: result.data.assessment.report?.recommendations || [],
-          createdAt: new Date(result.data.assessment.metadata.assessmentDate),
-          updatedAt: new Date()
-        }
-        
-        setCurrentAssessment(assessment)
-        console.log('评估完成:', assessment)
-      } else {
-        throw new Error(result.error || '评估失败')
-      }
+      setCurrentAssessment(assessment)
+      console.log('评估完成:', assessment)
+      
+      // 生成改进计划
+      const plan = await refactorAssessmentService.generateImprovementPlan(assessment)
+      setImprovementPlan(plan)
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '评估失败，请重试'
-      setError(errorMessage)
+      
+      // 检查是否是API key相关的错误
+      if (errorMessage.includes('API KEY') || errorMessage.includes('AI服务暂时不可用')) {
+        setError(errorMessage)
+        
+        // 如果是API key问题，也尝试显示基础评估
+        try {
+          console.log('API服务不可用，尝试基础评估模式...')
+          const basicAssessment = await refactorAssessmentService.executeAssessment(input)
+          setCurrentAssessment(basicAssessment)
+          
+          // 生成基础改进计划
+          const plan = await refactorAssessmentService.generateImprovementPlan(basicAssessment)
+          setImprovementPlan(plan)
+          
+          // 显示信息但不清除错误，让用户知道是基础模式
+          console.log('基础评估模式完成')
+        } catch (fallbackError) {
+          console.error('基础评估也失败了:', fallbackError)
+        }
+      } else {
+        setError(errorMessage)
+      }
+      
       console.error('Assessment failed:', error)
     } finally {
       setLoading(false)
@@ -154,64 +170,38 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
     setError(null)
   }
 
-  const handleGenerateImprovement = async () => {
+  const handleGenerateImprovementPlan = async () => {
     if (!currentAssessment) return
-
+    
     try {
-      const result = await learningApi.generateAbilityImprovementPlan()
-      if (result.success && result.data) {
-        // 将字符串分割成数组
-        const planArray = result.data.split('\n').filter(line => line.trim())
-        setImprovementPlan(planArray)
-      } else {
-        throw new Error(result.error || '生成改进计划失败')
-      }
+      const plan = await refactorAssessmentService.generateImprovementPlan(currentAssessment)
+      setImprovementPlan(plan)
     } catch (error) {
       console.error('Failed to generate improvement plan:', error)
-      setError('生成改进计划失败，请重试')
+      setError('生成改进计划失败')
     }
   }
 
   const handleExportReport = () => {
     if (!currentAssessment) return
-
-    // 生成Markdown格式的报告
-    const report = [
-      `# 能力评估报告`,
-      ``,
-      `**评估时间**: ${new Date(currentAssessment.createdAt).toLocaleDateString('zh-CN')}`,
-      `**总体评分**: ${currentAssessment.overallScore}/100`,
-      ``,
-      `## 维度评分`,
-      ``,
-      ...Object.entries(currentAssessment.dimensions).map(([key, dimension]) => 
-        `- **${key}**: ${dimension.score}/100`
-      ),
-      ``,
-      `## 优势领域`,
-      ``,
-      ...currentAssessment.strengths.map(strength => `- ${strength}`),
-      ``,
-      `## 待改进项`,
-      ``,
-      ...currentAssessment.weaknesses.map(weakness => `- ${weakness}`),
-      ``,
-      `## 发展建议`,
-      ``,
-      ...currentAssessment.recommendations.map(rec => `- ${rec}`),
-      ``
-    ].join('\n')
     
-    // 创建并下载文件
-    const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `能力评估报告_${new Date().toLocaleDateString('zh-CN')}.md`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    try {
+      const report = refactorAssessmentService.exportAssessmentReport(currentAssessment)
+      
+      // 创建并下载文件
+      const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `能力评估报告_${new Date().toLocaleDateString()}.md`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export report:', error)
+      setError('导出报告失败')
+    }
   }
 
   return (
@@ -244,8 +234,42 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
             <div className="space-y-2">
               <p className="font-medium">⚠️ AI服务未配置</p>
               <p className="text-sm">
-                请先在Profile设置中配置AI API密钥以获得更准确的评估结果。
-                未配置AI服务时将使用基础评估模式。
+                当前未配置AI API密钥，系统将使用基础评估模式。配置AI服务后可获得：
+              </p>
+              <ul className="text-sm ml-4 space-y-1">
+                <li>• 更精准的简历和技能分析</li>
+                <li>• 个性化的能力评估报告</li>
+                <li>• 智能的学习建议和职业规划</li>
+              </ul>
+              {onNavigate && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onNavigate('profile-settings')}
+                  className="mt-2"
+                >
+                  立即配置AI服务
+                </Button>
+              )}
+            </div>
+          </Alert>
+        )}
+
+        {/* AI服务错误状态 */}
+        {aiStatus && aiStatus.isConfigured && !aiStatus.available && (
+          <Alert variant="error" className="mb-6">
+            <div className="space-y-2">
+              <p className="font-medium">❌ AI服务连接失败</p>
+              <p className="text-sm">
+                已配置API密钥但服务无法连接，可能原因：
+              </p>
+              <ul className="text-sm ml-4 space-y-1">
+                <li>• API密钥无效或已过期</li>
+                <li>• 网络连接问题</li>
+                <li>• API服务暂时不可用</li>
+              </ul>
+              <p className="text-sm">
+                系统将使用基础评估模式，建议检查配置后重试。
               </p>
               {onNavigate && (
                 <Button
@@ -254,7 +278,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
                   onClick={() => onNavigate('profile-settings')}
                   className="mt-2"
                 >
-                  前往配置
+                  检查配置
                 </Button>
               )}
             </div>
@@ -263,8 +287,30 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
 
         {/* 错误提示 */}
         {error && (
-          <Alert variant="error" className="mb-6">
-            {error}
+          <Alert variant={currentAssessment ? "warning" : "error"} className="mb-6">
+            <div className="space-y-2">
+              <p className="font-medium">
+                {currentAssessment ? "⚠️ 基础评估模式" : "❌ 评估失败"}
+              </p>
+              <p className="text-sm">{error}</p>
+              {currentAssessment && (
+                <p className="text-sm">
+                  评估已完成，但使用的是基础模式。配置AI服务后可获得更精准的分析。
+                </p>
+              )}
+            </div>
+          </Alert>
+        )}
+
+        {/* 成功提示 - 当有评估结果且没有错误时 */}
+        {currentAssessment && !error && aiStatus?.available && (
+          <Alert variant="success" className="mb-6">
+            <div className="space-y-2">
+              <p className="font-medium">✅ AI智能评估完成</p>
+              <p className="text-sm">
+                已使用AI服务对您的能力进行全面分析，评估结果更加精准和个性化。
+              </p>
+            </div>
           </Alert>
         )}
 
@@ -309,7 +355,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ onNavigate }) =>
           <AssessmentResult
             assessment={currentAssessment}
             onReassess={handleReassess}
-            onGenerateImprovement={handleGenerateImprovement}
+            onGenerateImprovement={handleGenerateImprovementPlan}
             onExport={handleExportReport}
             loading={loading}
           />

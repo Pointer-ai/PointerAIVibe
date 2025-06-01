@@ -30,8 +30,9 @@ export * from './components/ui'
 export * from './components/features/Assessment'
 
 // 服务层导出
-export { refactorAIService, createAIService } from './services/aiService'
+export { refactorAIService } from './services/aiService'
 export { refactorAssessmentService } from './services/assessmentService'
+export { refactorGoalService } from './services/goalService'
 
 // 类型定义导出
 export * from './types'

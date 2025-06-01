@@ -21,7 +21,7 @@ import { getCurrentProfile } from '../../utils/profile'
 import { getCurrentAssessment } from '../../modules/abilityAssess'
 
 interface RefactorDashboardProps {
-  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content') => void
+  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase') => void
 }
 
 /**
@@ -51,6 +51,20 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
       ),
       color: 'from-blue-500 to-cyan-500',
       status: '🔄 开发中',
+      available: true
+    },
+    {
+      id: 'ui-showcase',
+      view: 'ui-showcase' as const,
+      title: '🎨 UI组件库',
+      description: '重构后的UI组件系统展示，包含所有基础组件的使用方法',
+      icon: (
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+        </svg>
+      ),
+      color: 'from-pink-500 to-rose-500',
+      status: '✅ 可用',
       available: true
     },
     {

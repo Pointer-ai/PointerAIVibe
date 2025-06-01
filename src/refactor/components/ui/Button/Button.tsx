@@ -18,7 +18,7 @@
 
 import React from 'react'
 
-interface ButtonProps {
+export interface ButtonProps {
   children: React.ReactNode
   variant?: 'primary' | 'secondary' | 'danger' | 'success'
   size?: 'sm' | 'md' | 'lg'

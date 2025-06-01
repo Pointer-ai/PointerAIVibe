@@ -76,6 +76,30 @@ pnpm dev
 6. **🆕 管理学习路径** - 在"学习路径管理"中可视化管理目标和路径
 7. **🆕 验证数据存储** - 在"数据检查器"中查看AI工具调用结果
 
+## 📚 详细使用指南
+
+### 🎯 完整系统指南
+**详细文档**: [UNIFIED_LEARNING_SYSTEM_GUIDE.md](./UNIFIED_LEARNING_SYSTEM_GUIDE.md)
+
+包含完整的功能说明、API参考和最佳实践：
+- 🚀 **快速开始** - 3步集成和配置指南
+- 🎯 **目标管理** - 3个目标激活限制的详细说明
+- 🤖 **AI工具系统** - 22个AI工具的完整使用方法
+- 💻 **代码环境** - Monaco Editor集成和多语言支持
+- 📊 **数据管理** - CoreData架构和Profile管理
+- 🔧 **开发扩展** - 添加新功能和自定义组件
+
+### 📖 快速参考
+
+| 功能模块 | 说明 | 位置 |
+|---------|-----|------|
+| **AI智能对话** | 真实LLM Function Calling | Dashboard → "AI智能对话" |
+| **目标管理** | 3个目标激活限制，智能状态管理 | Dashboard → "目标设定" |
+| **路径管理** | 可视化学习路径，进度跟踪 | Dashboard → "学习路径管理" |
+| **能力评估** | 简历解析，多维度技能分析 | Dashboard → "能力评估" |
+| **代码环境** | Monaco Editor，多语言支持 | Dashboard → "代码运行" |
+| **系统演示** | 22个AI工具完整测试 | Dashboard → "AI系统演示" |
+
 ## 🔧 核心功能模块
 
 ### 📊 智能能力评估系统
@@ -613,30 +637,26 @@ npm run build
 
 ### 📖 核心文档
 - **[README.md](README.md)** - 项目概述和快速开始指南
-- **[AI_SYSTEM_GUIDE.md](AI_SYSTEM_GUIDE.md)** - AI学习系统完整指南（API配置、Function Calling、22个AI工具）
-- **[COMPLETE_DEMO_GUIDE.md](COMPLETE_DEMO_GUIDE.md)** - 完整演示和验证指南（功能测试、数据验证、工具调用确认）
-- **[LEARNING_SYSTEM_GUIDE.md](LEARNING_SYSTEM_GUIDE.md)** - 学习系统架构和组件说明
-- **[GOAL_SETTING_INTEGRATION_GUIDE.md](GOAL_SETTING_INTEGRATION_GUIDE.md)** - 目标设定页面与Learning System统一架构集成指南
-- **[ABILITY_ASSESSMENT_INTEGRATION_GUIDE.md](ABILITY_ASSESSMENT_INTEGRATION_GUIDE.md)** - 能力评估系统与Learning System统一架构集成指南
+- **[UNIFIED_LEARNING_SYSTEM_GUIDE.md](UNIFIED_LEARNING_SYSTEM_GUIDE.md)** - 学习系统统一指南（完整功能说明、API参考、最佳实践）
 
-### 📁 开发文档
-- **[docs/archive/](docs/archive/)** - 历史文档归档
-  - `PATH_GENERATION_UPGRADE_SUMMARY.md` - 路径生成升级记录
-  - `ENHANCED_PATH_GENERATION.md` - 增强路径生成说明
+### 📁 模块文档
+- **[src/modules/coreData/README.md](src/modules/coreData/README.md)** - 核心数据管理系统
+- **[src/components/AIAssistant/README.md](src/components/AIAssistant/README.md)** - 悟语AI助手组件
+- **[src/modules/codeRunner/README.md](src/modules/codeRunner/README.md)** - Monaco Editor代码运行环境
+- **[src/modules/codeRunner/INTEGRATION_GUIDE.md](src/modules/codeRunner/INTEGRATION_GUIDE.md)** - 代码运行器集成指南
 
 ### 🎯 文档使用建议
 
 **新用户推荐阅读顺序**：
 1. 📖 **README.md** - 了解项目概况和核心功能
-2. 🎯 **COMPLETE_DEMO_GUIDE.md** - 完整测试所有功能
-3. 🤖 **AI_SYSTEM_GUIDE.md** - 深入了解AI系统技术细节
-4. 🏗️ **LEARNING_SYSTEM_GUIDE.md** - 理解系统架构设计
+2. 🎯 **UNIFIED_LEARNING_SYSTEM_GUIDE.md** - 完整的系统使用指南
+3. 📁 **模块文档** - 深入了解特定模块的技术细节
 
 **开发者推荐阅读顺序**：
-1. 🤖 **AI_SYSTEM_GUIDE.md** - 了解Function Calling技术实现
-2. 🏗️ **LEARNING_SYSTEM_GUIDE.md** - 掌握系统架构和组件
-3. 🎯 **COMPLETE_DEMO_GUIDE.md** - 验证开发环境和功能
-4. 📁 **docs/archive/** - 查阅历史技术决策
+1. 🎯 **UNIFIED_LEARNING_SYSTEM_GUIDE.md** - 了解系统架构和API
+2. 📁 **src/modules/coreData/README.md** - 掌握数据管理核心
+3. 📁 **src/modules/codeRunner/INTEGRATION_GUIDE.md** - 代码环境集成
+4. 📁 **src/components/AIAssistant/README.md** - AI助手技术实现
 
 ---
 

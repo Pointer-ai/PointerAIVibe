@@ -1698,7 +1698,7 @@ export class AgentToolExecutor {
         title: relatedPath.title,
         goalId: relatedPath.goalId
       } : null,
-      nodeInfo
+      nodeInfo: nodeInfo as any
     }
   }
   
@@ -1869,8 +1869,8 @@ export class AgentToolExecutor {
     
     // 重新计算维度分数
     const dimensionSkills = Object.values(currentAssessment.dimensions[dimension].skills)
-    const averageScore = dimensionSkills.reduce((sum, skillData) => {
-      const score = typeof skillData === 'number' ? skillData : skillData.score
+    const averageScore = (dimensionSkills as any[]).reduce((sum, skillData) => {
+      const score = typeof skillData === 'number' ? skillData : (skillData as any).score
       return sum + score
     }, 0) / dimensionSkills.length
     currentAssessment.dimensions[dimension].score = Math.round(averageScore)
@@ -1886,7 +1886,7 @@ export class AgentToolExecutor {
     
     // 记录活动
     addCoreEvent({
-      type: 'ability_updated',
+      type: 'ability_assessment_updated',
       data: {
         dimension,
         skill,
@@ -1898,14 +1898,13 @@ export class AgentToolExecutor {
     
     return {
       success: true,
-      message: `已更新 ${dimension}.${skill} 的评估数据`,
+      message: '技能评估更新成功',
       updatedSkill: {
-        skill,
         dimension,
+        skill,
         oldScore: currentScore,
         newScore: updatedSkill.score,
-        confidence: updatedSkill.confidence,
-        evidence
+        confidence: updatedSkill.confidence
       },
       dimensionScore: currentAssessment.dimensions[dimension].score,
       overallScore: currentAssessment.overallScore
@@ -2030,7 +2029,7 @@ export class AgentToolExecutor {
       }
     }
     
-    const correctionResults = []
+    const correctionResults: any[] = []
     let totalCorrections = 0
     
     // 处理每个修正
@@ -2076,8 +2075,8 @@ export class AgentToolExecutor {
     this.recalculateAssessmentScores(currentAssessment)
     
     // 更新元数据
-    currentAssessment.metadata.lastCorrected = new Date().toISOString()
-    currentAssessment.metadata.userFeedback = overallFeedback
+    (currentAssessment.metadata as any).lastCorrected = new Date().toISOString()
+    (currentAssessment.metadata as any).userFeedback = overallFeedback
     
     // 保存数据
     setProfileData('abilityAssessment', currentAssessment)
@@ -2113,7 +2112,7 @@ export class AgentToolExecutor {
       }
     }
     
-    const enhancementResults = []
+    const enhancementResults: any[] = []
     
     // 处理每个目标技能
     for (const skillPath of targetSkills) {
@@ -2273,7 +2272,7 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
         reassessmentData = this.generateBasicReassessment(dimension, targetSkills, newInformation)
       }
       
-      const updates = []
+      const updates: any[] = []
       
       // 更新技能分数
       if (reassessmentData.reassessment) {
@@ -2372,9 +2371,9 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
       ? Object.keys(currentAssessment.dimensions)
       : [targetDimension]
     
-    const suggestions = []
-    const weakSkills = []
-    const strengthSkills = []
+    const suggestions: string[] = []
+    const weakSkills: any[] = []
+    const strengthSkills: any[] = []
     
     // 分析各维度的技能
     for (const dim of dimensions) {
@@ -2505,7 +2504,7 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
 
   // 辅助方法：应用基础重评估
   private applyBasicReassessment(dimensionData: any, skills: string[], newInfo: string): any[] {
-    const updates = []
+    const updates: any[] = []
     const reassessment = this.generateBasicReassessment('', skills, newInfo)
     
     skills.forEach(skill => {

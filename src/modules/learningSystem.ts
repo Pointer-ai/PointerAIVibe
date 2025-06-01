@@ -417,7 +417,7 @@ export class LearningSystemService {
       const path = await this.pathService.generateLearningPath(goal.id, pathConfig)
 
       // 3. 为每个路径节点生成课程内容
-      const courseUnits = []
+      const courseUnits: any[] = []
       for (const node of path.nodes) {
         try {
           const unit = await this.contentService.generateCourseContent(node.id, {

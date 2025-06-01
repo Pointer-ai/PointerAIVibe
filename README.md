@@ -4,6 +4,7 @@
 > 智能化编程教育平台，提供个性化学习路径和AI助手指导
 
 [![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://pointer-ai.github.io/PointerAIVibe/)
+[![Build Status](https://github.com/pointer-ai/PointerAIVibe/workflows/Deploy%20to%20GitHub%20Pages/badge.svg)](https://github.com/pointer-ai/PointerAIVibe/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## 🎯 项目愿景

@@ -954,7 +954,7 @@ ${context}
 
   // 辅助函数：生成里程碑
   const generateMilestones = (nodes: any[]) => {
-    const milestones = []
+    const milestones: any[] = []
     const midPoint = Math.floor(nodes.length / 2)
     
     if (nodes.length > 3) {

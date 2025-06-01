@@ -5,7 +5,7 @@
 
 [![Demo](https://img.shields.io/badge/Demo-Live-brightgreen)](https://pointer-ai.github.io/PointerAIVibe/)
 [![Build Status](https://github.com/pointer-ai/PointerAIVibe/workflows/Deploy%20to%20GitHub%20Pages/badge.svg)](https://github.com/pointer-ai/PointerAIVibe/actions)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 
 ## 🎯 项目愿景
 
@@ -505,10 +505,100 @@ npm run build
 - 遵循ESLint和Prettier配置
 - 编写有意义的commit message
 - 为新功能添加相应的测试
+- **在新创建的源代码文件头部添加AGPLv3许可证声明**（参考 [LICENSE_HEADER.txt](LICENSE_HEADER.txt)）
 
-## 📄 许可证
+### AGPLv3许可证头部模板
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+在新创建的源代码文件开头添加以下许可证声明：
+
+```javascript
+/*
+ * Pointer.ai - AI驱动的个性化编程学习平台
+ * Copyright (C) 2024 Pointer.ai
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+```
+
+## 📄 许可证 & 版权保护
+
+### 🛡️ AGPLv3 强力保护
+
+本项目采用 **GNU Affero General Public License v3.0 (AGPLv3)** 许可证，这是专门为防止开源项目被商业化滥用而设计的强力copyleft许可证。
+
+#### 🔒 核心保护机制
+
+**AGPLv3 相比 MIT 的关键优势：**
+
+- **🚫 防止闭源商业化**：任何基于本项目的衍生作品都必须开源
+- **🌐 网络服务保护**：即使作为网络服务提供，也必须开放源代码
+- **📚 教育领域专属保护**：防止直接抄袭用于其他教育产品并收费
+- **🔄 强制回馈社区**：所有改进都必须回馈给开源社区
+
+#### ⚖️ 许可证条款要点
+
+**✅ 允许的行为：**
+- 自由使用、学习、研究本项目
+- 复制、分发本项目（必须保留AGPLv3许可证）
+- 修改和改进代码
+- 个人或内部使用
+- 教育和学术用途
+
+**❌ 禁止的行为：**
+- 将代码用于闭源商业产品
+- 提供基于本代码的收费网络服务而不开源完整代码
+- 移除或修改许可证声明
+- 声称对本项目拥有专有权利
+
+**🔄 强制义务：**
+- 任何衍生作品必须同样使用AGPLv3许可证
+- 网络服务必须向用户提供完整源代码下载
+- 必须保留原作者版权信息
+- 修改后的代码必须明确标注修改内容
+
+#### 🎯 专门针对教育领域的保护
+
+这个许可证选择特别针对教育科技领域的以下问题：
+
+1. **🏢 防止直接商业化**：教育公司不能直接拿代码做成收费产品
+2. **🌐 SaaS服务保护**：提供在线教育服务时必须开源所有相关代码  
+3. **🔄 促进教育创新**：确保教育技术的改进能够惠及整个教育社区
+4. **⚖️ 公平竞争环境**：商业公司如需使用，必须同样开源回馈社区
+
+#### 📞 商业合作
+
+如果您代表教育机构或公司，希望在不开源的情况下使用本项目：
+
+- 📧 **联系我们**: tzion@pointer.ai - 可讨论商业授权或合作事宜
+- 🤝 **技术合作**: 欢迎以开源方式共同改进项目
+- 💡 **定制服务**: 可提供基于开源版本的定制开发服务
+- 🎓 **教育支持**: 为教育机构提供免费技术支持
+
+#### 🔍 License合规检查
+
+为确保合规使用，请检查：
+- [ ] 是否保留了完整的AGPLv3许可证文件
+- [ ] 是否在衍生作品中声明了基于本项目
+- [ ] 网络服务是否提供了源代码下载链接
+- [ ] 修改的代码是否标注了修改说明
+- [ ] 衍生项目是否同样采用AGPLv3许可证
+
+**详细信息请查看 [LICENSE](LICENSE) 文件。**
+
+---
+
+*选择AGPLv3许可证是为了保护开源社区的共同利益，确保优秀的教育技术能够真正服务于教育事业，而不是被少数商业实体垄断。我们欢迎所有形式的开源贡献和合作！*
 
 ## 🙏 致谢
 

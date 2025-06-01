@@ -3,6 +3,27 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "description": "AI驱动的个性化编程学习平台 - 智能化编程教育平台，提供个性化学习路径和AI助手指导",
+  "license": "AGPL-3.0-or-later",
+  "author": "Pointer.ai",
+  "homepage": "https://pointer-ai.github.io/PointerAIVibe/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pointer-ai/PointerAIVibe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pointer-ai/PointerAIVibe/issues"
+  },
+  "keywords": [
+    "ai",
+    "education",
+    "programming",
+    "learning",
+    "react",
+    "typescript",
+    "vite",
+    "agpl"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

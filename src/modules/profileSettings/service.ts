@@ -35,7 +35,17 @@ const getDefaultAPIConfig = (): APIConfig => {
  */
 const getSettings = (): ProfileSettings => {
   const settings = getProfileData('settings') as ProfileSettings
-  return settings || {
+  
+  // 确保所有必需字段都存在，提供向后兼容性
+  if (settings) {
+    return {
+      apiConfig: settings.apiConfig || getDefaultAPIConfig(),
+      preferences: settings.preferences || {},
+      activityHistory: Array.isArray(settings.activityHistory) ? settings.activityHistory : []
+    }
+  }
+  
+  return {
     apiConfig: getDefaultAPIConfig(),
     preferences: {},
     activityHistory: []
@@ -88,10 +98,13 @@ export const saveAPIConfig = (config: APIConfig): void => {
     }
   }
   
+  // 确保 activityHistory 是数组，添加安全检查
+  const existingHistory = Array.isArray(currentSettings.activityHistory) ? currentSettings.activityHistory : []
+  
   const newSettings: ProfileSettings = {
     ...currentSettings,
     apiConfig: config,
-    activityHistory: [newRecord, ...currentSettings.activityHistory].slice(0, 100)
+    activityHistory: [newRecord, ...existingHistory].slice(0, 100)
   }
   
   saveSettings(newSettings)
@@ -133,8 +146,11 @@ export const addActivityRecord = (record: Omit<ActivityRecord, 'id' | 'timestamp
     ...record
   }
   
+  // 确保 activityHistory 是数组，添加安全检查
+  const existingHistory = Array.isArray(currentSettings.activityHistory) ? currentSettings.activityHistory : []
+  
   // 保留最近 100 条记录
-  const updatedHistory = [newRecord, ...currentSettings.activityHistory].slice(0, 100)
+  const updatedHistory = [newRecord, ...existingHistory].slice(0, 100)
   
   const newSettings: ProfileSettings = {
     ...currentSettings,
@@ -149,7 +165,7 @@ export const addActivityRecord = (record: Omit<ActivityRecord, 'id' | 'timestamp
  */
 export const getActivityHistory = (): ActivityRecord[] => {
   const settings = getSettings()
-  return settings.activityHistory
+  return Array.isArray(settings.activityHistory) ? settings.activityHistory : []
 }
 
 /**

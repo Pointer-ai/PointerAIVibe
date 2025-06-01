@@ -68,6 +68,7 @@ export interface AIService {
 // AI服务状态
 export interface AIServiceStatus {
   isConfigured: boolean
+  available: boolean
   provider: AIProvider | null
   model: string | null
   isHealthy: boolean

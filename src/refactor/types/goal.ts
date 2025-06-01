@@ -61,4 +61,16 @@ export interface GoalFilter {
   category?: string[]
   priority?: number[]
   targetLevel?: string[]
+}
+
+// 目标表单数据类型
+export interface GoalFormData {
+  title: string
+  description: string
+  category: string
+  priority: number
+  targetLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert'
+  estimatedTimeWeeks: number
+  requiredSkills: string[]
+  outcomes: string[]
 } 

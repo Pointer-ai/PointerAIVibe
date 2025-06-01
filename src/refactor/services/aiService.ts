@@ -244,6 +244,7 @@ export class RefactorAIService implements AIService {
 
     return {
       isConfigured,
+      available: isConfigured && isHealthy,
       provider: this.config?.provider || null,
       model: this.config?.model || null,
       isHealthy,

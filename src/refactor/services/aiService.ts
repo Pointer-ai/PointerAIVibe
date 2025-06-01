@@ -16,17 +16,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// AI服务统一接口实现
+// AI服务层 - 统一的AI服务接口
 
-import { 
-  AIService, 
-  AIModelConfig, 
-  AIProvider, 
-  AIServiceError, 
-  AIServiceStatus,
-  ChatContext 
+import {
+  AIService,
+  AIModelConfig,
+  AssessmentInput,
+  Assessment,
+  ChatMessage,
+  AIProvider
 } from '../types/ai'
-import { Assessment, AssessmentInput } from '../types/assessment'
+
+// 导入profile service来获取配置
+import { refactorProfileService } from './profileService'
 
 /**
  * AI服务实现类
@@ -34,390 +36,369 @@ import { Assessment, AssessmentInput } from '../types/assessment'
  */
 export class RefactorAIService implements AIService {
   private config: AIModelConfig | null = null
+  private configLoading = false
 
   constructor(config?: AIModelConfig) {
     if (config) {
       this.config = config
     } else {
-      // 尝试从profile配置加载
+      // 从profile配置加载
       this.loadConfigFromProfile()
+      
+      // 监听Profile切换事件，自动重新加载配置
+      this.setupProfileSwitchListener()
     }
+  }
+
+  /**
+   * 设置Profile切换监听器
+   */
+  private setupProfileSwitchListener(): void {
+    const profileSwitchHandler = () => {
+      console.log('[RefactorAIService] Profile switched, reloading config...')
+      // 延迟一点时间确保Profile切换完成
+      setTimeout(() => {
+        this.loadConfigFromProfile()
+      }, 50)
+    }
+
+    // 添加监听器
+    refactorProfileService.addProfileSwitchListener(profileSwitchHandler)
   }
 
   /**
    * 从profile配置加载AI配置
    */
   private loadConfigFromProfile(): void {
+    // 防止重复加载
+    if (this.configLoading) {
+      console.log('[RefactorAIService] Config loading in progress, skipping...')
+      return
+    }
+
+    this.configLoading = true
+
     try {
-      // 方法1: 从新的profiles系统加载
-      const profiles = localStorage.getItem('profiles')
-      if (profiles) {
-        const profileStore = JSON.parse(profiles)
-        const currentProfileId = profileStore.currentProfileId
+      const currentProfile = refactorProfileService.getCurrentProfile()
+      
+      if (currentProfile && currentProfile.data.settings.apiConfig) {
+        const apiConfig = currentProfile.data.settings.apiConfig
         
-        if (currentProfileId) {
-          const currentProfile = profileStore.profiles.find((p: any) => p.id === currentProfileId)
-          if (currentProfile && currentProfile.data && currentProfile.data.settings) {
-            const apiConfig = currentProfile.data.settings.apiConfig
-            if (apiConfig && apiConfig.key) {
-              this.config = {
-                provider: this.mapServiceToProvider(apiConfig.model),
-                model: apiConfig.specificModel || this.getDefaultModel(apiConfig.model),
-                apiKey: apiConfig.key,
-                temperature: apiConfig.params?.temperature || 0.7,
-                maxTokens: apiConfig.params?.maxTokens || 2000
-              }
-              console.log('[RefactorAIService] 成功从profiles系统加载API配置:', this.config.provider)
-              return
-            }
+        if (apiConfig.key && apiConfig.key.trim()) {
+          const newConfig = {
+            provider: this.mapServiceToProvider(apiConfig.model),
+            model: apiConfig.specificModel || this.getDefaultModel(apiConfig.model),
+            apiKey: apiConfig.key,
+            temperature: apiConfig.params?.temperature || 0.7,
+            maxTokens: apiConfig.params?.maxTokens || 2000
           }
+
+          // 只有配置真正改变时才更新
+          if (!this.config || JSON.stringify(this.config) !== JSON.stringify(newConfig)) {
+            this.config = newConfig
+            console.log(`[RefactorAIService] 成功加载API配置: ${this.config.provider} - ${this.config.model}`)
+          }
+          return
         }
       }
 
-      // 方法2: 从旧的profile系统加载（兼容）
-      const currentProfile = localStorage.getItem('currentProfile')
-      if (currentProfile) {
-        const profileData = localStorage.getItem(`profile_${currentProfile}`)
-        if (profileData) {
-          const profile = JSON.parse(profileData)
-          const apiConfig = profile.apiConfig
-
-          if (apiConfig && apiConfig.currentService && apiConfig[apiConfig.currentService]) {
-            const serviceConfig = apiConfig[apiConfig.currentService]
-            
-            this.config = {
-              provider: this.mapServiceToProvider(apiConfig.currentService),
-              model: serviceConfig.model || this.getDefaultModel(apiConfig.currentService),
-              apiKey: serviceConfig.apiKey,
-              temperature: 0.7,
-              maxTokens: 2000
-            }
-            console.log('[RefactorAIService] 从旧profile系统加载API配置:', this.config.provider)
-            return
-          }
-        }
+      // 如果没有有效配置，清空当前配置
+      if (this.config) {
+        this.config = null
+        console.log('[RefactorAIService] 清空API配置 - 当前Profile无有效配置')
       }
-
-      console.log('[RefactorAIService] 未找到有效的API配置')
     } catch (error) {
       console.warn('[RefactorAIService] Failed to load config from profile:', error)
+    } finally {
+      this.configLoading = false
     }
   }
 
   /**
-   * 映射服务名称到提供商类型
+   * 重新加载配置
    */
-  private mapServiceToProvider(service: string): AIProvider {
-    switch (service) {
-      case 'openai': return 'openai'
-      case 'claude': return 'claude'
-      case 'qwen': return 'qwen'
-      default: return 'openai'
-    }
+  reloadConfig(): void {
+    this.loadConfigFromProfile()
   }
 
   /**
-   * 获取默认模型名称
-   */
-  private getDefaultModel(service: string): string {
-    switch (service) {
-      case 'openai': return 'gpt-4'
-      case 'claude': return 'claude-3-5-sonnet-20241022'
-      case 'qwen': return 'qwen-plus'
-      default: return 'gpt-4'
-    }
-  }
-
-  /**
-   * 基础对话功能
-   */
-  async chat(message: string, context?: ChatContext): Promise<string> {
-    if (!this.config) {
-      throw new AIServiceError('AI服务未配置', 'openai')
-    }
-
-    try {
-      const response = await this.makeAPICall(message, context)
-      return response.content
-    } catch (error) {
-      throw new AIServiceError(
-        `AI对话失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        this.config.provider,
-        error instanceof Error ? error : undefined
-      )
-    }
-  }
-
-  /**
-   * 流式对话功能 (暂时返回普通响应)
-   */
-  async* chatStream(message: string, context?: ChatContext): AsyncIterableIterator<string> {
-    // 暂时简单实现，后续可以添加真正的流式支持
-    const response = await this.chat(message, context)
-    
-    // 模拟流式返回
-    const words = response.split(' ')
-    for (const word of words) {
-      yield word + ' '
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
-  }
-
-  /**
-   * 能力评估专用功能
-   */
-  async assessAbility(input: AssessmentInput): Promise<Assessment> {
-    if (!this.config) {
-      throw new AIServiceError('AI服务未配置', 'openai')
-    }
-
-    try {
-      // 构建评估专用的prompt
-      const assessmentPrompt = this.buildAssessmentPrompt(input)
-      
-      const response = await this.makeAPICall(assessmentPrompt)
-      
-      // 解析评估结果
-      return this.parseAssessmentResponse(response.content, input)
-    } catch (error) {
-      throw new AIServiceError(
-        `能力评估失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        this.config.provider,
-        error instanceof Error ? error : undefined
-      )
-    }
-  }
-
-  /**
-   * 学习建议生成
-   */
-  async generateLearningAdvice(context: any): Promise<string[]> {
-    if (!this.config) {
-      throw new AIServiceError('AI服务未配置', 'openai')
-    }
-
-    try {
-      const prompt = this.buildAdvicePrompt(context)
-      const response = await this.makeAPICall(prompt)
-      
-      // 解析建议列表
-      return this.parseAdviceResponse(response.content)
-    } catch (error) {
-      throw new AIServiceError(
-        `生成学习建议失败: ${error instanceof Error ? error.message : '未知错误'}`,
-        this.config.provider,
-        error instanceof Error ? error : undefined
-      )
-    }
-  }
-
-  /**
-   * 检查服务状态
-   */
-  async checkHealth(): Promise<boolean> {
-    if (!this.config) {
-      return false
-    }
-
-    try {
-      await this.makeAPICall('Hello', undefined, true)
-      return true
-    } catch (error) {
-      console.warn('[RefactorAIService] Health check failed:', error)
-      return false
-    }
-  }
-
-  /**
-   * 获取配置信息
+   * 获取当前配置
    */
   getConfig(): AIModelConfig | null {
     return this.config
   }
 
   /**
-   * 获取服务状态
+   * 设置配置
    */
-  async getStatus(): Promise<AIServiceStatus> {
-    const isConfigured = this.config !== null
-    const isHealthy = isConfigured ? await this.checkHealth() : false
+  setConfig(config: AIModelConfig): void {
+    this.config = config
+  }
 
-    return {
-      isConfigured,
-      available: isConfigured && isHealthy,
-      provider: this.config?.provider || null,
-      model: this.config?.model || null,
-      isHealthy,
-      lastCheck: new Date()
+  /**
+   * 检查服务健康状态
+   */
+  async checkHealth(): Promise<boolean> {
+    if (!this.config) {
+      console.error('[RefactorAIService] No AI configuration found')
+      return false
+    }
+
+    try {
+      // 发送简单的测试请求
+      const response = await this.chat('测试连接')
+      return !!(response && response.length > 0)
+    } catch (error) {
+      console.error('[RefactorAIService] Health check failed:', error)
+      return false
     }
   }
 
   /**
-   * 核心API调用方法
+   * 基础对话功能
    */
-  private async makeAPICall(
-    message: string, 
-    context?: ChatContext, 
-    isHealthCheck: boolean = false
-  ): Promise<{ content: string }> {
+  async chat(message: string, context?: any): Promise<string> {
     if (!this.config) {
-      throw new Error('AI配置未设置')
+      throw new Error('AI服务未配置，请在Profile设置中配置API密钥')
+    }
+
+    try {
+      const response = await this.callAIProvider(message, context)
+      return response
+    } catch (error) {
+      console.error('[RefactorAIService] Chat failed:', error)
+      throw new Error(`AI服务调用失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  /**
+   * 流式对话功能
+   */
+  async *chatStream(message: string, context?: any): AsyncIterableIterator<string> {
+    if (!this.config) {
+      throw new Error('AI服务未配置，请在Profile设置中配置API密钥')
+    }
+
+    try {
+      // 对于简化实现，这里先返回完整响应
+      // 在实际应用中可以实现真正的流式传输
+      const response = await this.chat(message, context)
+      yield response
+    } catch (error) {
+      console.error('[RefactorAIService] Stream chat failed:', error)
+      throw new Error(`AI服务调用失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  /**
+   * 能力评估专用接口
+   */
+  async assessAbility(input: AssessmentInput): Promise<Assessment> {
+    if (!this.config) {
+      throw new Error('AI服务未配置，请在Profile设置中配置API密钥')
+    }
+
+    try {
+      const prompt = this.buildAssessmentPrompt(input)
+      const response = await this.callAIProvider(prompt, { type: 'assessment' })
+      return this.parseAssessmentResponse(response, input)
+    } catch (error) {
+      console.error('[RefactorAIService] Assessment failed:', error)
+      throw new Error(`能力评估失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  /**
+   * 生成学习建议
+   */
+  async generateLearningAdvice(context: any): Promise<string[]> {
+    if (!this.config) {
+      throw new Error('AI服务未配置，请在Profile设置中配置API密钥')
+    }
+
+    try {
+      const prompt = this.buildLearningAdvicePrompt(context)
+      const response = await this.callAIProvider(prompt, { type: 'learning_advice' })
+      return this.parseLearningAdvice(response)
+    } catch (error) {
+      console.error('[RefactorAIService] Learning advice generation failed:', error)
+      return ['建议多练习编程基础', '多参与开源项目', '持续学习新技术']
+    }
+  }
+
+  /**
+   * 调用AI提供商
+   */
+  private async callAIProvider(message: string, context?: any): Promise<string> {
+    if (!this.config) {
+      throw new Error('AI配置未找到')
     }
 
     const { provider, model, apiKey, temperature, maxTokens } = this.config
 
-    let url: string
-    let headers: Record<string, string>
-    let body: any
-
-    // 构建请求参数
-    const messages = [
-      { role: 'system', content: this.getSystemPrompt(context, isHealthCheck) },
-      { role: 'user', content: message }
-    ]
-
-    switch (provider) {
-      case 'openai':
-        url = 'https://api.openai.com/v1/chat/completions'
-        headers = {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-        body = {
-          model,
-          messages,
-          temperature,
-          max_tokens: maxTokens
-        }
-        break
-
-      case 'claude':
-        url = 'https://api.anthropic.com/v1/messages'
-        headers = {
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
-        }
-        body = {
-          model,
-          messages: messages.filter(m => m.role !== 'system'),
-          system: this.getSystemPrompt(context, isHealthCheck),
-          max_tokens: maxTokens || 2000
-        }
-        break
-
-      case 'qwen':
-        url = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
-        headers = {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        }
-        body = {
-          model,
-          input: {
-            messages
-          },
-          parameters: {
-            temperature,
-            max_tokens: maxTokens
-          }
-        }
-        break
-
-      default:
-        throw new Error(`不支持的AI提供商: ${provider}`)
+    try {
+      switch (provider) {
+        case 'openai':
+          return await this.callOpenAI(message, { model, apiKey, temperature, maxTokens }, context)
+        case 'claude':
+          return await this.callClaude(message, { model, apiKey, temperature, maxTokens }, context)
+        case 'qwen':
+          return await this.callQwen(message, { model, apiKey, temperature, maxTokens }, context)
+        default:
+          throw new Error(`不支持的AI提供商: ${provider}`)
+      }
+    } catch (error) {
+      console.error(`[RefactorAIService] ${provider} API call failed:`, error)
+      throw error
     }
+  }
 
-    // 发送请求
-    const response = await fetch(url, {
+  /**
+   * 调用OpenAI API
+   */
+  private async callOpenAI(message: string, config: any, context?: any): Promise<string> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers,
-      body: JSON.stringify(body)
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+        temperature: config.temperature,
+        max_tokens: config.maxTokens
+      })
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`API请求失败 (${response.status}): ${errorText}`)
+      const errorData = await response.json().catch(() => null)
+      throw new Error(`OpenAI API错误: ${response.status} ${errorData?.error?.message || response.statusText}`)
     }
 
     const data = await response.json()
-
-    // 解析响应
-    let content: string
-    switch (provider) {
-      case 'openai':
-        content = data.choices?.[0]?.message?.content || ''
-        break
-      case 'claude':
-        content = data.content?.[0]?.text || ''
-        break
-      case 'qwen':
-        content = data.output?.text || ''
-        break
-      default:
-        content = ''
-    }
-
-    return { content }
+    return data.choices[0]?.message?.content || ''
   }
 
   /**
-   * 获取系统提示词
+   * 调用Claude API
    */
-  private getSystemPrompt(context?: ChatContext, isHealthCheck: boolean = false): string {
-    if (isHealthCheck) {
-      return '你是一个AI助手，请简单回复"OK"表示服务正常。'
+  private async callClaude(message: string, config: any, context?: any): Promise<string> {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: config.maxTokens,
+        messages: [
+          {
+            role: 'user',
+            content: message
+          }
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null)
+      throw new Error(`Claude API错误: ${response.status} ${errorData?.error?.message || response.statusText}`)
     }
 
-    return `你是Pointer.ai学习平台的AI助手，专门帮助用户进行编程学习和能力评估。
-
-你的核心职责：
-1. 帮助用户分析编程能力和技能水平
-2. 生成个性化的学习建议和改进计划
-3. 回答编程学习相关的问题
-4. 提供友好、专业、有建设性的指导
-
-请用中文回复，保持专业且友好的语调。`
+    const data = await response.json()
+    return data.content[0]?.text || ''
   }
 
   /**
-   * 构建评估专用prompt
+   * 调用通义千问API
+   */
+  private async callQwen(message: string, config: any, context?: any): Promise<string> {
+    const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        input: {
+          messages: [
+            {
+              role: 'user',
+              content: message
+            }
+          ]
+        },
+        parameters: {
+          temperature: config.temperature,
+          max_tokens: config.maxTokens
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null)
+      throw new Error(`通义千问API错误: ${response.status} ${errorData?.error?.message || response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.output?.text || ''
+  }
+
+  /**
+   * 构建评估提示词
    */
   private buildAssessmentPrompt(input: AssessmentInput): string {
-    const basePrompt = `请根据以下信息进行编程能力评估：
+    if (input.type === 'resume') {
+      return `请分析以下简历内容，从编程能力、算法思维、工程实践、团队协作、学习能力这5个维度进行评估。
+每个维度给出0-100的分数，并提供具体的优势和改进建议。
 
-评估类型：${input.type === 'resume' ? '简历分析' : '问卷评估'}
+简历内容：
+${input.data.resumeText}
 
-评估内容：
-${input.type === 'resume' ? input.data.resumeText : JSON.stringify(input.data.questionnaire, null, 2)}
+请以JSON格式返回评估结果：
+{
+  "overallScore": 总分(0-100),
+  "dimensions": {
+    "programming": {"score": 分数, "skills": ["技能1", "技能2"]},
+    "algorithm": {"score": 分数, "skills": ["技能1", "技能2"]},
+    "engineering": {"score": 分数, "skills": ["技能1", "技能2"]},
+    "collaboration": {"score": 分数, "skills": ["技能1", "技能2"]},
+    "learning": {"score": 分数, "skills": ["技能1", "技能2"]}
+  },
+  "strengths": ["优势1", "优势2"],
+  "weaknesses": ["待改进1", "待改进2"],
+  "recommendations": ["建议1", "建议2"]
+}`
+    } else {
+      // 问卷评估
+      const questionnaireText = input.data.questionnaire?.map((q, i) => 
+        `${i + 1}. 问题ID: ${q.questionId}, 答案: ${q.answer}`
+      ).join('\n') || ''
 
-请从以下维度进行评估（满分100分）：
-1. 编程基础能力 (Programming)
-2. 算法与数据结构 (Algorithm) 
-3. 项目经验 (Project)
-4. 系统设计 (System Design)
-5. 沟通协作 (Communication)
+      return `请基于以下问卷回答进行能力评估：
+${questionnaireText}
 
-请返回JSON格式的评估结果，包含：
-- overallScore: 总体评分
-- dimensions: 各维度详细评分和分析
-- strengths: 优势领域
-- weaknesses: 待改进领域  
-- recommendations: 学习建议`
-
-    return basePrompt
+请以相同的JSON格式返回评估结果。`
+    }
   }
 
   /**
-   * 构建建议生成prompt
+   * 构建学习建议提示词
    */
-  private buildAdvicePrompt(context: any): string {
-    return `基于用户的学习情况，请生成3-5条个性化的学习建议：
+  private buildLearningAdvicePrompt(context: any): string {
+    return `基于用户的能力评估结果，请提供3-5条个性化的学习建议。
+评估上下文：${JSON.stringify(context)}
 
-用户背景：
-${JSON.stringify(context, null, 2)}
-
-请生成实用、具体、可操作的学习建议。`
+请直接返回建议列表，每条建议一行。`
   }
 
   /**
@@ -431,9 +412,11 @@ ${JSON.stringify(context, null, 2)}
         const parsed = JSON.parse(jsonMatch[0])
         
         // 构建标准Assessment对象
+        const currentProfile = refactorProfileService.getCurrentProfile()
+        
         return {
           id: `assessment_${Date.now()}`,
-          profileId: localStorage.getItem('currentProfile') || 'default',
+          profileId: currentProfile?.id || 'unknown',
           type: input.type,
           overallScore: parsed.overallScore || 0,
           dimensions: parsed.dimensions || {},
@@ -449,12 +432,85 @@ ${JSON.stringify(context, null, 2)}
     }
 
     // 如果解析失败，返回默认评估结果
+    const currentProfile = refactorProfileService.getCurrentProfile()
+    
     return {
       id: `assessment_${Date.now()}`,
-      profileId: localStorage.getItem('currentProfile') || 'default',
+      profileId: currentProfile?.id || 'unknown',
       type: input.type,
       overallScore: 50,
-      dimensions: {},
+      dimensions: {
+        programming: { 
+          name: '编程能力',
+          score: 50, 
+          skills: [{
+            skill: '基础编程',
+            level: 'intermediate',
+            score: 50,
+            confidence: 0.7,
+            evidence: ['基础语法掌握'],
+            improvements: ['需要更多实践']
+          }],
+          summary: '基础编程能力良好',
+          recommendations: ['多做编程练习']
+        },
+        algorithm: { 
+          name: '算法思维',
+          score: 50, 
+          skills: [{
+            skill: '基础算法',
+            level: 'intermediate',
+            score: 50,
+            confidence: 0.7,
+            evidence: ['基础算法理解'],
+            improvements: ['需要更多算法练习']
+          }],
+          summary: '算法基础良好',
+          recommendations: ['多做算法题']
+        },
+        engineering: { 
+          name: '工程实践',
+          score: 50, 
+          skills: [{
+            skill: '基础工程',
+            level: 'intermediate',
+            score: 50,
+            confidence: 0.7,
+            evidence: ['基础项目经验'],
+            improvements: ['需要更多项目实践']
+          }],
+          summary: '工程基础良好',
+          recommendations: ['参与更多项目']
+        },
+        collaboration: { 
+          name: '团队协作',
+          score: 50, 
+          skills: [{
+            skill: '基础协作',
+            level: 'intermediate',
+            score: 50,
+            confidence: 0.7,
+            evidence: ['基础协作经验'],
+            improvements: ['需要更多团队经验']
+          }],
+          summary: '协作能力良好',
+          recommendations: ['参与团队项目']
+        },
+        learning: { 
+          name: '学习能力',
+          score: 50, 
+          skills: [{
+            skill: '基础学习',
+            level: 'intermediate',
+            score: 50,
+            confidence: 0.7,
+            evidence: ['持续学习态度'],
+            improvements: ['需要系统化学习']
+          }],
+          summary: '学习能力良好',
+          recommendations: ['制定学习计划']
+        }
+      },
       strengths: ['基础能力较好'],
       weaknesses: ['需要更多实践'],
       recommendations: ['建议多做项目练习'],
@@ -464,47 +520,66 @@ ${JSON.stringify(context, null, 2)}
   }
 
   /**
-   * 解析建议响应
+   * 解析学习建议
    */
-  private parseAdviceResponse(content: string): string[] {
-    // 提取建议列表
-    const lines = content.split('\n')
-    const advice: string[] = []
-    
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('•') || /^\d+\./.test(trimmed))) {
-        advice.push(trimmed.replace(/^[-•\d.\s]+/, ''))
-      }
+  private parseLearningAdvice(content: string): string[] {
+    try {
+      // 按行分割并过滤空行
+      const lines = content.split('\n').filter(line => line.trim().length > 0)
+      return lines.length > 0 ? lines : ['建议多练习编程基础', '多参与开源项目', '持续学习新技术']
+    } catch (error) {
+      console.warn('[RefactorAIService] Failed to parse learning advice:', error)
+      return ['建议多练习编程基础', '多参与开源项目', '持续学习新技术']
     }
-    
-    return advice.length > 0 ? advice : [content.trim()]
   }
 
   /**
-   * 重新加载配置
+   * 映射服务名到提供商
    */
-  reloadConfig(): void {
-    this.config = null
-    this.loadConfigFromProfile()
+  private mapServiceToProvider(service: string): AIProvider {
+    // 支持直接的模型名称映射
+    if (service.startsWith('gpt-') || service.includes('openai')) {
+      return 'openai'
+    }
+    if (service.startsWith('claude-') || service.includes('claude')) {
+      return 'claude'
+    }
+    if (service.startsWith('qwen-') || service.includes('qwen')) {
+      return 'qwen'
+    }
+
+    // 传统的服务名称映射
+    switch (service) {
+      case 'openai': return 'openai'
+      case 'claude': return 'claude'
+      case 'qwen': return 'qwen'
+      default: return 'openai'
+    }
   }
 
   /**
-   * 手动设置配置
+   * 获取默认模型
    */
-  setConfig(config: AIModelConfig): void {
-    this.config = config
+  private getDefaultModel(service: string): string {
+    // 如果service本身就是一个模型名称，直接返回
+    if (service.startsWith('gpt-') || service.startsWith('claude-') || service.startsWith('qwen-')) {
+      return service
+    }
+
+    // 否则根据服务名称返回默认模型
+    switch (service) {
+      case 'openai': return 'gpt-4'
+      case 'claude': return 'claude-3-5-sonnet-20241022'
+      case 'qwen': return 'qwen-plus'
+      default: return 'gpt-4'
+    }
   }
 }
 
-/**
- * 创建AI服务实例
- */
-export const createAIService = (config?: AIModelConfig): RefactorAIService => {
-  return new RefactorAIService(config)
-}
+// 创建全局单例实例
+export const refactorAIService = new RefactorAIService()
 
-/**
- * 默认AI服务实例
- */
-export const refactorAIService = new RefactorAIService() 
+// 将实例挂载到window对象上，便于其他模块访问
+if (typeof window !== 'undefined') {
+  (window as any).refactorAIService = refactorAIService
+} 

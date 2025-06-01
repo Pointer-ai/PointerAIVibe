@@ -17,65 +17,71 @@
  */
 
 import React, { useState } from 'react'
-import { learningApi, simpleApi, isApiSuccess, handleApiError } from '../api'
-import { RefactorDashboard as Dashboard } from '../refactor/pages/Dashboard'
+import { RefactorDashboard as RefactorDashboardPage } from '../refactor/pages/Dashboard'
 import { GoalManagementPage } from '../refactor/pages/GoalManagement'
 import { UIShowcase } from '../refactor/pages/UIShowcase'
 import { AssessmentPage } from '../refactor/pages/Assessment'
 import { ProfileManagementPage } from '../refactor/pages/ProfileManagement'
+import { SystemDiagnosticsPage } from '../refactor/pages/SystemDiagnostics'
+import { SyncTestPage } from '../refactor/pages/SyncTestPage'
 
 // 临时占位符页面组件
 const PlaceholderPage: React.FC<{ title: string; description: string; onNavigate: (view: string) => void }> = ({ title, description, onNavigate }) => (
-  <div className="min-h-screen bg-gray-50 py-8">
-    <div className="max-w-4xl mx-auto px-4">
-      <div className="text-center">
-        <div className="text-6xl mb-4">🚧</div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
-        <p className="text-lg text-gray-600 mb-8">{description}</p>
-        <button
-          onClick={() => onNavigate('main')}
-          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+  <div className="max-w-4xl mx-auto p-6">
+    <div className="text-center">
+      <h1 className="text-3xl font-bold text-gray-900 mb-4">{title}</h1>
+      <p className="text-gray-600 mb-8">{description}</p>
+      <div className="flex justify-center gap-4">
+        <button 
+          onClick={() => onNavigate('dashboard')}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
-          返回主页
+          返回Dashboard
         </button>
       </div>
     </div>
   </div>
 )
 
+type ViewType = 'dashboard' | 'goal-management' | 'assessment' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'path-planning' | 'system-integration' | 'api-testing' | 'course-content' | 'sync-test'
+
 /**
- * 重构系统入口Dashboard
- * 
- * 作为重构系统的主要入口，提供：
- * - 重构后页面的导航
- * - 与原系统的API对比
- * - 开发进度展示
+ * 重构系统入口组件
+ * 提供导航和页面路由功能
  */
 export const RefactorDashboard: React.FC = () => {
-  const [currentView, setCurrentView] = useState('main')
+  const [currentView, setCurrentView] = useState<ViewType>('dashboard')
+
+  const handleNavigate = (view: string) => {
+    setCurrentView(view as ViewType)
+  }
 
   const renderCurrentView = () => {
     switch (currentView) {
-      case 'main':
-        return <Dashboard onNavigate={setCurrentView} />
+      case 'dashboard':
+        return <RefactorDashboardPage onNavigate={handleNavigate} />
       case 'goal-management':
-        return <GoalManagementPage onNavigate={setCurrentView} />
-      case 'ui-showcase':
-        return <UIShowcase onNavigate={setCurrentView} />
+        return <GoalManagementPage onNavigate={handleNavigate} />
       case 'assessment':
-        return <AssessmentPage onNavigate={setCurrentView} />
+        return <AssessmentPage onNavigate={handleNavigate} />
+      case 'ui-showcase':
+        return <UIShowcase onNavigate={handleNavigate} />
       case 'profile-management':
-        return <ProfileManagementPage onNavigate={setCurrentView} />
+        return <ProfileManagementPage onNavigate={handleNavigate} />
+      case 'system-diagnostics':
+        return <SystemDiagnosticsPage onNavigate={handleNavigate} />
       case 'path-planning':
-        return <PlaceholderPage title="路径规划" description="智能化学习路径生成和管理功能正在开发中..." onNavigate={setCurrentView} />
+        return <PlaceholderPage title="路径规划" description="智能化学习路径生成和管理功能正在开发中..." onNavigate={handleNavigate} />
       case 'system-integration':
-        return <PlaceholderPage title="系统集成" description="重构系统与原系统的数据同步和集成测试功能..." onNavigate={setCurrentView} />
+        return <PlaceholderPage title="系统集成" description="与原系统的深度集成功能正在开发中..." onNavigate={handleNavigate} />
       case 'api-testing':
-        return <PlaceholderPage title="API测试" description="完整的API功能测试套件和性能监控..." onNavigate={setCurrentView} />
+        return <PlaceholderPage title="API测试" description="API接口测试和调试工具正在开发中..." onNavigate={handleNavigate} />
       case 'course-content':
-        return <PlaceholderPage title="课程内容" description="AI生成的交互式编程课程和学习材料..." onNavigate={setCurrentView} />
+        return <PlaceholderPage title="课程内容" description="个性化课程内容生成功能正在开发中..." onNavigate={handleNavigate} />
+      case 'sync-test':
+        return <SyncTestPage onNavigate={handleNavigate} />
       default:
-        return <Dashboard onNavigate={setCurrentView} />
+        return <RefactorDashboardPage onNavigate={handleNavigate} />
     }
   }
 

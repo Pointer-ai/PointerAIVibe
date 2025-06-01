@@ -149,15 +149,27 @@ export const ProfileManagementPage: React.FC<ProfileManagementPageProps> = ({ on
     }
   }
 
-  const handleSwitchProfile = (id: string) => {
-    const success = refactorProfileService.switchProfile(id)
-    if (success) {
-      setCurrentProfileId(id)
-      
-      // 重新加载AI服务配置
-      refactorAIService.reloadConfig()
-    } else {
-      setError('切换Profile失败')
+  const handleSwitchProfile = async (id: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const success = await refactorProfileService.switchProfile(id)
+      if (success) {
+        setCurrentProfileId(id)
+        
+        // 刷新Profile列表以确保状态一致
+        loadProfiles()
+        
+        console.log(`[ProfileManagement] Successfully switched to profile: ${id}`)
+      } else {
+        setError('切换Profile失败 - 请稍后重试')
+      }
+    } catch (error) {
+      console.error('[ProfileManagement] Profile switch failed:', error)
+      setError(error instanceof Error ? error.message : '切换Profile失败')
+    } finally {
+      setLoading(false)
     }
   }
 

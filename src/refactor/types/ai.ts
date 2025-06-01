@@ -20,6 +20,9 @@
 
 import { Assessment, AssessmentInput } from './assessment'
 
+// 重新导出评估相关类型，便于其他模块使用
+export type { Assessment, AssessmentInput }
+
 // AI服务提供商类型
 export type AIProvider = 'openai' | 'claude' | 'qwen'
 

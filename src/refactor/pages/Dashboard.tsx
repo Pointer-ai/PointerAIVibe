@@ -16,12 +16,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { Button } from '../components/ui/Button/Button'
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card/Card'
+import { Badge } from '../components/ui/Badge/Badge'
+import { ProgressBar } from '../components/ui/ProgressBar/ProgressBar'
 import { getCurrentProfile } from '../../utils/profile'
 import { getCurrentAssessment } from '../../modules/abilityAssess'
+import { ProfileManagementPage } from './ProfileManagement'
+import { SystemDiagnosticsPage } from './SystemDiagnostics'
+import { SyncTestPage } from './SyncTestPage'
 
 interface RefactorDashboardProps {
-  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management') => void
+  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'sync-test') => void
 }
 
 /**
@@ -262,6 +269,57 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
               </div>
             </div>
           ))}
+        </div>
+
+        {/* 管理功能 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('profile-management')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="text-4xl">👤</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Profile管理</h3>
+                  <p className="text-sm text-gray-600">管理用户Profile和设置</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('ui-showcase')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="text-4xl">🎨</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">UI组件库</h3>
+                  <p className="text-sm text-gray-600">查看所有可用UI组件</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('system-diagnostics')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="text-4xl">🔧</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">系统诊断</h3>
+                  <p className="text-sm text-gray-600">检查系统状态和数据兼容性</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => onNavigate('sync-test')}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="text-4xl">🔄</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">同步测试</h3>
+                  <p className="text-sm text-gray-600">测试Profile切换同步性能</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Progress Section - 与原系统相同的结构 */}

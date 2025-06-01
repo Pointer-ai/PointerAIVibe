@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Profile管理服务
+// Profile管理服务 - 完全兼容原系统
 
 import {
   Profile,
@@ -31,22 +31,69 @@ import {
   APIConfig
 } from '../types/profile'
 
+// 导入原有的profile工具函数
+import {
+  getProfiles as getOriginalProfiles,
+  getCurrentProfile as getOriginalCurrentProfile,
+  getCurrentProfileId as getOriginalCurrentProfileId,
+  createProfile as createOriginalProfile,
+  setCurrentProfile as setOriginalCurrentProfile,
+  updateProfile as updateOriginalProfile,
+  deleteProfile as deleteOriginalProfile,
+  getProfileData,
+  setProfileData,
+  Profile as OriginalProfile
+} from '../../utils/profile'
+
+// 导入同步管理器
+import { syncManager } from './syncManager'
+
 /**
- * Profile管理服务类
- * 提供完整的Profile管理功能，兼容原系统数据格式
+ * 增强的Profile管理服务类
+ * 完全兼容原系统数据格式，同时提供现代化的接口
  */
 export class RefactorProfileService {
-  private readonly STORAGE_KEY = 'profiles'
-  private readonly ORIGINAL_STORAGE_KEY = 'pointer_ai_profiles'
-  private readonly OLD_PROFILE_KEY = 'currentProfile'
+  private readonly REFACTOR_STORAGE_KEY = 'refactor_profiles_metadata'
+  private switchLock = false
+  private eventListeners: Array<() => void> = []
 
   /**
-   * 获取所有Profile
+   * 添加Profile切换事件监听器
+   */
+  addProfileSwitchListener(listener: () => void): void {
+    this.eventListeners.push(listener)
+  }
+
+  /**
+   * 移除Profile切换事件监听器
+   */
+  removeProfileSwitchListener(listener: () => void): void {
+    const index = this.eventListeners.indexOf(listener)
+    if (index > -1) {
+      this.eventListeners.splice(index, 1)
+    }
+  }
+
+  /**
+   * 触发Profile切换事件
+   */
+  private notifyProfileSwitch(): void {
+    this.eventListeners.forEach(listener => {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[RefactorProfileService] Event listener error:', error)
+      }
+    })
+  }
+
+  /**
+   * 获取所有Profile（转换为新格式）
    */
   getAllProfiles(): Profile[] {
     try {
-      const store = this.getProfileStore()
-      return store.profiles
+      const originalProfiles = getOriginalProfiles()
+      return originalProfiles.map(original => this.convertToNewFormat(original))
     } catch (error) {
       console.error('[RefactorProfileService] Failed to get all profiles:', error)
       return []
@@ -58,13 +105,9 @@ export class RefactorProfileService {
    */
   getCurrentProfile(): Profile | null {
     try {
-      const store = this.getProfileStore()
-      if (!store.currentProfileId) {
-        return null
-      }
-
-      const profile = store.profiles.find(p => p.id === store.currentProfileId)
-      return profile || null
+      const originalProfile = getOriginalCurrentProfile()
+      if (!originalProfile) return null
+      return this.convertToNewFormat(originalProfile)
     } catch (error) {
       console.error('[RefactorProfileService] Failed to get current profile:', error)
       return null
@@ -76,8 +119,8 @@ export class RefactorProfileService {
    */
   getProfileById(id: string): Profile | null {
     try {
-      const store = this.getProfileStore()
-      return store.profiles.find(p => p.id === id) || null
+      const allProfiles = this.getAllProfiles()
+      return allProfiles.find(p => p.id === id) || null
     } catch (error) {
       console.error('[RefactorProfileService] Failed to get profile by id:', error)
       return null
@@ -107,30 +150,22 @@ export class RefactorProfileService {
         }
       }
 
-      // 创建新Profile
-      const newProfile: Profile = {
-        id: `profile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: input.name,
+      // 使用原系统创建Profile
+      const originalProfile = createOriginalProfile(
+        input.name,
+        undefined, // 暂不支持密码
+        input.avatar
+      )
+
+      // 设置额外的metadata
+      this.setProfileMetadata(originalProfile.id, {
         email: input.email,
         bio: input.bio,
-        avatar: input.avatar,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isActive: true,
-        data: {
-          settings: this.getDefaultSettings()
-        }
-      }
+        settings: this.getDefaultSettings()
+      })
 
-      // 保存到存储
-      const store = this.getProfileStore()
-      store.profiles.push(newProfile)
-      this.saveProfileStore(store)
-
-      // 如果是第一个Profile，设为当前Profile
-      if (store.profiles.length === 1) {
-        this.switchProfile(newProfile.id)
-      }
+      // 转换为新格式返回
+      const newProfile = this.convertToNewFormat(originalProfile)
 
       return {
         success: true,
@@ -150,10 +185,10 @@ export class RefactorProfileService {
    */
   async updateProfile(id: string, input: UpdateProfileInput): Promise<ProfileOperationResult> {
     try {
-      const store = this.getProfileStore()
-      const profileIndex = store.profiles.findIndex(p => p.id === id)
+      const originalProfiles = getOriginalProfiles()
+      const originalProfile = originalProfiles.find(p => p.id === id)
       
-      if (profileIndex === -1) {
+      if (!originalProfile) {
         return {
           success: false,
           error: 'Profile不存在'
@@ -162,7 +197,7 @@ export class RefactorProfileService {
 
       // 检查名称重复（排除自己）
       if (input.name) {
-        const existing = store.profiles.find(p => p.name === input.name && p.id !== id)
+        const existing = originalProfiles.find(p => p.name === input.name && p.id !== id)
         if (existing) {
           return {
             success: false,
@@ -171,16 +206,31 @@ export class RefactorProfileService {
         }
       }
 
-      // 更新Profile
-      const currentProfile = store.profiles[profileIndex]
-      const updatedProfile: Profile = {
-        ...currentProfile,
-        ...input,
-        updatedAt: new Date()
+      // 更新原系统的Profile
+      const updates: Partial<OriginalProfile> = {}
+      if (input.name) updates.name = input.name
+      if (input.avatar) updates.avatar = input.avatar
+
+      updateOriginalProfile(id, updates)
+
+      // 更新metadata
+      const currentMetadata = this.getProfileMetadata(id)
+      this.setProfileMetadata(id, {
+        ...currentMetadata,
+        email: input.email !== undefined ? input.email : currentMetadata.email,
+        bio: input.bio !== undefined ? input.bio : currentMetadata.bio
+      })
+
+      // 获取更新后的Profile
+      const updatedOriginal = getOriginalProfiles().find(p => p.id === id)
+      if (!updatedOriginal) {
+        return {
+          success: false,
+          error: '更新失败'
+        }
       }
 
-      store.profiles[profileIndex] = updatedProfile
-      this.saveProfileStore(store)
+      const updatedProfile = this.convertToNewFormat(updatedOriginal)
 
       return {
         success: true,
@@ -200,55 +250,56 @@ export class RefactorProfileService {
    */
   async updateSettings(id: string, input: UpdateSettingsInput): Promise<ProfileOperationResult> {
     try {
-      const store = this.getProfileStore()
-      const profileIndex = store.profiles.findIndex(p => p.id === id)
+      const originalProfile = getOriginalProfiles().find(p => p.id === id)
       
-      if (profileIndex === -1) {
+      if (!originalProfile) {
         return {
           success: false,
           error: 'Profile不存在'
         }
       }
 
-      // 更新设置
-      const currentProfile = store.profiles[profileIndex]
+      // 获取当前设置
+      const currentSettings = this.getProfileSettings(id)
+      
+      // 构建新的设置
       const updatedSettings: ProfileSettings = {
-        ...currentProfile.data.settings,
+        ...currentSettings,
         ...input,
-        // 确保必需字段的类型安全
         notifications: {
-          ...currentProfile.data.settings.notifications,
+          ...currentSettings.notifications,
           ...input.notifications
         },
         privacy: {
-          ...currentProfile.data.settings.privacy,
+          ...currentSettings.privacy,
           ...input.privacy
         },
         learning: {
-          ...currentProfile.data.settings.learning,
+          ...currentSettings.learning,
           ...input.learning
         }
       }
 
-      const updatedProfile: Profile = {
-        ...currentProfile,
-        data: {
-          ...currentProfile.data,
-          settings: updatedSettings
-        },
-        updatedAt: new Date()
-      }
-
-      store.profiles[profileIndex] = updatedProfile
-      this.saveProfileStore(store)
-
-      // 如果更新了API配置，重新加载AI服务配置
+      // 如果更新了API配置，需要特殊处理以兼容原系统格式
       if (input.apiConfig) {
-        // 通知AI服务重新加载配置
-        if (typeof window !== 'undefined' && (window as any).refactorAIService) {
-          (window as any).refactorAIService.reloadConfig()
-        }
+        const apiConfigData = this.convertAPIConfigToOriginalFormat(input.apiConfig)
+        
+        // 设置原系统的settings格式
+        setProfileData('settings', {
+          ...getProfileData('settings'),
+          ...apiConfigData
+        })
       }
+
+      // 保存到metadata
+      const currentMetadata = this.getProfileMetadata(id)
+      this.setProfileMetadata(id, {
+        ...currentMetadata,
+        settings: updatedSettings
+      })
+
+      // 获取更新后的Profile
+      const updatedProfile = this.convertToNewFormat(originalProfile)
 
       return {
         success: true,
@@ -268,10 +319,10 @@ export class RefactorProfileService {
    */
   async deleteProfile(id: string): Promise<ProfileOperationResult> {
     try {
-      const store = this.getProfileStore()
-      const profileIndex = store.profiles.findIndex(p => p.id === id)
+      const originalProfiles = getOriginalProfiles()
+      const profileToDelete = originalProfiles.find(p => p.id === id)
       
-      if (profileIndex === -1) {
+      if (!profileToDelete) {
         return {
           success: false,
           error: 'Profile不存在'
@@ -279,26 +330,20 @@ export class RefactorProfileService {
       }
 
       // 不能删除最后一个Profile
-      if (store.profiles.length === 1) {
+      if (originalProfiles.length === 1) {
         return {
           success: false,
           error: '不能删除最后一个Profile'
         }
       }
 
-      // 删除Profile
-      const deletedProfile = store.profiles[profileIndex]
-      store.profiles.splice(profileIndex, 1)
+      // 删除原系统的Profile
+      deleteOriginalProfile(id)
 
-      // 如果删除的是当前Profile，切换到第一个可用Profile
-      if (store.currentProfileId === id) {
-        store.currentProfileId = store.profiles[0]?.id || null
-      }
+      // 删除metadata
+      this.deleteProfileMetadata(id)
 
-      this.saveProfileStore(store)
-
-      // 清理相关数据
-      this.cleanupProfileData(id)
+      const deletedProfile = this.convertToNewFormat(profileToDelete)
 
       return {
         success: true,
@@ -316,26 +361,44 @@ export class RefactorProfileService {
   /**
    * 切换当前Profile
    */
-  switchProfile(id: string): boolean {
+  async switchProfile(id: string): Promise<boolean> {
+    // 防止并发切换
+    if (this.switchLock || syncManager.isSyncing()) {
+      console.warn('[RefactorProfileService] Profile switch in progress, ignoring request')
+      return false
+    }
+
+    this.switchLock = true
+
     try {
-      const store = this.getProfileStore()
-      const profile = store.profiles.find(p => p.id === id)
+      const allProfiles = getOriginalProfiles()
+      const profile = allProfiles.find(p => p.id === id)
       
       if (!profile) {
         console.error('[RefactorProfileService] Profile not found:', id)
         return false
       }
 
-      store.currentProfileId = id
-      this.saveProfileStore(store)
-
-      // 同步到旧系统（兼容性）
-      localStorage.setItem(this.OLD_PROFILE_KEY, id)
-
+      // 原子性切换
+      setOriginalCurrentProfile(id)
+      
+      console.log(`[RefactorProfileService] Successfully switched to profile: ${profile.name} (${id})`)
+      
+      // 使用同步管理器执行相关同步操作
+      await syncManager.executeSync()
+      
+      // 触发事件通知
+      this.notifyProfileSwitch()
+      
       return true
     } catch (error) {
       console.error('[RefactorProfileService] Failed to switch profile:', error)
       return false
+    } finally {
+      // 延迟释放锁，确保相关服务有时间响应切换事件
+      setTimeout(() => {
+        this.switchLock = false
+      }, 100)
     }
   }
 
@@ -344,26 +407,19 @@ export class RefactorProfileService {
    */
   getProfileStats(): ProfileStats {
     try {
-      const store = this.getProfileStore()
-      const current = this.getCurrentProfile()
+      const profiles = this.getAllProfiles()
+      const currentProfile = this.getCurrentProfile()
       
-      // 计算存储使用情况
-      const storageUsed = this.calculateStorageUsage()
-      
-      // 获取评估和目标数量
-      const assessmentCount = this.getAssessmentCount(store.currentProfileId)
-      const goalCount = this.getGoalCount(store.currentProfileId)
-
       return {
-        totalProfiles: store.profiles.length,
-        activeProfile: store.currentProfileId,
-        lastActive: current?.updatedAt || null,
-        storageUsed,
-        assessmentCount,
-        goalCount
+        totalProfiles: profiles.length,
+        activeProfile: currentProfile?.name || null,
+        lastActive: currentProfile?.updatedAt || null,
+        storageUsed: this.calculateStorageUsage(),
+        assessmentCount: this.getAssessmentCount(currentProfile?.id),
+        goalCount: this.getGoalCount(currentProfile?.id)
       }
     } catch (error) {
-      console.error('[RefactorProfileService] Failed to get profile stats:', error)
+      console.error('[RefactorProfileService] Failed to get stats:', error)
       return {
         totalProfiles: 0,
         activeProfile: null,
@@ -385,9 +441,15 @@ export class RefactorProfileService {
         return null
       }
 
-      // 包含相关数据
+      // 获取原系统数据
+      const originalProfile = getOriginalProfiles().find(p => p.id === id)
+      if (!originalProfile) {
+        return null
+      }
+
       const exportData = {
         profile,
+        originalData: originalProfile.data,
         assessments: this.getProfileAssessments(id),
         goals: this.getProfileGoals(id),
         exportDate: new Date().toISOString()
@@ -414,29 +476,31 @@ export class RefactorProfileService {
         }
       }
 
-      // 生成新ID避免冲突
-      const newProfile: Profile = {
-        ...importData.profile,
-        id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        createdAt: new Date(),
-        updatedAt: new Date()
+      // 创建新Profile
+      const result = await this.createProfile({
+        name: `${importData.profile.name} (导入)`,
+        email: importData.profile.email,
+        bio: importData.profile.bio,
+        avatar: importData.profile.avatar
+      })
+
+      if (result.success && result.data) {
+        // 导入原始数据
+        if (importData.originalData) {
+          const originalProfiles = getOriginalProfiles()
+          const profileIndex = originalProfiles.findIndex(p => p.id === result.data!.id)
+          if (profileIndex !== -1) {
+            originalProfiles[profileIndex].data = importData.originalData
+            // 更新localStorage
+            localStorage.setItem('pointer_ai_profiles', JSON.stringify({
+              profiles: originalProfiles,
+              currentProfileId: getOriginalCurrentProfileId()
+            }))
+          }
+        }
       }
 
-      // 检查名称冲突
-      const existing = this.getAllProfiles().find(p => p.name === newProfile.name)
-      if (existing) {
-        newProfile.name = `${newProfile.name} (导入)`
-      }
-
-      // 创建Profile
-      const store = this.getProfileStore()
-      store.profiles.push(newProfile)
-      this.saveProfileStore(store)
-
-      return {
-        success: true,
-        data: newProfile
-      }
+      return result
     } catch (error) {
       console.error('[RefactorProfileService] Failed to import profile:', error)
       return {
@@ -447,158 +511,182 @@ export class RefactorProfileService {
   }
 
   /**
-   * 私有方法：获取Profile存储
-   * 优先读取原系统数据，如果不存在则读取新系统数据
+   * 私有方法：将原格式转换为新格式
    */
-  private getProfileStore(): ProfileStore {
-    try {
-      // 首先尝试读取原系统数据
-      const originalData = localStorage.getItem(this.ORIGINAL_STORAGE_KEY)
-      if (originalData) {
-        const originalStore = JSON.parse(originalData)
-        return this.convertOriginalToNewFormat(originalStore)
-      }
+  private convertToNewFormat(original: OriginalProfile): Profile {
+    const metadata = this.getProfileMetadata(original.id)
+    const settings = this.getProfileSettings(original.id)
 
-      // 如果没有原系统数据，读取新系统数据
-      const newData = localStorage.getItem(this.STORAGE_KEY)
-      if (newData) {
-        const parsed = JSON.parse(newData)
-        // 确保profiles是数组
-        if (parsed.profiles && Array.isArray(parsed.profiles)) {
-          return parsed
-        }
-      }
-    } catch (error) {
-      console.warn('[RefactorProfileService] Failed to parse profile store:', error)
-    }
-
-    // 返回默认存储结构
     return {
-      currentProfileId: null,
-      profiles: []
+      id: original.id,
+      name: original.name,
+      avatar: original.avatar,
+      email: metadata.email,
+      bio: metadata.bio,
+      createdAt: new Date(original.createdAt),
+      updatedAt: new Date(original.lastLogin || original.createdAt),
+      isActive: true,
+      data: {
+        settings: settings,
+        progress: original.data,
+        achievements: []
+      }
     }
   }
 
   /**
-   * 私有方法：将原系统格式转换为新系统格式
+   * 私有方法：获取Profile设置（兼容原系统格式）
    */
-  private convertOriginalToNewFormat(originalStore: any): ProfileStore {
+  private getProfileSettings(profileId: string): ProfileSettings {
     try {
-      const originalProfiles = originalStore.profiles || []
-      const convertedProfiles: Profile[] = originalProfiles.map((original: any) => {
-        // 转换为新格式
-        const converted: Profile = {
-          id: original.id,
-          name: original.name,
-          avatar: original.avatar,
-          email: undefined, // 原系统没有email字段
-          bio: undefined, // 原系统没有bio字段
-          createdAt: new Date(original.createdAt),
-          updatedAt: new Date(original.lastLogin || original.createdAt),
-          isActive: true,
-          data: {
-            settings: this.convertOriginalSettings(original.data),
-            progress: original.data,
-            achievements: []
-          }
-        }
-        return converted
-      })
-
-      return {
-        currentProfileId: originalStore.currentProfileId,
-        profiles: convertedProfiles
+      // 先从当前Profile切换到指定Profile来获取设置
+      const originalCurrentId = getOriginalCurrentProfileId()
+      const needSwitch = originalCurrentId !== profileId
+      
+      if (needSwitch) {
+        setOriginalCurrentProfile(profileId)
       }
-    } catch (error) {
-      console.error('[RefactorProfileService] Failed to convert original format:', error)
-      return {
-        currentProfileId: null,
-        profiles: []
-      }
-    }
-  }
 
-  /**
-   * 私有方法：转换原系统设置为新格式
-   */
-  private convertOriginalSettings(originalData: any): ProfileSettings {
-    const defaultSettings = this.getDefaultSettings()
-    
-    // 如果原系统有settings，尝试转换
-    if (originalData && originalData.settings) {
+      // 从原系统获取settings
+      const originalSettings = getProfileData('settings')
+      
+      // 恢复原来的Profile
+      if (needSwitch && originalCurrentId) {
+        setOriginalCurrentProfile(originalCurrentId)
+      }
+
+      // 从metadata获取新格式设置
+      const metadata = this.getProfileMetadata(profileId)
+      const defaultSettings = this.getDefaultSettings()
+
+      // 合并设置，优先使用原系统的API配置
+      let apiConfig = defaultSettings.apiConfig
+      
+      if (originalSettings?.apiConfig) {
+        // 转换原系统的API配置格式
+        apiConfig = this.convertOriginalAPIConfig(originalSettings.apiConfig)
+      }
+
       return {
         ...defaultSettings,
-        // 从原系统设置中提取可用字段
-        theme: originalData.settings.theme || defaultSettings.theme,
-        language: originalData.settings.language || defaultSettings.language,
-        apiConfig: originalData.settings.apiConfig || defaultSettings.apiConfig,
-        notifications: {
-          ...defaultSettings.notifications,
-          ...originalData.settings.notifications
-        },
-        privacy: {
-          ...defaultSettings.privacy,
-          ...originalData.settings.privacy
-        },
-        learning: {
-          ...defaultSettings.learning,
-          ...originalData.settings.learning
-        }
+        ...metadata.settings,
+        apiConfig: apiConfig
       }
-    }
-
-    return defaultSettings
-  }
-
-  /**
-   * 私有方法：保存Profile存储
-   * 同时保存到原系统和新系统格式
-   */
-  private saveProfileStore(store: ProfileStore): void {
-    try {
-      // 保存到新系统格式
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(store))
-      
-      // 同时保存到原系统格式以保持兼容性
-      const originalFormat = this.convertNewToOriginalFormat(store)
-      localStorage.setItem(this.ORIGINAL_STORAGE_KEY, JSON.stringify(originalFormat))
-      
-      // 兼容旧的currentProfile key
-      localStorage.setItem(this.OLD_PROFILE_KEY, store.currentProfileId || '')
     } catch (error) {
-      console.error('[RefactorProfileService] Failed to save profile store:', error)
-      throw error
+      console.error('[RefactorProfileService] Failed to get profile settings:', error)
+      return this.getDefaultSettings()
     }
   }
 
   /**
-   * 私有方法：将新系统格式转换为原系统格式
+   * 私有方法：转换原系统API配置为新格式
    */
-  private convertNewToOriginalFormat(newStore: ProfileStore): any {
-    try {
-      const originalProfiles = newStore.profiles.map(profile => ({
-        id: profile.id,
-        name: profile.name,
-        hasPassword: false, // 新系统暂不支持密码
-        createdAt: profile.createdAt.toISOString(),
-        lastLogin: profile.updatedAt.toISOString(),
-        avatar: profile.avatar || '👤',
-        data: {
-          ...profile.data.progress,
-          settings: profile.data.settings
-        }
-      }))
+  private convertOriginalAPIConfig(originalConfig: any): APIConfig {
+    const defaultConfig = this.getDefaultSettings().apiConfig!
+    
+    if (!originalConfig) return defaultConfig
 
+    // 如果是新格式，直接返回
+    if (originalConfig.model && originalConfig.key) {
+      return originalConfig
+    }
+
+    // 转换旧格式
+    const currentService = originalConfig.currentService
+    if (currentService && originalConfig[currentService]) {
+      const serviceConfig = originalConfig[currentService]
       return {
-        profiles: originalProfiles,
-        currentProfileId: newStore.currentProfileId
+        model: this.mapOldServiceToNewModel(currentService),
+        key: serviceConfig.apiKey || '',
+        specificModel: serviceConfig.model || this.getDefaultModelForService(currentService),
+        params: {
+          temperature: 0.7,
+          maxTokens: 2000,
+          ...serviceConfig.params
+        }
       }
+    }
+
+    return defaultConfig
+  }
+
+  /**
+   * 私有方法：将新格式API配置转换为原系统格式
+   */
+  private convertAPIConfigToOriginalFormat(config: APIConfig): any {
+    return {
+      apiConfig: {
+        currentService: this.mapNewModelToOldService(config.model),
+        [this.mapNewModelToOldService(config.model)]: {
+          apiKey: config.key,
+          model: config.specificModel,
+          params: config.params
+        }
+      }
+    }
+  }
+
+  /**
+   * 私有方法：映射服务名称
+   */
+  private mapOldServiceToNewModel(oldService: string): 'openai' | 'claude' | 'qwen' {
+    switch (oldService) {
+      case 'openai': return 'openai'
+      case 'claude': return 'claude'
+      case 'qwen': return 'qwen'
+      default: return 'openai'
+    }
+  }
+
+  private mapNewModelToOldService(newModel: string): string {
+    switch (newModel) {
+      case 'openai': return 'openai'
+      case 'claude': return 'claude'
+      case 'qwen': return 'qwen'
+      default: return 'openai'
+    }
+  }
+
+  private getDefaultModelForService(service: string): string {
+    switch (service) {
+      case 'openai': return 'gpt-4'
+      case 'claude': return 'claude-3-5-sonnet-20241022'
+      case 'qwen': return 'qwen-plus'
+      default: return 'gpt-4'
+    }
+  }
+
+  /**
+   * 私有方法：获取Profile的metadata
+   */
+  private getProfileMetadata(profileId: string): any {
+    try {
+      const metadata = localStorage.getItem(`${this.REFACTOR_STORAGE_KEY}_${profileId}`)
+      return metadata ? JSON.parse(metadata) : {}
     } catch (error) {
-      console.error('[RefactorProfileService] Failed to convert to original format:', error)
-      return {
-        profiles: [],
-        currentProfileId: null
-      }
+      return {}
+    }
+  }
+
+  /**
+   * 私有方法：设置Profile的metadata
+   */
+  private setProfileMetadata(profileId: string, data: any): void {
+    try {
+      localStorage.setItem(`${this.REFACTOR_STORAGE_KEY}_${profileId}`, JSON.stringify(data))
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to set metadata:', error)
+    }
+  }
+
+  /**
+   * 私有方法：删除Profile的metadata
+   */
+  private deleteProfileMetadata(profileId: string): void {
+    try {
+      localStorage.removeItem(`${this.REFACTOR_STORAGE_KEY}_${profileId}`)
+    } catch (error) {
+      console.error('[RefactorProfileService] Failed to delete metadata:', error)
     }
   }
 
@@ -609,6 +697,15 @@ export class RefactorProfileService {
     return {
       theme: 'system',
       language: 'zh-CN',
+      apiConfig: {
+        model: 'openai',
+        key: '',
+        specificModel: 'gpt-4',
+        params: {
+          temperature: 0.7,
+          maxTokens: 2000
+        }
+      },
       notifications: {
         email: true,
         push: true,
@@ -619,7 +716,7 @@ export class RefactorProfileService {
         dataCollection: true
       },
       learning: {
-        dailyGoal: 60, // 60分钟
+        dailyGoal: 30,
         difficulty: 'intermediate',
         focusAreas: []
       }
@@ -632,21 +729,16 @@ export class RefactorProfileService {
   private validateProfileInput(input: CreateProfileInput): { isValid: boolean; errors: ProfileValidationError[] } {
     const errors: ProfileValidationError[] = []
 
-    // 验证名称
     if (!input.name || input.name.trim().length === 0) {
       errors.push({ field: 'name', message: 'Profile名称不能为空' })
-    } else if (input.name.length > 50) {
+    }
+
+    if (input.name && input.name.length > 50) {
       errors.push({ field: 'name', message: 'Profile名称不能超过50个字符' })
     }
 
-    // 验证邮箱
     if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
       errors.push({ field: 'email', message: '邮箱格式不正确' })
-    }
-
-    // 验证简介
-    if (input.bio && input.bio.length > 200) {
-      errors.push({ field: 'bio', message: '简介不能超过200个字符' })
     }
 
     return {
@@ -656,36 +748,21 @@ export class RefactorProfileService {
   }
 
   /**
-   * 私有方法：清理Profile数据
-   */
-  private cleanupProfileData(profileId: string): void {
-    try {
-      // 清理评估数据
-      localStorage.removeItem(`refactor_assessments_${profileId}`)
-      localStorage.removeItem(`refactor_current_assessment_${profileId}`)
-      
-      // 清理目标数据（如果有）
-      localStorage.removeItem(`goals_${profileId}`)
-      
-      // 清理其他相关数据
-      // TODO: 根据实际需要添加更多清理逻辑
-    } catch (error) {
-      console.warn('[RefactorProfileService] Failed to cleanup profile data:', error)
-    }
-  }
-
-  /**
-   * 私有方法：计算存储使用情况
+   * 私有方法：计算存储使用量
    */
   private calculateStorageUsage(): number {
     try {
-      let totalSize = 0
-      for (const key in localStorage) {
-        if (localStorage.hasOwnProperty(key)) {
-          totalSize += localStorage[key].length
+      let total = 0
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key) {
+          const value = localStorage.getItem(key)
+          if (value) {
+            total += new Blob([value]).size
+          }
         }
       }
-      return Math.round(totalSize / 1024 / 1024 * 100) / 100 // MB
+      return Math.round(total / 1024 / 1024 * 100) / 100 // MB
     } catch (error) {
       return 0
     }
@@ -694,7 +771,7 @@ export class RefactorProfileService {
   /**
    * 私有方法：获取评估数量
    */
-  private getAssessmentCount(profileId: string | null): number {
+  private getAssessmentCount(profileId?: string): number {
     if (!profileId) return 0
     try {
       const data = localStorage.getItem(`refactor_assessments_${profileId}`)
@@ -707,7 +784,7 @@ export class RefactorProfileService {
   /**
    * 私有方法：获取目标数量
    */
-  private getGoalCount(profileId: string | null): number {
+  private getGoalCount(profileId?: string): number {
     if (!profileId) return 0
     try {
       const data = localStorage.getItem(`goals_${profileId}`)
@@ -742,7 +819,5 @@ export class RefactorProfileService {
   }
 }
 
-/**
- * 默认Profile服务实例
- */
+// 创建单例实例
 export const refactorProfileService = new RefactorProfileService() 

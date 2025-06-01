@@ -33,6 +33,9 @@ export * from './assessment'
 // AI服务相关类型
 export * from './ai'
 
+// Profile相关类型
+export * from './profile'
+
 // 基础类型
 export interface APIResponse<T = any> {
   success: boolean

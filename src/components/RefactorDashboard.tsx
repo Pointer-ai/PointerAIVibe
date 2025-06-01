@@ -25,6 +25,7 @@ import RefactorDashboardMain from '../refactor/pages/Dashboard'
 import GoalManagement from '../refactor/pages/GoalManagement'
 import UIShowcase from '../refactor/pages/UIShowcase'
 import AssessmentPage from '../refactor/pages/Assessment'
+import ProfileManagementPage from '../refactor/pages/ProfileManagement'
 
 /**
  * 重构系统Dashboard
@@ -36,7 +37,7 @@ export const RefactorDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [systemStatus, setSystemStatus] = useState<any>(null)
-  const [activeView, setActiveView] = useState<'main' | 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'quick-start' | 'api-test'>('main')
+  const [activeView, setActiveView] = useState<'main' | 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'quick-start' | 'api-test'>('main')
   const [profile] = useState(getCurrentProfile())
 
   const showMessage = (msg: string, isError = false) => {
@@ -67,7 +68,7 @@ export const RefactorDashboard: React.FC = () => {
   }, [])
 
   // 处理导航
-  const handleNavigate = (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase') => {
+  const handleNavigate = (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management') => {
     setActiveView(view)
   }
 
@@ -286,6 +287,32 @@ export const RefactorDashboard: React.FC = () => {
               </div>
             </div>
             <AssessmentPage />
+          </div>
+        )
+
+      case 'profile-management':
+        return (
+          <div className="space-y-6">
+            {/* 导航栏 */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={handleBackToMain}
+                    className="text-blue-600 hover:text-blue-800 flex items-center space-x-2"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span>返回重构Dashboard</span>
+                  </button>
+                </div>
+                <div className="text-sm text-gray-500">
+                  用户管理
+                </div>
+              </div>
+            </div>
+            <ProfileManagementPage />
           </div>
         )
 

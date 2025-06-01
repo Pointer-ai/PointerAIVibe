@@ -21,7 +21,7 @@ import { getCurrentProfile } from '../../utils/profile'
 import { getCurrentAssessment } from '../../modules/abilityAssess'
 
 interface RefactorDashboardProps {
-  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase') => void
+  onNavigate: (view: 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management') => void
 }
 
 /**
@@ -39,6 +39,20 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
   }
 
   const modules = [
+    {
+      id: 'profile-management',
+      view: 'profile-management' as const,
+      title: '👤 Profile管理',
+      description: '管理您的学习档案、设置和AI配置，支持多Profile切换',
+      icon: (
+        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      ),
+      color: 'from-emerald-500 to-teal-500',
+      status: '✅ 可用',
+      available: true
+    },
     {
       id: 'goal-management',
       view: 'goal-management' as const,

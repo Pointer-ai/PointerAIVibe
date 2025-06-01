@@ -23,8 +23,8 @@ export { default as RefactorDashboard } from './pages/Dashboard'
 export { default as GoalManagementPage } from './pages/GoalManagement'
 export { default as UIShowcasePage } from './pages/UIShowcase'
 export { default as AssessmentPage } from './pages/Assessment'
-export { ProfileManagementPage } from './pages/ProfileManagement'
-export { SystemDiagnosticsPage } from './pages/SystemDiagnostics'
+export { default as ProfileManagementPage } from './pages/ProfileManagement'
+export { default as SystemDiagnosticsPage } from './pages/SystemDiagnostics'
 export { DataManagementPage } from './pages/DataManagement'
 
 // 导出UI组件
@@ -32,7 +32,6 @@ export * from './components/ui'
 
 // 导出服务
 export { refactorAIService } from './services/aiService'
-export { refactorProfileService } from './services/profileService'
 export { legacyDataService } from './services/legacyDataService'
 export { syncManager } from './services/syncManager'
 

@@ -23,7 +23,7 @@ import { Badge } from '../components/ui/Badge/Badge'
 import { Alert, toast } from '../components/ui/Alert/Alert'
 import { ConfirmModal } from '../components/ui/Modal/Modal'
 import { Loading } from '../components/ui/Loading/Loading'
-import { refactorProfileService } from '../services/profileService'
+import { learningApi } from '../../api'
 
 interface DataManagementPageProps {
   onNavigate: (view: string) => void
@@ -53,6 +53,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmData | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [currentProfile, setCurrentProfile] = useState<any>(null)
+  const [exportData, setExportData] = useState<string | null>(null)
 
   // 刷新数据
   const refreshData = async () => {
@@ -60,16 +61,26 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       setRefreshing(true)
       
       // 获取当前Profile
-      const profile = refactorProfileService.getCurrentProfile()
+      const profileResponse = learningApi.getCurrentProfile()
+      if (!profileResponse.success || !profileResponse.data) {
+        toast.error('无法获取当前Profile')
+        return
+      }
+      
+      const profile = profileResponse.data
       setCurrentProfile(profile)
       
       // 获取学习数据
-      const data = refactorProfileService.getProfileLearningData()
-      setLearningData(data)
+      const dataResponse = learningApi.getProfileLearningData()
+      if (dataResponse.success) {
+        setLearningData(dataResponse.data)
+      }
       
       // 获取数据统计
-      const stats = refactorProfileService.getProfileDataStats()
-      setDataStats(stats)
+      const statsResponse = learningApi.getProfileDataStats()
+      if (statsResponse.success) {
+        setDataStats(statsResponse.data)
+      }
       
     } catch (error) {
       console.error('Failed to refresh data:', error)
@@ -96,18 +107,17 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   }
 
   // 导出所有数据
-  const exportAllData = () => {
-    const exportData = refactorProfileService.exportLearningData()
-    const blob = new Blob([exportData], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `learning-data-${currentProfile?.name || 'unknown'}-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast.success('数据导出成功')
+  const handleExport = async () => {
+    try {
+      const exportResponse = learningApi.exportLearningData()
+      if (exportResponse.success) {
+        setExportData(exportResponse.data || null)
+      } else {
+        toast.error(exportResponse.error || '导出失败')
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '导出失败')
+    }
   }
 
   // 处理删除操作
@@ -124,13 +134,13 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       switch (deleteConfirm.type) {
         case 'goal':
-          result = await refactorProfileService.deleteLearningGoal(deleteConfirm.id, deleteConfirm.title)
+          result = await learningApi.deleteLearningGoal(deleteConfirm.id, deleteConfirm.title)
           break
         case 'path':
-          result = await refactorProfileService.deleteLearningPath(deleteConfirm.id, deleteConfirm.title)
+          result = await learningApi.deleteLearningPath(deleteConfirm.id, deleteConfirm.title)
           break
         case 'unit':
-          result = await refactorProfileService.deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
+          result = await learningApi.deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
           break
       }
 
@@ -147,6 +157,21 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       toast.error('删除操作失败')
       setDeleteConfirm(null)
     }
+  }
+
+  const handleDownload = () => {
+    if (!exportData) return
+    
+    const blob = new Blob([exportData], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `learning_data_${currentProfile?.name || 'unknown'}_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setExportData(null)
   }
 
   if (loading) {
@@ -182,7 +207,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
             <div className="flex items-center gap-3">
               <Button
                 variant="secondary"
-                onClick={exportAllData}
+                onClick={handleExport}
                 className="flex items-center gap-2"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -612,10 +637,30 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
           onConfirm={confirmDelete}
           title="⚠️ 确认删除"
           content={`您确定要删除 "${deleteConfirm.title}" 吗？此操作不可撤销。删除学习目标会同时删除相关的学习路径和课程内容。`}
-          confirmText="确认删除"
+          confirmText={isDeleting ? '删除中...' : '确认删除'}
           cancelText="取消"
           variant="danger"
         />
+      )}
+
+      {/* 导出数据模态框 */}
+      {exportData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">导出成功</h3>
+            <p className="text-gray-600 mb-4">
+              学习数据已导出为JSON格式，点击下载按钮保存到本地。
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setExportData(null)}>
+                取消
+              </Button>
+              <Button onClick={handleDownload}>
+                下载文件
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

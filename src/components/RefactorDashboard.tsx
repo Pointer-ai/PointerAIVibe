@@ -63,9 +63,9 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onBack }) 
       case 'ui-showcase':
         return <UIShowcase onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'profile-management':
-        return <ProfileManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
+        return <ProfileManagementPage />
       case 'system-diagnostics':
-        return <SystemDiagnosticsPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
+        return <SystemDiagnosticsPage />
       case 'data-management':
         return <DataManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'path-planning':

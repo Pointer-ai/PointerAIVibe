@@ -16,375 +16,536 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Profile管理页面 - 完整的Profile CRUD操作
+
 import React, { useState, useEffect } from 'react'
+import { learningApi } from '../../api'
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card/Card'
 import { Button } from '../components/ui/Button/Button'
+import { Input, FormField } from '../components/ui/Input/Input'
+import { Badge, StatusBadge } from '../components/ui/Badge/Badge'
 import { Alert } from '../components/ui/Alert/Alert'
-import { ProfileList, ProfileForm, ProfileSettings } from '../components/features/Profile'
-import { refactorProfileService } from '../services/profileService'
-import { refactorAIService } from '../services/aiService'
-import { Profile, CreateProfileInput, UpdateProfileInput, UpdateSettingsInput, APIConfig } from '../types/profile'
+import { Modal, ConfirmModal, FormModal } from '../components/ui/Modal/Modal'
+import { Loading } from '../components/ui/Loading/Loading'
+import { 
+  Profile, 
+  CreateProfileInput, 
+  UpdateProfileInput,
+  UpdateSettingsInput,
+  ProfileSettings,
+  APIConfig
+} from '../types/profile'
 
-interface ProfileManagementPageProps {
-  onNavigate?: (view: string) => void
-}
-
-type ViewMode = 'list' | 'create' | 'edit' | 'settings'
-
-export const ProfileManagementPage: React.FC<ProfileManagementPageProps> = ({ onNavigate }) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+export default function ProfileManagement() {
   const [profiles, setProfiles] = useState<Profile[]>([])
-  const [currentProfileId, setCurrentProfileId] = useState<string | null>(null)
-  const [editingProfile, setEditingProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSwitching, setIsSwitching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingProfile, setEditingProfile] = useState<Profile | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
 
-  // 初始化数据
+  // 加载数据
   useEffect(() => {
-    loadProfiles()
+    loadData()
   }, [])
 
-  const loadProfiles = () => {
+  const loadData = () => {
     try {
-      const allProfiles = refactorProfileService.getAllProfiles()
-      const current = refactorProfileService.getCurrentProfile()
+      const allProfilesResponse = learningApi.getAllProfiles()
+      const currentResponse = learningApi.getCurrentProfile()
       
-      setProfiles(allProfiles)
-      setCurrentProfileId(current?.id || null)
+      if (allProfilesResponse.success) {
+        setProfiles(allProfilesResponse.data || [])
+      } else {
+        setError(allProfilesResponse.error || 'Failed to load profiles')
+      }
+      
+      if (currentResponse.success) {
+        setCurrentProfile(currentResponse.data || null)
+      }
     } catch (error) {
-      console.error('Failed to load profiles:', error)
-      setError('加载Profile失败')
+      setError(error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleCreateProfile = async (input: CreateProfileInput | UpdateProfileInput) => {
-    // 确保input包含必需的name字段
-    if (!input.name) {
-      setError('Profile名称不能为空')
-      return
-    }
-
-    const createInput: CreateProfileInput = {
-      name: input.name,
-      email: input.email,
-      bio: input.bio,
-      avatar: input.avatar
-    }
-
-    setLoading(true)
-    setError(null)
-
+  // 创建Profile
+  const handleCreateProfile = async (data: CreateProfileInput) => {
     try {
-      const result = await refactorProfileService.createProfile(createInput)
-      if (result.success && result.data) {
-        setProfiles(prev => [...prev, result.data!])
-        
-        // 如果是第一个Profile，自动设为当前Profile
-        if (profiles.length === 0) {
-          setCurrentProfileId(result.data.id)
-        }
-        
-        setViewMode('list')
+      const result = await learningApi.createProfile(data)
+      if (result.success) {
+        loadData()
+        setShowCreateModal(false)
+        setError(null)
       } else {
         setError(result.error || '创建Profile失败')
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : '创建Profile失败')
-    } finally {
-      setLoading(false)
     }
   }
 
-  const handleUpdateProfile = async (input: CreateProfileInput | UpdateProfileInput) => {
+  // 更新Profile
+  const handleUpdateProfile = async (data: UpdateProfileInput) => {
     if (!editingProfile) return
-
-    const updateInput: UpdateProfileInput = {
-      name: input.name,
-      email: input.email,
-      bio: input.bio,
-      avatar: input.avatar
-    }
-
-    setLoading(true)
-    setError(null)
-
+    
     try {
-      const result = await refactorProfileService.updateProfile(editingProfile.id, updateInput)
-      if (result.success && result.data) {
-        setProfiles(prev => prev.map(p => p.id === editingProfile.id ? result.data! : p))
+      const result = await learningApi.updateProfile(editingProfile.id, data)
+      if (result.success) {
+        loadData()
         setEditingProfile(null)
-        setViewMode('list')
+        setError(null)
       } else {
         setError(result.error || '更新Profile失败')
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : '更新Profile失败')
-    } finally {
-      setLoading(false)
     }
   }
 
+  // 更新设置
   const handleUpdateSettings = async (settings: UpdateSettingsInput) => {
     if (!editingProfile) return
-
-    setLoading(true)
-    setError(null)
-
+    
     try {
-      const result = await refactorProfileService.updateSettings(editingProfile.id, settings)
-      if (result.success && result.data) {
-        setProfiles(prev => prev.map(p => p.id === editingProfile.id ? result.data! : p))
-        setEditingProfile(result.data)
-        
-        // 如果更新的是当前Profile，重新加载AI服务配置
-        if (editingProfile.id === currentProfileId) {
-          refactorAIService.reloadConfig()
-        }
+      const result = await learningApi.updateProfileSettings(editingProfile.id, settings)
+      if (result.success) {
+        loadData()
+        setShowSettingsModal(false)
+        setEditingProfile(null)
+        setError(null)
       } else {
         setError(result.error || '更新设置失败')
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : '更新设置失败')
-    } finally {
-      setLoading(false)
     }
   }
 
+  // 切换Profile
   const handleSwitchProfile = async (id: string) => {
-    setLoading(true)
+    if (isSwitching) return
+    
+    setIsSwitching(true)
     setError(null)
-
+    
     try {
-      const success = await refactorProfileService.switchProfile(id)
-      if (success) {
-        setCurrentProfileId(id)
-        
-        // 刷新Profile列表以确保状态一致
-        loadProfiles()
-        
-        console.log(`[ProfileManagement] Successfully switched to profile: ${id}`)
+      const success = await learningApi.switchProfile(id)
+      if (success.success) {
+        loadData()
       } else {
-        setError('切换Profile失败 - 请稍后重试')
+        setError(success.error || 'Profile切换失败')
       }
     } catch (error) {
-      console.error('[ProfileManagement] Profile switch failed:', error)
-      setError(error instanceof Error ? error.message : '切换Profile失败')
+      setError(error instanceof Error ? error.message : 'Profile切换失败')
     } finally {
-      setLoading(false)
+      setIsSwitching(false)
     }
   }
 
-  const handleDeleteProfile = async (id: string) => {
-    setLoading(true)
-    setError(null)
-
+  // 删除Profile
+  const handleDeleteProfile = async () => {
+    if (!deleteConfirm) return
+    
     try {
-      const result = await refactorProfileService.deleteProfile(id)
+      const result = await learningApi.deleteProfile(deleteConfirm.id)
       if (result.success) {
-        setProfiles(prev => prev.filter(p => p.id !== id))
-        
-        // 如果删除的是当前Profile，重新加载
-        if (id === currentProfileId) {
-          loadProfiles()
-        }
+        loadData()
+        setDeleteConfirm(null)
+        setError(null)
       } else {
         setError(result.error || '删除Profile失败')
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : '删除Profile失败')
-    } finally {
-      setLoading(false)
     }
   }
 
-  const handleEditProfile = (profile: Profile) => {
-    setEditingProfile(profile)
-    setViewMode('edit')
-  }
-
-  const handleEditSettings = (profile: Profile) => {
-    setEditingProfile(profile)
-    setViewMode('settings')
-  }
-
-  const handleTestAPI = async (config: APIConfig): Promise<boolean> => {
-    try {
-      // 临时设置AI配置进行测试
-      const originalConfig = refactorAIService.getConfig()
-      refactorAIService.setConfig({
-        provider: config.model === 'openai' ? 'openai' : config.model === 'claude' ? 'claude' : 'qwen',
-        model: config.specificModel || (config.model === 'openai' ? 'gpt-4' : config.model === 'claude' ? 'claude-3-5-sonnet-20241022' : 'qwen-plus'),
-        apiKey: config.key,
-        temperature: config.params?.temperature || 0.7,
-        maxTokens: config.params?.maxTokens || 2000
-      })
-
-      const success = await refactorAIService.checkHealth()
-      
-      // 恢复原配置
-      if (originalConfig) {
-        refactorAIService.setConfig(originalConfig)
-      }
-      
-      return success
-    } catch (error) {
-      console.error('API test failed:', error)
-      return false
-    }
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <Loading size="lg" text="加载Profile数据..." />
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* 页面头部 */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">👤 Profile管理</h1>
-              <p className="text-gray-600 mt-2">
-                管理您的学习档案、设置和AI配置
-              </p>
-            </div>
-            
-            {onNavigate && (
-              <Button
-                variant="secondary"
-                onClick={() => onNavigate('main')}
-              >
-                返回主页
-              </Button>
-            )}
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* 页面标题 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Profile管理</h1>
+            <p className="text-gray-600 mt-2">管理所有Profile，切换当前活跃Profile</p>
           </div>
+          <Button onClick={() => setShowCreateModal(true)}>
+            ➕ 创建Profile
+          </Button>
         </div>
 
         {/* 错误提示 */}
         {error && (
-          <Alert variant="error" className="mb-6">
+          <Alert 
+            variant="error" 
+            closable 
+            onClose={() => setError(null)}
+          >
             {error}
           </Alert>
         )}
 
-        {/* 主要内容区域 */}
-        {viewMode === 'list' && (
-          <ProfileList
-            profiles={profiles}
-            currentProfileId={currentProfileId}
-            onSwitch={handleSwitchProfile}
-            onEdit={handleEditProfile}
-            onDelete={handleDeleteProfile}
-            onCreateNew={() => setViewMode('create')}
+        {/* 当前Profile信息 */}
+        {currentProfile && (
+          <Card variant="bordered">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="text-xl">{currentProfile.avatar || '👤'}</span>
+                当前活跃Profile: {currentProfile.name}
+                <StatusBadge status="active" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">邮箱</p>
+                  <p className="font-medium">{currentProfile.email || '未设置'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">创建时间</p>
+                  <p className="font-medium">{currentProfile.createdAt.toLocaleDateString()}</p>
+                </div>
+                {currentProfile.bio && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-gray-600">简介</p>
+                    <p className="font-medium">{currentProfile.bio}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button 
+                variant="secondary"
+                onClick={() => {
+                  setEditingProfile(currentProfile)
+                  setShowSettingsModal(true)
+                }}
+              >
+                ⚙️ 管理设置
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {/* Profile列表 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {profiles.map(profile => (
+            <Card 
+              key={profile.id} 
+              variant={profile.isActive ? "shadow" : "bordered"}
+              className={profile.isActive ? "ring-2 ring-blue-500" : ""}
+            >
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{profile.avatar || '👤'}</span>
+                    <span className="truncate">{profile.name}</span>
+                  </div>
+                  {profile.isActive && <Badge variant="primary">当前</Badge>}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">邮箱: </span>
+                    <span>{profile.email || '未设置'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">创建时间: </span>
+                    <span>{profile.createdAt.toLocaleDateString()}</span>
+                  </div>
+                  {profile.bio && (
+                    <div>
+                      <span className="text-gray-600">简介: </span>
+                      <span className="truncate">{profile.bio}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter>
+                <div className="flex gap-2 w-full">
+                  {!profile.isActive && (
+                    <Button 
+                      variant="primary" 
+                      size="sm" 
+                      onClick={() => handleSwitchProfile(profile.id)}
+                      disabled={isSwitching}
+                      className="flex-1"
+                    >
+                      {isSwitching ? '切换中...' : '切换'}
+                    </Button>
+                  )}
+                  <Button 
+                    variant="secondary" 
+                    size="sm"
+                    onClick={() => setEditingProfile(profile)}
+                    className="flex-1"
+                  >
+                    编辑
+                  </Button>
+                  {!profile.isActive && (
+                    <Button 
+                      variant="danger" 
+                      size="sm"
+                      onClick={() => setDeleteConfirm({ id: profile.id, name: profile.name })}
+                    >
+                      删除
+                    </Button>
+                  )}
+                </div>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+
+        {/* 创建Profile模态框 */}
+        <SimpleCreateModal 
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSubmit={handleCreateProfile}
+        />
+
+        {/* 编辑Profile模态框 */}
+        {editingProfile && (
+          <SimpleEditModal 
+            isOpen={!!editingProfile && !showSettingsModal}
+            profile={editingProfile}
+            onClose={() => setEditingProfile(null)}
+            onSubmit={handleUpdateProfile}
           />
         )}
 
-        {viewMode === 'create' && (
-          <div className="space-y-6">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="secondary"
-                onClick={() => setViewMode('list')}
-              >
-                ← 返回列表
-              </Button>
-              <h2 className="text-xl font-semibold">创建新Profile</h2>
-            </div>
-            
-            <ProfileForm
-              loading={loading}
-              onSubmit={handleCreateProfile}
-              onCancel={() => setViewMode('list')}
-            />
-          </div>
+        {/* 设置管理模态框 */}
+        {editingProfile && (
+          <SimpleSettingsModal 
+            isOpen={showSettingsModal}
+            profile={editingProfile}
+            onClose={() => {
+              setShowSettingsModal(false)
+              setEditingProfile(null)
+            }}
+            onSubmit={handleUpdateSettings}
+          />
         )}
 
-        {viewMode === 'edit' && editingProfile && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Button
-                  variant="secondary"
-                  onClick={() => setViewMode('list')}
-                >
-                  ← 返回列表
-                </Button>
-                <h2 className="text-xl font-semibold">编辑Profile</h2>
-              </div>
-              
-              <Button
-                variant="primary"
-                onClick={() => handleEditSettings(editingProfile)}
-              >
-                高级设置
-              </Button>
-            </div>
-            
-            <ProfileForm
-              profile={editingProfile}
-              loading={loading}
-              onSubmit={handleUpdateProfile}
-              onCancel={() => setViewMode('list')}
-            />
-          </div>
-        )}
-
-        {viewMode === 'settings' && editingProfile && (
-          <div className="space-y-6">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="secondary"
-                onClick={() => setViewMode('list')}
-              >
-                ← 返回列表
-              </Button>
-              <h2 className="text-xl font-semibold">Profile设置</h2>
-            </div>
-            
-            <ProfileSettings
-              profile={editingProfile}
-              loading={loading}
-              onSave={handleUpdateSettings}
-              onTestAPI={handleTestAPI}
-            />
-          </div>
-        )}
-
-        {/* 系统特性说明 */}
-        {viewMode === 'list' && (
-          <div className="mt-8 grid md:grid-cols-2 gap-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-blue-800 mb-3">🆕 新功能</h3>
-              <div className="space-y-2 text-sm text-blue-700">
-                <div className="flex items-center">
-                  <span className="w-3 h-3 bg-blue-500 rounded-full mr-3"></span>
-                  多Profile数据隔离
-                </div>
-                <div className="flex items-center">
-                  <span className="w-3 h-3 bg-blue-500 rounded-full mr-3"></span>
-                  独立的AI配置管理
-                </div>
-                <div className="flex items-center">
-                  <span className="w-3 h-3 bg-blue-500 rounded-full mr-3"></span>
-                  个性化学习设置
-                </div>
-                <div className="flex items-center">
-                  <span className="w-3 h-3 bg-blue-500 rounded-full mr-3"></span>
-                  Profile数据导入导出
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-green-800 mb-3">💡 使用提示</h3>
-              <div className="space-y-2 text-sm text-green-700">
-                <p>• 每个Profile有独立的评估记录和学习进度</p>
-                <p>• 可以为不同学习目标创建不同Profile</p>
-                <p>• AI配置支持OpenAI、Claude、通义千问</p>
-                <p>• 切换Profile后AI服务会自动使用新配置</p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 删除确认模态框 */}
+        <ConfirmModal 
+          isOpen={!!deleteConfirm}
+          title="确认删除Profile"
+          content={`确定要删除Profile "${deleteConfirm?.name}" 吗？此操作不可撤销。`}
+          onConfirm={handleDeleteProfile}
+          onClose={() => setDeleteConfirm(null)}
+          confirmText="删除"
+          variant="danger"
+        />
       </div>
     </div>
   )
 }
 
-export default ProfileManagementPage 
+// 简单的创建Profile模态框
+const SimpleCreateModal: React.FC<{
+  isOpen: boolean
+  onClose: () => void
+  onSubmit: (data: CreateProfileInput) => Promise<void>
+}> = ({ isOpen, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState<CreateProfileInput>({
+    name: '',
+    email: '',
+    bio: '',
+    avatar: '👤'
+  })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) return
+    
+    setLoading(true)
+    try {
+      await onSubmit(formData)
+      setFormData({ name: '', email: '', bio: '', avatar: '👤' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <FormModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      title="创建新Profile"
+      loading={loading}
+      submitDisabled={!formData.name.trim()}
+    >
+      <div className="space-y-4">
+        <FormField label="Profile名称" required>
+          <Input
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="请输入Profile名称"
+          />
+        </FormField>
+        
+        <FormField label="邮箱">
+          <Input
+            type="email"
+            value={formData.email || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            placeholder="请输入邮箱地址"
+          />
+        </FormField>
+        
+        <FormField label="简介">
+          <Input
+            value={formData.bio || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+            placeholder="请输入简介"
+          />
+        </FormField>
+        
+        <FormField label="头像">
+          <Input
+            value={formData.avatar || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, avatar: e.target.value }))}
+            placeholder="请输入头像emoji"
+          />
+        </FormField>
+      </div>
+    </FormModal>
+  )
+}
+
+// 简单的编辑Profile模态框
+const SimpleEditModal: React.FC<{
+  isOpen: boolean
+  profile: Profile
+  onClose: () => void
+  onSubmit: (data: UpdateProfileInput) => Promise<void>
+}> = ({ isOpen, profile, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState<UpdateProfileInput>({
+    name: profile.name,
+    email: profile.email,
+    bio: profile.bio,
+    avatar: profile.avatar
+  })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async () => {
+    if (!formData.name?.trim()) return
+    
+    setLoading(true)
+    try {
+      await onSubmit(formData)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <FormModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      title="编辑Profile"
+      loading={loading}
+      submitDisabled={!formData.name?.trim()}
+    >
+      <div className="space-y-4">
+        <FormField label="Profile名称" required>
+          <Input
+            value={formData.name || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="请输入Profile名称"
+          />
+        </FormField>
+        
+        <FormField label="邮箱">
+          <Input
+            type="email"
+            value={formData.email || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+            placeholder="请输入邮箱地址"
+          />
+        </FormField>
+        
+        <FormField label="简介">
+          <Input
+            value={formData.bio || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+            placeholder="请输入简介"
+          />
+        </FormField>
+        
+        <FormField label="头像">
+          <Input
+            value={formData.avatar || ''}
+            onChange={(e) => setFormData(prev => ({ ...prev, avatar: e.target.value }))}
+            placeholder="请输入头像emoji"
+          />
+        </FormField>
+      </div>
+    </FormModal>
+  )
+}
+
+// 简单的设置管理模态框
+const SimpleSettingsModal: React.FC<{
+  isOpen: boolean
+  profile: Profile
+  onClose: () => void
+  onSubmit: (data: UpdateSettingsInput) => Promise<void>
+}> = ({ isOpen, profile, onClose, onSubmit }) => {
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async () => {
+    setLoading(true)
+    try {
+      // 这里可以添加设置更新逻辑
+      await onSubmit({})
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <FormModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      title="Profile设置"
+      loading={loading}
+    >
+      <div className="space-y-4">
+        <div className="text-gray-600">
+          Profile设置功能正在开发中...
+        </div>
+        <div className="space-y-2">
+          <p><strong>Profile ID:</strong> {profile.id}</p>
+          <p><strong>创建时间:</strong> {profile.createdAt.toLocaleString()}</p>
+          <p><strong>更新时间:</strong> {profile.updatedAt.toLocaleString()}</p>
+        </div>
+      </div>
+    </FormModal>
+  )
+}
+
+// 命名导出，用于其他组件导入
+export const ProfileManagementPage = ProfileManagement 

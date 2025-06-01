@@ -87,4 +87,9 @@ export interface GoalRecommendation {
   skills: string[]
   outcomes: string[]
   reasoning: string
+  priority?: number
+  targetLevel?: 'beginner' | 'intermediate' | 'advanced'
+  requiredSkills?: string[]
+  estimatedTimeWeeks?: number
+  confidence?: number
 } 

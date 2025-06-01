@@ -16,100 +16,133 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Profile同步Hook - 处理Profile切换时的状态同步
+// Profile同步管理Hook
 
-import { useEffect, useState, useCallback } from 'react'
-import { refactorProfileService } from '../services/profileService'
+import { useState, useEffect, useCallback } from 'react'
+import { learningApi } from '../../api'
 import { syncManager } from '../services/syncManager'
 import { Profile } from '../types/profile'
 
-export interface UseProfileSyncResult {
+export interface ProfileSyncState {
   currentProfile: Profile | null
   isLoading: boolean
-  isSyncing: boolean
+  error: string | null
+  isSwitching: boolean
+}
+
+export interface ProfileSyncActions {
   switchProfile: (id: string) => Promise<boolean>
-  reloadProfile: () => void
+  refreshProfile: () => void
+  clearError: () => void
 }
 
 /**
- * Profile同步Hook
- * 提供稳定的Profile状态管理和切换功能
+ * Profile同步管理Hook
+ * 提供稳定的Profile状态管理和同步操作
  */
-export const useProfileSync = (): UseProfileSyncResult => {
-  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
+export function useProfileSync(): ProfileSyncState & ProfileSyncActions {
+  const [state, setState] = useState<ProfileSyncState>({
+    currentProfile: null,
+    isLoading: true,
+    error: null,
+    isSwitching: false
+  })
 
-  // 加载当前Profile
+  /**
+   * 加载当前Profile
+   */
   const loadCurrentProfile = useCallback(() => {
     try {
-      const profile = refactorProfileService.getCurrentProfile()
-      setCurrentProfile(profile)
+      const response = learningApi.getCurrentProfile()
+      if (response.success) {
+        setState(prev => ({
+          ...prev,
+          currentProfile: response.data || null,
+          isLoading: false,
+          error: null
+        }))
+      } else {
+        setState(prev => ({
+          ...prev,
+          currentProfile: null,
+          isLoading: false,
+          error: response.error || 'Failed to load profile'
+        }))
+      }
     } catch (error) {
-      console.error('[useProfileSync] Failed to load current profile:', error)
-      setCurrentProfile(null)
+      setState(prev => ({
+        ...prev,
+        currentProfile: null,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }))
     }
   }, [])
 
-  // Profile切换处理器
+  /**
+   * 处理Profile切换事件
+   */
   const handleProfileSwitch = useCallback(() => {
-    console.log('[useProfileSync] Profile switch detected, reloading...')
     loadCurrentProfile()
   }, [loadCurrentProfile])
 
-  // 初始化和事件监听
-  useEffect(() => {
-    // 初始加载
-    loadCurrentProfile()
-
-    // 监听Profile切换事件
-    refactorProfileService.addProfileSwitchListener(handleProfileSwitch)
-
-    // 监听同步状态变化
-    const syncStatusInterval = setInterval(() => {
-      setIsSyncing(syncManager.isSyncing())
-    }, 100)
-
-    return () => {
-      refactorProfileService.removeProfileSwitchListener(handleProfileSwitch)
-      clearInterval(syncStatusInterval)
-    }
-  }, [handleProfileSwitch, loadCurrentProfile])
-
-  // 切换Profile方法
+  /**
+   * 切换Profile
+   */
   const switchProfile = useCallback(async (id: string): Promise<boolean> => {
-    if (isLoading || isSyncing) {
-      console.warn('[useProfileSync] Switch operation already in progress')
-      return false
-    }
-
-    setIsLoading(true)
-
+    setState(prev => ({ ...prev, isSwitching: true, error: null }))
+    
     try {
-      const success = await refactorProfileService.switchProfile(id)
-      if (success) {
-        // Profile切换事件会自动触发状态更新
-        console.log(`[useProfileSync] Profile switched to: ${id}`)
+      const response = await learningApi.switchProfile(id)
+      if (response.success) {
+        // Profile切换成功，重新加载当前Profile
+        loadCurrentProfile()
+        // 执行同步操作
+        await syncManager.executeSync()
+        setState(prev => ({ ...prev, isSwitching: false }))
+        return true
+      } else {
+        setState(prev => ({ 
+          ...prev, 
+          isSwitching: false,
+          error: response.error || 'Profile切换失败'
+        }))
+        return false
       }
-      return success
     } catch (error) {
-      console.error('[useProfileSync] Profile switch failed:', error)
+      setState(prev => ({ 
+        ...prev, 
+        isSwitching: false,
+        error: error instanceof Error ? error.message : 'Profile切换失败'
+      }))
       return false
-    } finally {
-      setIsLoading(false)
     }
-  }, [isLoading, isSyncing])
+  }, [loadCurrentProfile])
 
-  // 手动重新加载Profile
-  const reloadProfile = useCallback(() => {
+  /**
+   * 刷新Profile
+   */
+  const refreshProfile = useCallback(() => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }))
+    loadCurrentProfile()
+  }, [loadCurrentProfile])
+
+  /**
+   * 清除错误
+   */
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }))
+  }, [])
+
+  // 初始加载
+  useEffect(() => {
     loadCurrentProfile()
   }, [loadCurrentProfile])
 
   return {
-    currentProfile,
-    isLoading,
-    isSyncing,
+    ...state,
     switchProfile,
-    reloadProfile
+    refreshProfile,
+    clearError
   }
 } 

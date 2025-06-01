@@ -153,7 +153,7 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
           isConfigured: true,
           available: true,
           isHealthy: true,
-          provider: 'system',
+          provider: 'openai',
           model: 'default',
           lastCheck: new Date()
         })
@@ -283,7 +283,7 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
           title: line.trim(),
           description: `基于AI分析的个性化学习建议`,
           category: 'custom',
-          difficulty: 'intermediate',
+          difficulty: 'medium',
           estimatedWeeks: 8,
           skills: [],
           outcomes: [line.trim()],
@@ -299,7 +299,7 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
         title: '个性化学习计划',
         description: aiResponse,
         category: 'custom',
-        difficulty: 'intermediate',
+        difficulty: 'medium',
         estimatedWeeks: 8,
         skills: [],
         outcomes: ['提升编程技能'],
@@ -618,14 +618,14 @@ export const GoalRecommendations: React.FC<GoalRecommendationsProps> = ({
                           
                           <div className="flex flex-wrap gap-2 mb-3">
                             <span className="text-sm text-gray-500">技能要求：</span>
-                            {recommendation.requiredSkills.slice(0, 4).map((skill, i) => (
+                            {(recommendation.requiredSkills || []).slice(0, 4).map((skill, i) => (
                               <Badge key={i} variant="secondary" className="text-xs">
                                 {skill}
                               </Badge>
                             ))}
-                            {recommendation.requiredSkills.length > 4 && (
+                            {(recommendation.requiredSkills || []).length > 4 && (
                               <Badge variant="secondary" className="text-xs">
-                                +{recommendation.requiredSkills.length - 4}
+                                +{(recommendation.requiredSkills || []).length - 4}
                               </Badge>
                             )}
                           </div>

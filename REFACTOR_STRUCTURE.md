@@ -59,7 +59,6 @@ src/
     │   └── SystemIntegration.tsx  # 📋 待开发
     ├── services/          # ✅ 业务服务层 (已重构)
     │   ├── aiService.ts        # ✅ AI服务统一接口
-    │   ├── profileService.ts   # ✅ Profile服务 (已完成)
     │   ├── legacyDataService.ts # ✅ Legacy数据兼容服务
     │   ├── syncManager.ts      # ✅ 同步管理服务
     │   └── apiService.ts       # 📋 API调用服务 (待开发)

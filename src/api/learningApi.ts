@@ -45,7 +45,9 @@ import {
   getLearningPaths, 
   createLearningPath, 
   updateLearningPath, 
-  deleteLearningPath
+  deleteLearningPath,
+  getCourseUnits,
+  deleteCourseUnit as deleteCourseUnitService
 } from '../modules/coreData'
 
 import { 
@@ -1822,7 +1824,7 @@ export class LearningAPI {
   }
 
   /**
-   * 获取Profile学习数据统计
+   * 获取Profile数据统计
    */
   getProfileDataStats(profileId?: string): APIResponse<{
     goals: number
@@ -1846,16 +1848,63 @@ export class LearningAPI {
         profileId = currentProfile.data.id
       }
 
-      // 这里应该调用对应的数据获取方法
-      // 为了简化，返回基本统计
+      // 获取实际数据
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+      
+      // 统计目标状态
+      const goalsByStatus: Record<string, number> = {}
+      goals.forEach(goal => {
+        goalsByStatus[goal.status] = (goalsByStatus[goal.status] || 0) + 1
+      })
+
+      // 统计路径状态
+      const pathsByStatus: Record<string, number> = {}
+      paths.forEach(path => {
+        pathsByStatus[path.status] = (pathsByStatus[path.status] || 0) + 1
+      })
+
+      // 获取课程单元数量
+      let courseUnitsCount = 0
+      try {
+        const stored = localStorage.getItem('courseUnits')
+        if (stored) {
+          const units = JSON.parse(stored)
+          courseUnitsCount = Array.isArray(units) ? units.length : 0
+        }
+      } catch (error) {
+        console.warn('Failed to get course units count:', error)
+      }
+
+      // 获取AI动作记录数量
+      let agentActionsCount = 0
+      try {
+        const stored = localStorage.getItem('agentActions')
+        if (stored) {
+          const actions = JSON.parse(stored)
+          agentActionsCount = Array.isArray(actions) ? actions.length : 0
+        }
+      } catch (error) {
+        console.warn('Failed to get agent actions count:', error)
+      }
+
+      // 检查是否有能力评估
+      let hasAssessment = false
+      try {
+        const stored = localStorage.getItem('currentAssessment')
+        hasAssessment = !!stored
+      } catch (error) {
+        console.warn('Failed to check assessment:', error)
+      }
+
       const stats = {
-        goals: 0,
-        paths: 0,
-        courseUnits: 0,
-        agentActions: 0,
-        hasAssessment: false,
-        goalsByStatus: {},
-        pathsByStatus: {}
+        goals: goals.length,
+        paths: paths.length,
+        courseUnits: courseUnitsCount,
+        agentActions: agentActionsCount,
+        hasAssessment,
+        goalsByStatus,
+        pathsByStatus
       }
 
       return {
@@ -1887,12 +1936,49 @@ export class LearningAPI {
         profileId = currentProfile.data.id
       }
 
+      // 获取实际数据
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+
+      // 获取课程单元
+      let courseUnits = []
+      try {
+        const stored = localStorage.getItem('courseUnits')
+        if (stored) {
+          courseUnits = JSON.parse(stored)
+        }
+      } catch (error) {
+        console.warn('Failed to get course units:', error)
+      }
+
+      // 获取AI动作记录
+      let agentActions = []
+      try {
+        const stored = localStorage.getItem('agentActions')
+        if (stored) {
+          agentActions = JSON.parse(stored)
+        }
+      } catch (error) {
+        console.warn('Failed to get agent actions:', error)
+      }
+
+      // 获取能力评估
+      let currentAssessment = null
+      try {
+        const stored = localStorage.getItem('currentAssessment')
+        if (stored) {
+          currentAssessment = JSON.parse(stored)
+        }
+      } catch (error) {
+        console.warn('Failed to get current assessment:', error)
+      }
+
       const data = {
-        goals: [],
-        paths: [],
-        courseUnits: [],
-        agentActions: [],
-        assessment: null
+        goals,
+        paths,
+        courseUnits,
+        agentActions,
+        currentAssessment
       }
 
       return {
@@ -1970,11 +2056,19 @@ export class LearningAPI {
    */
   async deleteCourseUnit(unitId: string, title: string): Promise<APIResponse<boolean>> {
     try {
-      // 这里应该调用对应的删除方法
-      // 为了简化，返回成功
+      const deleted = deleteCourseUnitService(unitId)
+      
+      if (!deleted) {
+        return {
+          success: false,
+          error: '课程单元删除失败'
+        }
+      }
+
       return {
         success: true,
-        data: true
+        data: true,
+        message: '✅ 课程单元删除成功'
       }
     } catch (error) {
       return {

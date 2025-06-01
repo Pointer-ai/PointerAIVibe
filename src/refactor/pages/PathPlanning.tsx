@@ -113,7 +113,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
         const progressData: PathProgressStats[] = []
         for (const path of pathsResponse.data || []) {
           const progressResponse = learningApi.getPathProgress(path.id)
-          if (progressResponse.success) {
+          if (progressResponse.success && progressResponse.data) {
             progressData.push(progressResponse.data)
           }
         }

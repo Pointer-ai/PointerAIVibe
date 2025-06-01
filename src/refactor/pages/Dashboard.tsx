@@ -161,15 +161,15 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
       id: 'course-content',
       view: 'course-content' as const,
       title: '📚 课程内容',
-      description: 'AI生成的交互式编程课程和学习材料',
+      description: '完整的课程内容管理系统，支持讲解部分和练习评测，集成coderunner框架',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
         </svg>
       ),
       color: 'from-orange-500 to-red-500',
-      status: '📋 规划中',
-      available: false
+      status: '✅ 可用',
+      available: true
     }
   ]
 

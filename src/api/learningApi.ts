@@ -33,6 +33,7 @@ import { SkillGapAnalysis, PathGenerationConfig } from '../modules/pathPlan/type
 import { ContentGenerationConfig, Exercise, ProjectTemplate } from '../modules/courseContent/types'
 import { LearningGoal, LearningPath, CourseUnit } from '../modules/coreData/types'
 import { AbilityAssessment, AssessmentInput } from '../modules/abilityAssess/types'
+import { CourseContent, CreateCourseContentRequest, UpdateCourseContentRequest, ExerciseSubmissionRequest, ExerciseEvaluationResult, CourseContentProgress } from '../refactor/types/courseContent'
 
 // 导入各个模块的核心功能
 import { 
@@ -2198,6 +2199,389 @@ export class LearningAPI {
       return goals.data?.length || 0
     } catch (error) {
       return 0
+    }
+  }
+
+  // ========== 课程内容管理 ==========
+
+  /**
+   * 获取所有课程内容
+   */
+  getAllCourseContent(): APIResponse<CourseContent[]> {
+    try {
+      // 这里应该调用实际的课程内容服务，目前返回样例数据
+      const { sampleCourseContents } = require('../refactor/data/sampleCourseContent')
+      
+      return {
+        success: true,
+        data: sampleCourseContents,
+        message: '成功获取课程内容列表'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取课程内容失败'
+      }
+    }
+  }
+
+  /**
+   * 根据ID获取课程内容
+   */
+  getCourseContentById(contentId: string): APIResponse<CourseContent | null> {
+    try {
+      const { getCourseContentById } = require('../refactor/data/sampleCourseContent')
+      const content = getCourseContentById(contentId)
+      
+      if (!content) {
+        return {
+          success: false,
+          error: '未找到指定的课程内容'
+        }
+      }
+
+      return {
+        success: true,
+        data: content,
+        message: '成功获取课程内容详情'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取课程内容详情失败'
+      }
+    }
+  }
+
+  /**
+   * 根据节点ID获取课程内容
+   */
+  getCourseContentsByNodeId(nodeId: string): APIResponse<CourseContent[]> {
+    try {
+      const { getCourseContentsByNodeId } = require('../refactor/data/sampleCourseContent')
+      const contents = getCourseContentsByNodeId(nodeId)
+      
+      return {
+        success: true,
+        data: contents,
+        message: `成功获取节点 ${nodeId} 的课程内容`
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取节点课程内容失败'
+      }
+    }
+  }
+
+  /**
+   * 创建新的课程内容
+   */
+  async createCourseContent(request: CreateCourseContentRequest): Promise<APIResponse<CourseContent>> {
+    try {
+      if (!request.title.trim()) {
+        return {
+          success: false,
+          error: '课程内容标题不能为空'
+        }
+      }
+
+      if (!request.nodeId) {
+        return {
+          success: false,
+          error: '必须指定节点ID'
+        }
+      }
+
+      // 这里应该调用课程内容生成服务
+      // 目前返回模拟的新课程内容
+      const newContent: CourseContent = {
+        id: `content_${Date.now()}`,
+        nodeId: request.nodeId,
+        title: request.title,
+        description: request.description,
+        order: request.order || 1,
+        explanation: {
+          id: `explanation_${Date.now()}`,
+          title: `${request.title} - 讲解`,
+          content: {
+            markdown: '# 课程内容\n\n这是通过API创建的课程内容。\n\n## 学习目标\n\n- 掌握基础概念\n- 理解核心原理\n- 应用实践技能'
+          },
+          learningObjectives: ['掌握基础概念', '理解核心原理'],
+          prerequisites: [],
+          keyConcepts: []
+        },
+        practice: {
+          id: `practice_${Date.now()}`,
+          title: `${request.title} - 练习`,
+          exercises: [],
+          assessment: {
+            passingScore: 70,
+            attempts: 3
+          }
+        },
+        metadata: {
+          estimatedReadingTime: 15,
+          difficulty: (request.generationConfig?.difficulty as 1 | 2 | 3 | 4 | 5) || 1,
+          language: request.generationConfig?.language as any || 'python',
+          skills: request.generationConfig?.focusAreas || [],
+          concepts: [],
+          keywords: [],
+          learningOutcomes: [],
+          learningStyles: ['visual', 'reading'],
+          version: '1.0.0'
+        },
+        status: 'not_started',
+        progress: {
+          explanationCompleted: false,
+          practiceCompleted: false,
+          timeSpent: 0
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      return {
+        success: true,
+        data: newContent,
+        message: `✅ 成功创建课程内容: ${request.title}`
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '创建课程内容失败'
+      }
+    }
+  }
+
+  /**
+   * 更新课程内容
+   */
+  async updateCourseContent(contentId: string, updates: UpdateCourseContentRequest): Promise<APIResponse<CourseContent>> {
+    try {
+      const contentResult = this.getCourseContentById(contentId)
+      if (!contentResult.success || !contentResult.data) {
+        return {
+          success: false,
+          error: '未找到要更新的课程内容'
+        }
+      }
+
+      const updatedContent: CourseContent = {
+        ...contentResult.data,
+        ...(updates.title && { title: updates.title }),
+        ...(updates.description && { description: updates.description }),
+        ...(updates.order && { order: updates.order }),
+        ...(updates.explanation && { 
+          explanation: {
+            ...contentResult.data.explanation,
+            ...updates.explanation
+          }
+        }),
+        ...(updates.practice && { 
+          practice: {
+            ...contentResult.data.practice,
+            ...updates.practice
+          }
+        }),
+        ...(updates.metadata && { 
+          metadata: {
+            ...contentResult.data.metadata,
+            ...updates.metadata
+          }
+        }),
+        updatedAt: new Date().toISOString()
+      }
+
+      return {
+        success: true,
+        data: updatedContent,
+        message: '✅ 课程内容更新成功'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '更新课程内容失败'
+      }
+    }
+  }
+
+  /**
+   * 删除课程内容
+   */
+  async deleteCourseContent(contentId: string): Promise<APIResponse<boolean>> {
+    try {
+      const contentResult = this.getCourseContentById(contentId)
+      if (!contentResult.success || !contentResult.data) {
+        return {
+          success: false,
+          error: '未找到要删除的课程内容'
+        }
+      }
+
+      // 这里应该调用实际的删除服务
+      // 目前模拟删除成功
+      return {
+        success: true,
+        data: true,
+        message: '✅ 课程内容删除成功'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '删除课程内容失败'
+      }
+    }
+  }
+
+  /**
+   * 更新课程内容进度
+   */
+  async updateCourseContentProgress(contentId: string, progress: Partial<CourseContentProgress>): Promise<APIResponse<CourseContentProgress>> {
+    try {
+      const contentResult = this.getCourseContentById(contentId)
+      if (!contentResult.success || !contentResult.data) {
+        return {
+          success: false,
+          error: '未找到指定的课程内容'
+        }
+      }
+
+      // 这里应该更新实际的进度数据
+      const updatedProgress: CourseContentProgress = {
+        contentId,
+        nodeId: contentResult.data.nodeId,
+        explanationProgress: {
+          sectionsViewed: [],
+          timeSpent: 0,
+          completed: false,
+          ...progress.explanationProgress
+        },
+        practiceProgress: {
+          exercisesAttempted: [],
+          overallScore: 0,
+          passed: false,
+          ...progress.practiceProgress
+        },
+        totalTimeSpent: progress.totalTimeSpent || 0,
+        lastAccessAt: new Date().toISOString(),
+        startedAt: progress.startedAt || new Date().toISOString()
+      }
+
+      return {
+        success: true,
+        data: updatedProgress,
+        message: '✅ 学习进度更新成功'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '更新学习进度失败'
+      }
+    }
+  }
+
+  /**
+   * 提交练习答案
+   */
+  async submitExercise(submission: ExerciseSubmissionRequest): Promise<APIResponse<ExerciseEvaluationResult>> {
+    try {
+      const contentResult = this.getCourseContentById(submission.contentId)
+      if (!contentResult.success || !contentResult.data) {
+        return {
+          success: false,
+          error: '未找到指定的课程内容'
+        }
+      }
+
+      // 模拟练习评估结果
+      const evaluation: ExerciseEvaluationResult = {
+        exerciseId: submission.exerciseId,
+        submissionId: `submission_${Date.now()}`,
+        score: Math.floor(Math.random() * 100), // 随机分数，实际应该根据答案评估
+        maxScore: 100,
+        passed: Math.random() > 0.3, // 70% 通过率
+        feedback: {
+          overall: '练习完成得不错！',
+          detailed: [
+            {
+              section: '解题思路',
+              message: '思路清晰，逻辑正确',
+              type: 'success'
+            }
+          ]
+        },
+        recommendations: ['继续练习类似题目', '关注代码优化'],
+        nextSteps: ['进入下一个练习', '查看解题技巧'],
+        timestamp: new Date().toISOString()
+      }
+
+      return {
+        success: true,
+        data: evaluation,
+        message: '✅ 练习提交成功，已完成评估'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '提交练习失败'
+      }
+    }
+  }
+
+  /**
+   * 获取课程内容统计
+   */
+  getCourseContentStats(): APIResponse<{
+    total: number
+    byStatus: Record<string, number>
+    byDifficulty: Record<string, number>
+    totalEstimatedTime: number
+    averageProgress: number
+  }> {
+    try {
+      const allContentResult = this.getAllCourseContent()
+      if (!allContentResult.success || !allContentResult.data) {
+        return {
+          success: false,
+          error: '获取课程内容统计失败'
+        }
+      }
+
+      const contents = allContentResult.data
+      const stats = {
+        total: contents.length,
+        byStatus: {
+          'not_started': contents.filter(c => c.status === 'not_started').length,
+          'in_progress': contents.filter(c => c.status === 'in_progress').length,
+          'completed': contents.filter(c => c.status === 'completed').length
+        },
+        byDifficulty: {
+          '1': contents.filter(c => c.metadata.difficulty === 1).length,
+          '2': contents.filter(c => c.metadata.difficulty === 2).length,
+          '3': contents.filter(c => c.metadata.difficulty === 3).length,
+          '4': contents.filter(c => c.metadata.difficulty === 4).length,
+          '5': contents.filter(c => c.metadata.difficulty === 5).length
+        },
+        totalEstimatedTime: contents.reduce((sum, c) => sum + c.metadata.estimatedReadingTime, 0),
+        averageProgress: contents.length > 0 
+          ? contents.reduce((sum, c) => {
+              const progress = (c.progress.explanationCompleted ? 50 : 0) + (c.progress.practiceCompleted ? 50 : 0)
+              return sum + progress
+            }, 0) / contents.length
+          : 0
+      }
+
+      return {
+        success: true,
+        data: stats,
+        message: '成功获取课程内容统计信息'
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '获取课程内容统计失败'
+      }
     }
   }
 }

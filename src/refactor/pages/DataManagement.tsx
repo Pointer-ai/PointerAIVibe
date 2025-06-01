@@ -31,7 +31,7 @@ interface DataManagementPageProps {
 }
 
 interface DeleteConfirmData {
-  type: 'goal' | 'path' | 'unit'
+  type: 'goal' | 'path' | 'unit' | 'content'
   id: string
   title: string
 }
@@ -53,6 +53,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const [learningData, setLearningData] = useState<any>(null)
   const [dataStats, setDataStats] = useState<any>(null)
   const [pathProgress, setPathProgress] = useState<Record<string, any>>({}) // ⭐新增
+  const [courseContentStats, setCourseContentStats] = useState<any>(null) // ⭐新增课程内容统计
   const [selectedPath, setSelectedPath] = useState<any>(null) // ⭐新增
   const [showPathDetails, setShowPathDetails] = useState(false) // ⭐新增
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmData | null>(null)
@@ -99,6 +100,12 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
         setDataStats(statsResponse.data)
       }
       
+      // ⭐新增：获取课程内容统计
+      const courseStatsResponse = learningApi.getCourseContentStats()
+      if (courseStatsResponse.success) {
+        setCourseContentStats(courseStatsResponse.data)
+      }
+      
     } catch (error) {
       console.error('Failed to refresh data:', error)
       toast.error('数据刷新失败')
@@ -138,7 +145,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   }
 
   // 处理删除操作
-  const handleDelete = (type: 'goal' | 'path' | 'unit', id: string, title: string) => {
+  const handleDelete = (type: 'goal' | 'path' | 'unit' | 'content', id: string, title: string) => {
     setDeleteConfirm({ type, id, title })
   }
 
@@ -158,6 +165,9 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
           break
         case 'unit':
           result = await learningApi.deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
+          break
+        case 'content':
+          result = await learningApi.deleteCourseContent(deleteConfirm.id)
           break
       }
 
@@ -294,7 +304,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 数据统计概览 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* 实时数据统计 */}
           <Card>
             <CardHeader>
@@ -357,6 +367,82 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ⭐新增：课程内容统计 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                📚 课程内容统计
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {courseContentStats ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">总课程数</span>
+                    <Badge variant="primary">{courseContentStats.total} 个</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">总学时</span>
+                    <Badge variant="info">{courseContentStats.totalEstimatedTime} 分钟</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">平均进度</span>
+                    <Badge variant="success">{Math.round(courseContentStats.averageProgress)}%</Badge>
+                  </div>
+                  
+                  {/* 课程状态分布 */}
+                  {courseContentStats.total > 0 && (
+                    <div className="pt-3 border-t">
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">课程状态分布</h4>
+                      <div className="space-y-1">
+                        {Object.entries(courseContentStats.byStatus as Record<string, number>).map(([status, count]) => (
+                          <div key={status} className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              {status === 'not_started' ? '未开始' : 
+                               status === 'in_progress' ? '进行中' : 
+                               status === 'completed' ? '已完成' : status}
+                            </span>
+                            <span className="text-gray-900">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 难度分布 */}
+                  {courseContentStats.total > 0 && (
+                    <div className="pt-3 border-t">
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">难度分布</h4>
+                      <div className="space-y-1">
+                        {Object.entries(courseContentStats.byDifficulty as Record<string, number>).map(([difficulty, count]) => (
+                          <div key={difficulty} className="flex justify-between text-sm">
+                            <span className="text-gray-600">
+                              难度 {difficulty} 级
+                            </span>
+                            <span className="text-gray-900">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-gray-500">
+                  <div className="text-2xl mb-2">📚</div>
+                  <p>暂无课程内容数据</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => onNavigate('course-content')}
+                  >
+                    查看课程内容
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -736,6 +822,162 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                   </summary>
                   <pre className="mt-3 p-4 bg-gray-100 rounded-lg text-xs overflow-auto max-h-64">
                     {JSON.stringify(learningData.courseUnits, null, 2)}
+                  </pre>
+                </details>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ⭐新增：课程内容管理 */}
+          {courseContentStats && courseContentStats.total > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    📖 课程内容管理
+                    <Badge variant="info">{courseContentStats.total} 个内容</Badge>
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onNavigate('course-content')}
+                      className="flex items-center gap-2"
+                    >
+                      🛠️ 内容管理
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        const allContent = learningApi.getAllCourseContent()
+                        if (allContent.success) {
+                          copyToClipboard(allContent.data)
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      📋 复制数据
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* 课程内容统计概览 */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {courseContentStats.byStatus?.not_started || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">未开始</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {courseContentStats.byStatus?.in_progress || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">进行中</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {courseContentStats.byStatus?.completed || 0}
+                    </div>
+                    <div className="text-sm text-gray-600">已完成</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {Math.round(courseContentStats.averageProgress)}%
+                    </div>
+                    <div className="text-sm text-gray-600">平均进度</div>
+                  </div>
+                </div>
+
+                {/* 课程内容列表 */}
+                <div className="space-y-3">
+                  {(() => {
+                    const allContent = learningApi.getAllCourseContent()
+                    if (!allContent.success || !allContent.data) return null
+                    
+                    return allContent.data.slice(0, 5).map((content: any) => (
+                      <div
+                        key={content.id}
+                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-900">{content.title}</h4>
+                          <div className="flex items-center gap-3 mt-1">
+                            <Badge variant="secondary">{content.type}</Badge>
+                            <Badge variant={
+                              content.difficulty <= 2 ? 'success' :
+                              content.difficulty <= 4 ? 'warning' : 'danger'
+                            }>
+                              难度 {content.difficulty}
+                            </Badge>
+                            <span className="text-sm text-gray-500">
+                              {content.estimatedTimeMinutes} 分钟
+                            </span>
+                            {content.progress && (
+                              <Badge variant={
+                                content.progress.status === 'completed' ? 'success' :
+                                content.progress.status === 'in_progress' ? 'warning' : 'secondary'
+                              }>
+                                {content.progress.status === 'completed' ? '已完成' :
+                                 content.progress.status === 'in_progress' ? '进行中' : '未开始'}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={async () => {
+                            const confirmed = window.confirm(`确定要删除课程内容 "${content.title}" 吗？`)
+                            if (confirmed) {
+                              const result = await learningApi.deleteCourseContent(content.id)
+                              if (result.success) {
+                                toast.success('课程内容已删除')
+                                await refreshData()
+                              } else {
+                                toast.error(result.error || '删除失败')
+                              }
+                            }
+                          }}
+                          className="flex items-center gap-2"
+                        >
+                          🗑️ 删除
+                        </Button>
+                      </div>
+                    ))
+                  })()}
+                </div>
+
+                {/* 显示更多内容 */}
+                {(() => {
+                  const allContent = learningApi.getAllCourseContent()
+                  if (!allContent.success || !allContent.data || allContent.data.length <= 5) return null
+                  
+                  return (
+                    <div className="mt-4 text-center">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onNavigate('course-content')}
+                      >
+                        查看全部 {allContent.data.length} 个课程内容
+                      </Button>
+                    </div>
+                  )
+                })()}
+
+                {/* 展开查看完整数据 */}
+                <details className="mt-4">
+                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                    展开查看完整课程内容数据
+                  </summary>
+                  <pre className="mt-3 p-4 bg-gray-100 rounded-lg text-xs overflow-auto max-h-64">
+                    {(() => {
+                      const allContent = learningApi.getAllCourseContent()
+                      return JSON.stringify(allContent.success ? allContent.data : [], null, 2)
+                    })()}
                   </pre>
                 </details>
               </CardContent>

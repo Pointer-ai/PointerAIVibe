@@ -20,12 +20,13 @@ import React, { useState } from 'react'
 import { Button } from '../refactor/components/ui/Button/Button'
 import DashboardPage from '../refactor/pages/Dashboard'
 import { GoalManagementPage } from '../refactor/pages/GoalManagement'
-import { PathPlanningPage } from '../refactor/pages/PathPlanning'
+import PathPlanningPage from '../refactor/pages/PathPlanning'
 import { AssessmentPage } from '../refactor/pages/Assessment'
 import UIShowcase from '../refactor/pages/UIShowcase'
 import { ProfileManagementPage } from '../refactor/pages/ProfileManagement'
 import { SystemDiagnosticsPage } from '../refactor/pages/SystemDiagnostics'
 import { DataManagementPage } from '../refactor/pages/DataManagement'
+import { CourseContentPage } from '../refactor/pages/CourseContent'
 import { ToastContainer } from '../refactor/components/ui/Alert/Alert'
 
 type ViewType = 'dashboard' | 'goal-management' | 'path-planning' | 'assessment' | 'system-integration' | 'api-testing' | 'course-content' | 'ui-showcase' | 'profile-management' | 'system-diagnostics' | 'data-management'
@@ -92,15 +93,7 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onBack }) 
           </div>
         )
       case 'course-content':
-        return (
-          <div className="p-8">
-            <h1 className="text-2xl font-bold mb-4">📚 课程内容</h1>
-            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
-            <Button onClick={() => setCurrentView('dashboard')}>
-              返回Dashboard
-            </Button>
-          </div>
-        )
+        return <CourseContentPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       default:
         return <DashboardPage onNavigate={handleNavigate} />
     }

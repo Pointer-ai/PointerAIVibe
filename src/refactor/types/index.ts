@@ -36,6 +36,9 @@ export * from './ai'
 // Profile相关类型
 export * from './profile'
 
+// 课程内容相关类型
+export * from './courseContent'
+
 // 基础类型
 export interface APIResponse<T = any> {
   success: boolean

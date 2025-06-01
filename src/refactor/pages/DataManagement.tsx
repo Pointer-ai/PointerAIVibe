@@ -19,10 +19,11 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from '../components/ui/Button/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card/Card'
-import { Badge } from '../components/ui/Badge/Badge'
+import { Badge, StatusBadge } from '../components/ui/Badge/Badge'
 import { Alert, toast } from '../components/ui/Alert/Alert'
-import { ConfirmModal } from '../components/ui/Modal/Modal'
+import { ConfirmModal, Modal } from '../components/ui/Modal/Modal'
 import { Loading } from '../components/ui/Loading/Loading'
+import { ProgressBar } from '../components/ui/ProgressBar/ProgressBar'
 import { learningApi } from '../../api'
 
 interface DataManagementPageProps {
@@ -44,12 +45,16 @@ interface DeleteConfirmData {
  * - 删除数据（支持级联删除）
  * - 导出数据
  * - 活动记录
+ * - 增强的路径数据管理 ⭐新增
  */
 export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [learningData, setLearningData] = useState<any>(null)
   const [dataStats, setDataStats] = useState<any>(null)
+  const [pathProgress, setPathProgress] = useState<Record<string, any>>({}) // ⭐新增
+  const [selectedPath, setSelectedPath] = useState<any>(null) // ⭐新增
+  const [showPathDetails, setShowPathDetails] = useState(false) // ⭐新增
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmData | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [currentProfile, setCurrentProfile] = useState<any>(null)
@@ -74,6 +79,18 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       const dataResponse = learningApi.getProfileLearningData()
       if (dataResponse.success) {
         setLearningData(dataResponse.data)
+        
+        // ⭐新增：获取路径进度数据
+        if (dataResponse.data?.paths?.length > 0) {
+          const progressData: Record<string, any> = {}
+          for (const path of dataResponse.data.paths) {
+            const progressResponse = learningApi.getPathProgress(path.id)
+            if (progressResponse.success) {
+              progressData[path.id] = progressResponse.data
+            }
+          }
+          setPathProgress(progressData)
+        }
       }
       
       // 获取数据统计
@@ -172,6 +189,50 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
     setExportData(null)
+  }
+
+  // ⭐新增：查看路径详情
+  const viewPathDetails = (path: any) => {
+    setSelectedPath(path)
+    setShowPathDetails(true)
+  }
+
+  // ⭐新增：批量删除路径
+  const handleBatchDeletePaths = async () => {
+    if (!learningData?.paths?.length) return
+    
+    const confirmed = window.confirm(`确定要删除所有 ${learningData.paths.length} 条学习路径吗？此操作不可撤销！`)
+    if (!confirmed) return
+
+    try {
+      setIsDeleting(true)
+      let successCount = 0
+      let failCount = 0
+
+      for (const path of learningData.paths) {
+        try {
+          const result = await learningApi.deleteLearningPath(path.id, path.title)
+          if (result.success) {
+            successCount++
+          } else {
+            failCount++
+          }
+        } catch (error) {
+          failCount++
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`成功删除 ${successCount} 条路径${failCount > 0 ? `，${failCount} 条失败` : ''}`)
+        await refreshData()
+      } else {
+        toast.error('所有路径删除失败')
+      }
+    } catch (error) {
+      toast.error('批量删除失败')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   if (loading) {
@@ -407,57 +468,208 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
             </Card>
           )}
 
-          {/* 学习路径管理 */}
+          {/* 学习路径管理 - ⭐增强版 */}
           {learningData?.paths?.length > 0 && (
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle className="flex items-center gap-2">
                     🛤️ 学习路径管理
+                    <Badge variant="info">{learningData.paths.length} 条路径</Badge>
                   </CardTitle>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => copyToClipboard(learningData.paths)}
-                    className="flex items-center gap-2"
-                  >
-                    📋 复制数据
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onNavigate('path-planning')}
+                      className="flex items-center gap-2"
+                    >
+                      🛠️ 路径管理
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => copyToClipboard(learningData.paths)}
+                      className="flex items-center gap-2"
+                    >
+                      📋 复制数据
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={handleBatchDeletePaths}
+                      disabled={isDeleting}
+                      className="flex items-center gap-2"
+                    >
+                      🗑️ 批量删除
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {learningData.paths.map((path: any) => (
-                    <div
-                      key={path.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{path.title}</h4>
-                        <div className="flex items-center gap-3 mt-1">
-                          <Badge variant="info">{path.nodes.length} 节点</Badge>
-                          <Badge variant={
-                            path.status === 'active' ? 'success' :
-                            path.status === 'completed' ? 'primary' :
-                            path.status === 'frozen' ? 'warning' : 'secondary'
-                          }>
-                            {path.status}
-                          </Badge>
-                          <span className="text-sm text-gray-500">
-                            {path.totalEstimatedHours}h
-                          </span>
-                        </div>
-                      </div>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => handleDelete('path', path.id, path.title)}
-                        className="flex items-center gap-2"
-                      >
-                        🗑️ 删除
-                      </Button>
+                {/* ⭐新增：路径统计概览 */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {learningData.paths.filter((p: any) => p.status === 'active').length}
                     </div>
-                  ))}
+                    <div className="text-sm text-gray-600">活跃路径</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {Object.values(pathProgress).reduce((sum: number, p: any) => sum + (p?.completedNodes || 0), 0)}
+                    </div>
+                    <div className="text-sm text-gray-600">已完成节点</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                      {learningData.paths.reduce((sum: number, p: any) => sum + (p.nodes?.length || 0), 0)}
+                    </div>
+                    <div className="text-sm text-gray-600">总节点数</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {learningData.paths.reduce((sum: number, p: any) => sum + (p.totalEstimatedHours || 0), 0)}h
+                    </div>
+                    <div className="text-sm text-gray-600">总学时</div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {learningData.paths.map((path: any) => {
+                    const progress = pathProgress[path.id]
+                    const goal = learningData.goals?.find((g: any) => g.id === path.goalId)
+                    
+                    return (
+                      <div
+                        key={path.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="font-medium text-gray-900">{path.title}</h4>
+                              <StatusBadge status={
+                                path.status === 'active' ? 'active' :
+                                path.status === 'completed' ? 'completed' :
+                                path.status === 'frozen' ? 'pending' : 'inactive'
+                              } />
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                              <span>🎯 目标：{goal?.title || '未知目标'}</span>
+                              <span>📊 节点：{path.nodes?.length || 0}个</span>
+                              <span>⏱️ 预计：{path.totalEstimatedHours || 0}小时</span>
+                              <span>📅 创建：{new Date(path.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            
+                            {/* ⭐新增：进度展示 */}
+                            {progress && (
+                              <div className="mb-3">
+                                <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                                  <span>学习进度</span>
+                                  <span>{progress.completedNodes}/{progress.totalNodes} 节点完成</span>
+                                </div>
+                                <ProgressBar 
+                                  value={progress.progressPercentage} 
+                                  max={100}
+                                  className="mb-4"
+                                />
+                              </div>
+                            )}
+
+                            {/* ⭐新增：里程碑展示 */}
+                            {path.milestones && path.milestones.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-2">
+                                <span className="text-sm text-gray-600">里程碑：</span>
+                                {path.milestones.slice(0, 3).map((milestone: any, index: number) => (
+                                  <Badge key={index} variant="info" className="text-xs">
+                                    {milestone.title}
+                                  </Badge>
+                                ))}
+                                {path.milestones.length > 3 && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    +{path.milestones.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => viewPathDetails(path)}
+                              className="flex items-center gap-1"
+                            >
+                              👁️ 详情
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => handleDelete('path', path.id, path.title)}
+                              className="flex items-center gap-1"
+                            >
+                              🗑️ 删除
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* ⭐新增：节点快速预览 */}
+                        {path.nodes && path.nodes.length > 0 && (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-blue-600 hover:text-blue-800 text-sm">
+                              查看节点详情 ({path.nodes.length} 个节点)
+                            </summary>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {path.nodes.slice(0, 6).map((node: any, index: number) => (
+                                <div key={node.id} className="p-3 bg-gray-50 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs text-gray-500">#{index + 1}</span>
+                                    <Badge variant={
+                                      node.type === 'concept' ? 'info' :
+                                      node.type === 'practice' ? 'warning' :
+                                      node.type === 'project' ? 'success' :
+                                      node.type === 'assessment' ? 'danger' : 'secondary'
+                                    } className="text-xs">
+                                      {node.type}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-sm font-medium text-gray-900 mb-1">
+                                    {node.title}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    {node.estimatedHours}h • 难度{node.difficulty}/5
+                                  </div>
+                                  {node.skills && node.skills.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {node.skills.slice(0, 2).map((skill: string, i: number) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">
+                                          {skill}
+                                        </Badge>
+                                      ))}
+                                      {node.skills.length > 2 && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          +{node.skills.length - 2}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                              {path.nodes.length > 6 && (
+                                <div className="p-3 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                                  <span className="text-sm text-gray-500">
+                                    还有 {path.nodes.length - 6} 个节点...
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <details className="mt-4">
@@ -662,6 +874,195 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
           </div>
         </div>
       )}
+
+      {/* ⭐新增：路径详情对话框 */}
+      {showPathDetails && selectedPath && (
+        <Modal
+          title={`路径详情 - ${selectedPath.title}`}
+          isOpen={showPathDetails}
+          onClose={() => setShowPathDetails(false)}
+          size="xl"
+        >
+          <PathDetailsContent 
+            path={selectedPath} 
+            progress={pathProgress[selectedPath.id]}
+            goal={learningData.goals?.find((g: any) => g.id === selectedPath.goalId)}
+          />
+        </Modal>
+      )}
     </div>
   )
-} 
+}
+
+/**
+ * ⭐新增：路径详情内容组件
+ */
+const PathDetailsContent: React.FC<{ 
+  path: any
+  progress: any
+  goal: any
+}> = ({ path, progress, goal }) => {
+  return (
+    <div className="space-y-6">
+      {/* 基本信息 */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 mb-3">基本信息</h3>
+        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div><span className="font-medium">状态：</span>{path.status}</div>
+            <div><span className="font-medium">节点数量：</span>{path.nodes?.length || 0}</div>
+            <div><span className="font-medium">预计学时：</span>{path.totalEstimatedHours || 0} 小时</div>
+            <div><span className="font-medium">创建时间：</span>{new Date(path.createdAt).toLocaleString()}</div>
+          </div>
+          {goal && (
+            <div className="pt-3 border-t border-gray-200">
+              <span className="font-medium">关联目标：</span>
+              <div className="mt-2 p-3 bg-white rounded border">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium">{goal.title}</span>
+                  <Badge variant="secondary">{goal.category}</Badge>
+                  <Badge variant={
+                    goal.status === 'active' ? 'success' :
+                    goal.status === 'completed' ? 'primary' : 'warning'
+                  }>
+                    {goal.status}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-600">{goal.description}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 学习进度 */}
+      {progress && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-3">学习进度</h3>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span>整体进度</span>
+              <span className="font-medium">{progress.progressPercentage}%</span>
+            </div>
+            <ProgressBar value={progress.progressPercentage} max={100} className="mb-4" />
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-2xl font-bold text-green-600">{progress.completedNodes}</div>
+                <div className="text-gray-600">已完成</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-2xl font-bold text-blue-600">{progress.inProgressNodes || 0}</div>
+                <div className="text-gray-600">进行中</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded">
+                <div className="text-2xl font-bold text-gray-400">
+                  {progress.totalNodes - progress.completedNodes - (progress.inProgressNodes || 0)}
+                </div>
+                <div className="text-gray-600">未开始</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 学习节点详情 */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 mb-3">学习节点详情</h3>
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+          {path.nodes?.map((node: any, index: number) => (
+            <div key={node.id} className="border rounded-lg p-4 bg-white">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-500 font-medium">#{index + 1}</div>
+                  <h4 className="font-medium">{node.title}</h4>
+                  <Badge variant={
+                    node.type === 'concept' ? 'info' :
+                    node.type === 'practice' ? 'warning' :
+                    node.type === 'project' ? 'success' :
+                    node.type === 'assessment' ? 'danger' : 'secondary'
+                  }>
+                    {node.type}
+                  </Badge>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {node.estimatedHours}h • 难度 {node.difficulty}/5
+                </div>
+              </div>
+              
+              <p className="text-sm text-gray-700 mb-3">{node.description}</p>
+              
+              {node.skills && node.skills.length > 0 && (
+                <div className="mb-3">
+                  <span className="text-sm font-medium text-gray-700 mb-2 block">技能要求：</span>
+                  <div className="flex flex-wrap gap-1">
+                    {node.skills.map((skill: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {node.prerequisites && node.prerequisites.length > 0 && (
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">前置要求：</span>
+                  {node.prerequisites.join(', ')}
+                </div>
+              )}
+            </div>
+          )) || (
+            <div className="text-center py-8 text-gray-500">
+              <p>该路径还没有学习节点</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 里程碑详情 */}
+      {path.milestones && path.milestones.length > 0 && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-3">学习里程碑</h3>
+          <div className="space-y-3">
+            {path.milestones.map((milestone: any, index: number) => (
+              <div key={index} className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
+                <div className="text-2xl">🎯</div>
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900 mb-1">{milestone.title}</div>
+                  {milestone.description && (
+                    <p className="text-sm text-gray-600 mb-2">{milestone.description}</p>
+                  )}
+                  {milestone.nodeIds && milestone.nodeIds.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">包含节点：</span>
+                      {milestone.nodeIds.length} 个
+                    </div>
+                  )}
+                  {milestone.reward && (
+                    <div className="text-sm text-green-600 mt-1">
+                      <span className="font-medium">奖励：</span>{milestone.reward}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 路径元数据 */}
+      {path.metadata && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-3">技术信息</h3>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <pre className="text-xs text-gray-700 overflow-auto max-h-32">
+              {JSON.stringify(path.metadata, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default DataManagementPage 

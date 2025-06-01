@@ -105,15 +105,15 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onNavigate
       id: 'path-planning',
       view: 'path-planning' as const,
       title: '🛤️ 路径规划',
-      description: '智能化学习路径生成和管理，可视化进度跟踪',
+      description: '重构版学习路径管理系统，支持AI生成、进度跟踪和状态管理',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
       ),
       color: 'from-green-500 to-teal-500',
-      status: '📋 规划中',
-      available: false
+      status: '✅ 可用',
+      available: true
     },
     {
       id: 'assessment',

@@ -47,7 +47,8 @@ import {
   updateLearningPath, 
   deleteLearningPath,
   getCourseUnits,
-  deleteCourseUnit as deleteCourseUnitService
+  deleteCourseUnit as deleteCourseUnitService,
+  getAgentActions
 } from '../modules/coreData'
 
 import { 
@@ -84,6 +85,8 @@ import {
   ProfileSettings,
   APIConfig
 } from '../refactor/types/profile'
+
+import { getCurrentAssessment } from '../modules/abilityAssess/service'
 
 /**
  * API响应统一格式
@@ -1848,60 +1851,38 @@ export class LearningAPI {
         profileId = currentProfile.data.id
       }
 
-      // 获取实际数据
+      // 获取实际数据 - 使用原系统的Profile隔离数据获取方法
       const goals = getLearningGoals()
       const paths = getLearningPaths()
-      
-      // 统计目标状态
+      const courseUnits = getCourseUnits()
+      const agentActions = getAgentActions()
+
+      // 检查能力评估 - 使用原系统方法
+      let hasAssessment = false
+      try {
+        const assessment = getCurrentAssessment()
+        hasAssessment = !!assessment
+      } catch (error) {
+        console.warn('Failed to get assessment:', error)
+      }
+
+      // 统计目标状态分布
       const goalsByStatus: Record<string, number> = {}
       goals.forEach(goal => {
         goalsByStatus[goal.status] = (goalsByStatus[goal.status] || 0) + 1
       })
 
-      // 统计路径状态
+      // 统计路径状态分布
       const pathsByStatus: Record<string, number> = {}
       paths.forEach(path => {
         pathsByStatus[path.status] = (pathsByStatus[path.status] || 0) + 1
       })
 
-      // 获取课程单元数量
-      let courseUnitsCount = 0
-      try {
-        const stored = localStorage.getItem('courseUnits')
-        if (stored) {
-          const units = JSON.parse(stored)
-          courseUnitsCount = Array.isArray(units) ? units.length : 0
-        }
-      } catch (error) {
-        console.warn('Failed to get course units count:', error)
-      }
-
-      // 获取AI动作记录数量
-      let agentActionsCount = 0
-      try {
-        const stored = localStorage.getItem('agentActions')
-        if (stored) {
-          const actions = JSON.parse(stored)
-          agentActionsCount = Array.isArray(actions) ? actions.length : 0
-        }
-      } catch (error) {
-        console.warn('Failed to get agent actions count:', error)
-      }
-
-      // 检查是否有能力评估
-      let hasAssessment = false
-      try {
-        const stored = localStorage.getItem('currentAssessment')
-        hasAssessment = !!stored
-      } catch (error) {
-        console.warn('Failed to check assessment:', error)
-      }
-
       const stats = {
         goals: goals.length,
         paths: paths.length,
-        courseUnits: courseUnitsCount,
-        agentActions: agentActionsCount,
+        courseUnits: courseUnits.length,
+        agentActions: agentActions.length,
         hasAssessment,
         goalsByStatus,
         pathsByStatus
@@ -1914,7 +1895,7 @@ export class LearningAPI {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : '获取数据统计失败'
+        error: error instanceof Error ? error.message : '获取Profile数据统计失败'
       }
     }
   }
@@ -1936,39 +1917,16 @@ export class LearningAPI {
         profileId = currentProfile.data.id
       }
 
-      // 获取实际数据
+      // 获取实际数据 - 使用原系统的Profile隔离数据获取方法
       const goals = getLearningGoals()
       const paths = getLearningPaths()
+      const courseUnits = getCourseUnits()
+      const agentActions = getAgentActions()
 
-      // 获取课程单元
-      let courseUnits = []
+      // 获取能力评估 - 使用原系统方法
+      let currentAssessment: any = null
       try {
-        const stored = localStorage.getItem('courseUnits')
-        if (stored) {
-          courseUnits = JSON.parse(stored)
-        }
-      } catch (error) {
-        console.warn('Failed to get course units:', error)
-      }
-
-      // 获取AI动作记录
-      let agentActions = []
-      try {
-        const stored = localStorage.getItem('agentActions')
-        if (stored) {
-          agentActions = JSON.parse(stored)
-        }
-      } catch (error) {
-        console.warn('Failed to get agent actions:', error)
-      }
-
-      // 获取能力评估
-      let currentAssessment = null
-      try {
-        const stored = localStorage.getItem('currentAssessment')
-        if (stored) {
-          currentAssessment = JSON.parse(stored)
-        }
+        currentAssessment = getCurrentAssessment()
       } catch (error) {
         console.warn('Failed to get current assessment:', error)
       }

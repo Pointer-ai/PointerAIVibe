@@ -20,6 +20,7 @@ import React, { useState } from 'react'
 import { Button } from '../refactor/components/ui/Button/Button'
 import DashboardPage from '../refactor/pages/Dashboard'
 import { GoalManagementPage } from '../refactor/pages/GoalManagement'
+import { PathPlanningPage } from '../refactor/pages/PathPlanning'
 import { AssessmentPage } from '../refactor/pages/Assessment'
 import UIShowcase from '../refactor/pages/UIShowcase'
 import { ProfileManagementPage } from '../refactor/pages/ProfileManagement'
@@ -69,15 +70,7 @@ export const RefactorDashboard: React.FC<RefactorDashboardProps> = ({ onBack }) 
       case 'data-management':
         return <DataManagementPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'path-planning':
-        return (
-          <div className="p-8">
-            <h1 className="text-2xl font-bold mb-4">🛤️ 路径规划</h1>
-            <p className="text-gray-600 mb-4">该功能正在开发中...</p>
-            <Button onClick={() => setCurrentView('dashboard')}>
-              返回Dashboard
-            </Button>
-          </div>
-        )
+        return <PathPlanningPage onNavigate={(view: string) => handleNavigate(view as ViewType)} />
       case 'system-integration':
         return (
           <div className="p-8">

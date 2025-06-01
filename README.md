@@ -354,6 +354,33 @@ npm run build
 - React、Vite等开源社区的卓越工具
 - 所有提供反馈和建议的用户
 
+## 📚 文档导航
+
+### 📖 核心文档
+- **[README.md](README.md)** - 项目概述和快速开始指南
+- **[AI_SYSTEM_GUIDE.md](AI_SYSTEM_GUIDE.md)** - AI学习系统完整指南（API配置、Function Calling、22个AI工具）
+- **[COMPLETE_DEMO_GUIDE.md](COMPLETE_DEMO_GUIDE.md)** - 完整演示和验证指南（功能测试、数据验证、工具调用确认）
+- **[LEARNING_SYSTEM_GUIDE.md](LEARNING_SYSTEM_GUIDE.md)** - 学习系统架构和组件说明
+
+### 📁 开发文档
+- **[docs/archive/](docs/archive/)** - 历史文档归档
+  - `PATH_GENERATION_UPGRADE_SUMMARY.md` - 路径生成升级记录
+  - `ENHANCED_PATH_GENERATION.md` - 增强路径生成说明
+
+### 🎯 文档使用建议
+
+**新用户推荐阅读顺序**：
+1. 📖 **README.md** - 了解项目概况和核心功能
+2. 🎯 **COMPLETE_DEMO_GUIDE.md** - 完整测试所有功能
+3. 🤖 **AI_SYSTEM_GUIDE.md** - 深入了解AI系统技术细节
+4. 🏗️ **LEARNING_SYSTEM_GUIDE.md** - 理解系统架构设计
+
+**开发者推荐阅读顺序**：
+1. 🤖 **AI_SYSTEM_GUIDE.md** - 了解Function Calling技术实现
+2. 🏗️ **LEARNING_SYSTEM_GUIDE.md** - 掌握系统架构和组件
+3. 🎯 **COMPLETE_DEMO_GUIDE.md** - 验证开发环境和功能
+4. 📁 **docs/archive/** - 查阅历史技术决策
+
 ---
 
 **🎯 Pointer.ai - 让AI真正为编程教育服务，让每个人都能享受个性化的学习体验！** 🚀

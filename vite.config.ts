@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/PointerAIVibe/',
+  base: '/',
   define: {
     // 为 pdfjs-dist 提供全局变量
     global: 'globalThis'

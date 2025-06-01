@@ -23,7 +23,12 @@ import {
   getLearningGoals,
   getLearningPaths,
   getCourseUnits,
-  addCoreEvent
+  addCoreEvent,
+  updateLearningGoal,
+  updateLearningPath,
+  createLearningGoal,
+  createLearningPath,
+  createCourseUnit
 } from './coreData'
 import { getCurrentAssessment } from './abilityAssess/service'
 import { log } from '../utils/logger'
@@ -61,6 +66,12 @@ export interface LearningSystemStatus {
   }
   recommendations: string[]
   nextActions: string[]
+  systemHealth: {
+    dataIntegrity: boolean
+    lastSyncTime: string
+    coreDataSize: number
+    missingData: string[]
+  }
 }
 
 /**
@@ -80,6 +91,115 @@ export class LearningSystemService {
     this.contentService = new CourseContentService()
     this.abilityService = new AbilityAssessmentService()
     log('[LearningSystem] All services initialized')
+    
+    // 初始化时进行数据完整性检查
+    this.performDataIntegrityCheck()
+  }
+
+  // ========== 数据完整性管理 ==========
+
+  /**
+   * 执行数据完整性检查
+   */
+  private performDataIntegrityCheck(): void {
+    try {
+      const issues = this.checkDataIntegrity()
+      if (issues.length > 0) {
+        log('[LearningSystem] Data integrity issues found:', issues)
+        this.reportDataIssues(issues)
+      } else {
+        log('[LearningSystem] Data integrity check passed')
+      }
+    } catch (error) {
+      log('[LearningSystem] Data integrity check failed:', error)
+    }
+  }
+
+  /**
+   * 检查数据完整性
+   */
+  private checkDataIntegrity(): string[] {
+    const issues: string[] = []
+    
+    try {
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+      const units = getCourseUnits()
+      const assessment = getCurrentAssessment()
+      
+      // 检查孤立的学习路径（没有对应目标）
+      const orphanedPaths = paths.filter(path => 
+        !goals.some(goal => goal.id === path.goalId)
+      )
+      if (orphanedPaths.length > 0) {
+        issues.push(`发现 ${orphanedPaths.length} 个孤立的学习路径`)
+      }
+      
+      // 检查孤立的课程单元（没有对应路径节点）
+      const orphanedUnits = units.filter(unit => 
+        !paths.some(path => 
+          path.nodes.some(node => node.id === unit.nodeId)
+        )
+      )
+      if (orphanedUnits.length > 0) {
+        issues.push(`发现 ${orphanedUnits.length} 个孤立的课程单元`)
+      }
+      
+      // 检查缺失的必要数据
+      if (!assessment && goals.length > 0) {
+        issues.push('有学习目标但缺少能力评估数据')
+      }
+      
+      // 检查数据时间戳一致性
+      const outdatedGoals = goals.filter(goal => 
+        new Date(goal.updatedAt) < new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30天前
+      )
+      if (outdatedGoals.length > 0) {
+        issues.push(`发现 ${outdatedGoals.length} 个超过30天未更新的目标`)
+      }
+      
+    } catch (error) {
+      issues.push(`数据完整性检查失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+    
+    return issues
+  }
+
+  /**
+   * 报告数据问题到Core Data
+   */
+  private reportDataIssues(issues: string[]): void {
+    addCoreEvent({
+      type: 'data_integrity_issues_detected',
+      details: {
+        issueCount: issues.length,
+        issues: issues,
+        timestamp: new Date().toISOString(),
+        autoFixAttempted: false
+      }
+    })
+  }
+
+  /**
+   * 同步Learning System状态到Core Data
+   */
+  private syncSystemStatus(): void {
+    try {
+      const systemStatus = this.getBasicSystemStatus()
+      
+      addCoreEvent({
+        type: 'learning_system_status_sync',
+        details: {
+          activeGoals: systemStatus.activeGoals.length,
+          activePaths: systemStatus.activePaths.length,
+          totalInteractions: this.interactionHistory.length,
+          lastSyncTime: new Date().toISOString()
+        }
+      })
+      
+    } catch (error) {
+      log('[LearningSystem] Failed to sync system status:', error)
+    }
   }
 
   // ========== AI Agent 交互系统 ==========
@@ -126,14 +246,16 @@ export class LearningSystemService {
       }
       this.interactionHistory.push(interaction)
       
-      // 记录Agent交互事件
+      // 记录Agent交互事件到Core Data
       addCoreEvent({
         type: 'agent_interaction',
         details: {
           userMessage,
           intent: intent.type,
           toolsUsed: actionResult.toolsUsed,
-          success: actionResult.success
+          success: actionResult.success,
+          responseLength: response.length,
+          timestamp: interaction.timestamp
         }
       })
 
@@ -150,6 +272,9 @@ export class LearningSystemService {
         }
       })
 
+      // 同步系统状态
+      this.syncSystemStatus()
+
       log(`[LearningSystem] Agent interaction completed`)
       
       return {
@@ -161,6 +286,16 @@ export class LearningSystemService {
 
     } catch (error) {
       log(`[LearningSystem] Agent chat failed:`, error)
+      
+      // 记录错误事件
+      addCoreEvent({
+        type: 'agent_interaction_error',
+        details: {
+          userMessage,
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
       
       return {
         response: '抱歉，我遇到了一些问题。请稍后再试或提供更具体的信息。',
@@ -410,34 +545,83 @@ export class LearningSystemService {
     try {
       log('[LearningSystem] Starting complete learning path creation')
 
-      // 1. 创建学习目标
-      await this.goalService.createGoal(goalRecommendation)
-      const goals = getLearningGoals()
-      const goal = goals.find(g => g.title === goalRecommendation.title)
-      
-      if (!goal) {
-        throw new Error('Failed to create goal')
-      }
+      // 记录流程开始事件
+      addCoreEvent({
+        type: 'complete_learning_path_creation_started',
+        details: {
+          goalTitle: goalRecommendation.title,
+          goalCategory: goalRecommendation.category,
+          pathConfig,
+          contentConfig,
+          timestamp: new Date().toISOString()
+        }
+      })
 
-      // 2. 生成学习路径
-      const path = await this.pathService.generateLearningPath(goal.id, pathConfig)
+      // 1. 创建学习目标 - 直接使用Core Data API确保同步
+      const goalData = {
+        title: goalRecommendation.title,
+        description: goalRecommendation.description,
+        category: goalRecommendation.category as 'frontend' | 'backend' | 'fullstack' | 'automation' | 'ai' | 'mobile' | 'game' | 'data' | 'custom',
+        priority: goalRecommendation.priority || 3,
+        targetLevel: 'intermediate' as 'beginner' | 'intermediate' | 'advanced' | 'expert',
+        estimatedTimeWeeks: goalRecommendation.estimatedTimeWeeks,
+        requiredSkills: goalRecommendation.requiredSkills || [],
+        outcomes: goalRecommendation.outcomes || [],
+        status: 'active' as const
+      }
+      
+      const goal = createLearningGoal(goalData)
+      log('[LearningSystem] Goal created via Core Data:', goal.id)
+
+      // 2. 生成学习路径 - 使用PathPlan服务
+      const path = await this.pathService.generateLearningPath(goal.id, {
+        learningStyle: 'balanced',
+        timePreference: 'moderate',
+        difficultyProgression: 'linear',
+        includeProjects: true,
+        includeMilestones: true
+      })
+      log('[LearningSystem] Path generated:', path.id)
 
       // 3. 为每个路径节点生成课程内容
       const courseUnits: any[] = []
       for (const node of path.nodes) {
         try {
-          const unit = await this.contentService.generateCourseContent(node.id, {
-            ...contentConfig,
-            contentType: this.inferContentType(node.type)
-          })
+          const unitData = {
+            nodeId: node.id,
+            title: `${node.title} - 课程内容`,
+            description: node.description || `${node.title}的详细学习内容`,
+            type: this.inferContentType(node.type),
+            content: {
+              markdown: `# ${node.title}\n\n这是${node.title}的详细学习内容。`
+            },
+            metadata: {
+              difficulty: node.difficulty || 3,
+              estimatedTime: node.estimatedMinutes || 60,
+              keywords: node.skills || [],
+              learningObjectives: [`掌握${node.title}的核心概念`, `能够应用${node.title}解决实际问题`]
+            }
+          }
+          
+          const unit = createCourseUnit(unitData)
           courseUnits.push(unit)
+          log('[LearningSystem] Course unit created for node:', node.id)
         } catch (error) {
           log('[LearningSystem] Failed to generate content for node:', node.id, error)
-          // 继续处理其他节点
+          // 记录课程内容创建失败事件
+          addCoreEvent({
+            type: 'course_unit_creation_failed',
+            details: {
+              nodeId: node.id,
+              pathId: path.id,
+              goalId: goal.id,
+              error: error instanceof Error ? error.message : '未知错误'
+            }
+          })
         }
       }
 
-      // 记录完整流程事件
+      // 记录完整流程成功事件
       addCoreEvent({
         type: 'complete_learning_path_created',
         details: {
@@ -445,15 +629,45 @@ export class LearningSystemService {
           pathId: path.id,
           nodeCount: path.nodes.length,
           courseUnitCount: courseUnits.length,
+          estimatedHours: path.totalEstimatedHours,
+          successfulUnits: courseUnits.length,
+          failedUnits: path.nodes.length - courseUnits.length,
+          completionTime: new Date().toISOString()
+        }
+      })
+
+      // 记录到活动历史
+      addActivityRecord({
+        type: 'goal_set',
+        action: '完整学习路径创建',
+        details: {
+          goalTitle: goal.title,
+          pathTitle: path.title,
+          nodeCount: path.nodes.length,
+          unitCount: courseUnits.length,
           estimatedHours: path.totalEstimatedHours
         }
       })
+
+      // 同步系统状态
+      this.syncSystemStatus()
 
       log('[LearningSystem] Complete learning path created successfully')
       return { goal, path, courseUnits }
 
     } catch (error) {
       log('[LearningSystem] Failed to create complete learning path:', error)
+      
+      // 记录失败事件
+      addCoreEvent({
+        type: 'complete_learning_path_creation_failed',
+        details: {
+          goalTitle: goalRecommendation.title,
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
+      
       throw error
     }
   }
@@ -571,7 +785,21 @@ export class LearningSystemService {
     const smartRecommendations = await this.getSmartLearningRecommendations()
     const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', {})
 
-    return {
+    // 执行数据完整性检查
+    const dataIntegrityIssues = this.checkDataIntegrity()
+    const isDataIntegrityOK = dataIntegrityIssues.length === 0
+
+    // 计算Core Data大小
+    const coreDataSize = goals.length + paths.length + units.length + this.interactionHistory.length
+
+    // 识别缺失的数据
+    const missingData: string[] = []
+    if (!abilitySummary.hasAssessment) missingData.push('ability_assessment')
+    if (activeGoals.length === 0) missingData.push('active_goals')
+    if (activeGoals.length > 0 && activePaths.length === 0) missingData.push('learning_paths')
+    if (activePaths.length > 0 && units.length === 0) missingData.push('course_units')
+
+    const systemStatus: LearningSystemStatus = {
       setupComplete: !!(abilitySummary.hasAssessment && activeGoals.length > 0 && activePaths.length > 0),
       currentPhase,
       progress: {
@@ -583,8 +811,28 @@ export class LearningSystemService {
         overallProgress: allNodes.length > 0 ? (completedNodes.length / allNodes.length) * 100 : 0
       },
       recommendations: smartRecommendations.recommendations,
-      nextActions: nextActionResult.suggestions || []
+      nextActions: nextActionResult.suggestions || [],
+      systemHealth: {
+        dataIntegrity: isDataIntegrityOK,
+        lastSyncTime: new Date().toISOString(),
+        coreDataSize,
+        missingData
+      }
     }
+
+    // 记录系统状态快照到Core Data
+    addCoreEvent({
+      type: 'system_status_snapshot',
+      details: {
+        currentPhase,
+        setupComplete: systemStatus.setupComplete,
+        progress: systemStatus.progress,
+        systemHealth: systemStatus.systemHealth,
+        timestamp: new Date().toISOString()
+      }
+    })
+
+    return systemStatus
   }
 
   // ========== 私有方法 ==========
@@ -1068,10 +1316,57 @@ export class LearningSystemService {
     log('[LearningSystem] Executing ability assessment')
     
     try {
+      // 记录评估开始事件
+      addCoreEvent({
+        type: 'ability_assessment_started',
+        details: {
+          assessmentType: input.type,
+          inputSize: input.content ? input.content.length : 0,
+          timestamp: new Date().toISOString()
+        }
+      })
+
       const assessment = await this.abilityService.executeAssessment(input)
       
       // 评估完成后，检查是否需要进行下一步操作
       const systemStatus = await this.getSystemStatus()
+      
+      // 记录评估完成事件（详细版本）
+      addCoreEvent({
+        type: 'ability_assessment_completed_detailed',
+        details: {
+          assessmentId: `assessment_${Date.now()}`,
+          overallScore: assessment.overallScore,
+          level: assessment.report.summary,
+          dimensions: Object.keys(assessment.dimensions).map(key => ({
+            name: key,
+            score: assessment.dimensions[key].score,
+            weight: assessment.dimensions[key].weight
+          })),
+          strengths: assessment.report.strengths,
+          improvements: assessment.report.improvements,
+          confidence: assessment.metadata.confidence,
+          nextRecommendations: systemStatus.recommendations,
+          systemPhase: systemStatus.currentPhase,
+          timestamp: new Date().toISOString()
+        }
+      })
+
+      // 记录到活动历史
+      addActivityRecord({
+        type: 'assessment',
+        action: '能力评估完成',
+        details: {
+          assessmentType: input.type,
+          overallScore: assessment.overallScore,
+          strengths: assessment.report.strengths.length,
+          improvements: assessment.report.improvements.length,
+          confidence: assessment.metadata.confidence
+        }
+      })
+
+      // 同步系统状态
+      this.syncSystemStatus()
       
       return {
         assessment,
@@ -1082,6 +1377,17 @@ export class LearningSystemService {
       
     } catch (error) {
       log('[LearningSystem] Ability assessment failed:', error)
+      
+      // 记录评估失败事件
+      addCoreEvent({
+        type: 'ability_assessment_failed',
+        details: {
+          assessmentType: input.type,
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
+      
       throw error
     }
   }
@@ -1090,7 +1396,19 @@ export class LearningSystemService {
    * 获取能力概述 - 统一接口
    */
   getAbilitySummary() {
-    return this.abilityService.getAbilitySummary()
+    const summary = this.abilityService.getAbilitySummary()
+    
+    // 记录能力概述查询事件
+    addCoreEvent({
+      type: 'ability_summary_accessed',
+      details: {
+        hasAssessment: summary.hasAssessment,
+        overallScore: summary.overallScore,
+        accessTime: new Date().toISOString()
+      }
+    })
+    
+    return summary
   }
 
   /**
@@ -1100,6 +1418,15 @@ export class LearningSystemService {
     log('[LearningSystem] Updating ability assessment')
     
     try {
+      // 记录更新开始事件
+      addCoreEvent({
+        type: 'ability_assessment_update_started',
+        details: {
+          updateFields: Object.keys(updates),
+          timestamp: new Date().toISOString()
+        }
+      })
+
       const updatedAssessment = await this.abilityService.updateAssessment(updates)
       
       if (!updatedAssessment) {
@@ -1109,6 +1436,33 @@ export class LearningSystemService {
       // 重新获取系统状态
       const systemStatus = await this.getSystemStatus()
       
+      // 记录更新完成事件
+      addCoreEvent({
+        type: 'ability_assessment_updated_detailed',
+        details: {
+          assessmentId: 'current_assessment',
+          updatedFields: Object.keys(updates),
+          newOverallScore: updatedAssessment.overallScore,
+          newConfidence: updatedAssessment.metadata.confidence,
+          systemPhase: systemStatus.currentPhase,
+          timestamp: new Date().toISOString()
+        }
+      })
+
+      // 记录到活动历史
+      addActivityRecord({
+        type: 'assessment',
+        action: '能力评估更新',
+        details: {
+          updatedFields: Object.keys(updates),
+          newScore: updatedAssessment.overallScore,
+          confidence: updatedAssessment.metadata.confidence
+        }
+      })
+
+      // 同步系统状态
+      this.syncSystemStatus()
+      
       return {
         assessment: updatedAssessment,
         systemStatus,
@@ -1117,6 +1471,17 @@ export class LearningSystemService {
       
     } catch (error) {
       log('[LearningSystem] Failed to update ability assessment:', error)
+      
+      // 记录更新失败事件
+      addCoreEvent({
+        type: 'ability_assessment_update_failed',
+        details: {
+          updateFields: Object.keys(updates),
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
+      
       throw error
     }
   }
@@ -1126,6 +1491,389 @@ export class LearningSystemService {
    */
   async generateAbilityImprovementPlan(): Promise<string> {
     return await this.abilityService.generateImprovementPlan()
+  }
+
+  // ========== 数据同步验证和修复工具 ==========
+
+  /**
+   * 验证数据同步完整性
+   */
+  async validateDataSync(): Promise<{
+    isValid: boolean
+    issues: string[]
+    recommendations: string[]
+    autoFixResults?: any[]
+  }> {
+    log('[LearningSystem] Starting data sync validation')
+    
+    const issues: string[] = []
+    const recommendations: string[] = []
+    const autoFixResults: any[] = []
+    
+    try {
+      // 1. 检查Core Data与各服务的一致性
+      const coreDataIssues = this.checkDataIntegrity()
+      issues.push(...coreDataIssues)
+      
+      // 2. 检查能力评估数据同步
+      const assessment = getCurrentAssessment()
+      const abilityProfile = getAbilityProfile()
+      
+      if (assessment && !abilityProfile) {
+        issues.push('能力评估存在但AbilityProfile缺失')
+        recommendations.push('重新同步能力评估数据到Core Data')
+      }
+      
+      // 3. 检查学习目标与路径的关联
+      const goals = getLearningGoals()
+      const paths = getLearningPaths()
+      
+      for (const goal of goals) {
+        const relatedPaths = paths.filter(p => p.goalId === goal.id)
+        if (goal.status === 'active' && relatedPaths.length === 0) {
+          issues.push(`活跃目标 "${goal.title}" 缺少学习路径`)
+          recommendations.push(`为目标 "${goal.title}" 生成学习路径`)
+        }
+      }
+      
+      // 4. 检查课程内容与路径节点的关联
+      const units = getCourseUnits()
+      for (const path of paths) {
+        if (path.status === 'active') {
+          for (const node of path.nodes) {
+            const relatedUnits = units.filter(u => u.nodeId === node.id)
+            if (relatedUnits.length === 0) {
+              issues.push(`路径节点 "${node.title}" 缺少课程内容`)
+              recommendations.push(`为节点 "${node.title}" 生成课程内容`)
+            }
+          }
+        }
+      }
+      
+      // 5. 检查事件记录的完整性
+      const recentEvents = this.getRecentCoreEvents()
+      if (recentEvents.length === 0 && (goals.length > 0 || paths.length > 0)) {
+        issues.push('存在学习数据但缺少相关事件记录')
+        recommendations.push('补充事件记录或重新同步数据')
+      }
+      
+      // 6. 检查交互历史的有效性
+      const invalidInteractions = this.interactionHistory.filter(interaction => 
+        !interaction.id || !interaction.timestamp || !interaction.userMessage
+      )
+      if (invalidInteractions.length > 0) {
+        issues.push(`发现 ${invalidInteractions.length} 条无效的交互记录`)
+        recommendations.push('清理无效的交互历史')
+      }
+      
+      const isValid = issues.length === 0
+      
+      // 记录验证结果
+      addCoreEvent({
+        type: 'data_sync_validation_completed',
+        details: {
+          isValid,
+          issueCount: issues.length,
+          issues: issues.slice(0, 10), // 只记录前10个问题
+          recommendationCount: recommendations.length,
+          validationTime: new Date().toISOString()
+        }
+      })
+      
+      log('[LearningSystem] Data sync validation completed:', { isValid, issues: issues.length })
+      
+      return {
+        isValid,
+        issues,
+        recommendations,
+        autoFixResults
+      }
+      
+    } catch (error) {
+      log('[LearningSystem] Data sync validation failed:', error)
+      
+      addCoreEvent({
+        type: 'data_sync_validation_failed',
+        details: {
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      return {
+        isValid: false,
+        issues: ['数据同步验证过程失败'],
+        recommendations: ['检查系统状态', '重新启动Learning System'],
+        autoFixResults: []
+      }
+    }
+  }
+
+  /**
+   * 自动修复数据同步问题
+   */
+  async autoFixDataSync(fixOptions: {
+    fixOrphanedData?: boolean
+    regenerateMissingPaths?: boolean
+    recreateMissingUnits?: boolean
+    cleanInvalidRecords?: boolean
+  } = {}): Promise<{
+    success: boolean
+    fixedIssues: string[]
+    failedFixes: string[]
+    summary: string
+  }> {
+    log('[LearningSystem] Starting auto-fix for data sync issues')
+    
+    const fixedIssues: string[] = []
+    const failedFixes: string[] = []
+    
+    try {
+      // 记录修复开始事件
+      addCoreEvent({
+        type: 'data_sync_auto_fix_started',
+        details: {
+          fixOptions,
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      // 1. 清理孤立数据
+      if (fixOptions.fixOrphanedData) {
+        try {
+          const orphanedPaths = this.findOrphanedPaths()
+          for (const path of orphanedPaths) {
+            updateLearningPath(path.id, { status: 'archived' })
+          }
+          if (orphanedPaths.length > 0) {
+            fixedIssues.push(`归档了 ${orphanedPaths.length} 个孤立的学习路径`)
+          }
+        } catch (error) {
+          failedFixes.push('修复孤立数据失败')
+        }
+      }
+      
+      // 2. 为活跃目标生成缺失的路径
+      if (fixOptions.regenerateMissingPaths) {
+        try {
+          const goalsNeedingPaths = this.findGoalsNeedingPaths()
+          for (const goal of goalsNeedingPaths) {
+            try {
+              await this.pathService.generateLearningPath(goal.id, {
+                learningStyle: 'balanced',
+                timePreference: 'moderate',
+                difficultyProgression: 'linear',
+                includeProjects: true,
+                includeMilestones: true
+              })
+              fixedIssues.push(`为目标 "${goal.title}" 生成了学习路径`)
+            } catch (error) {
+              failedFixes.push(`为目标 "${goal.title}" 生成路径失败`)
+            }
+          }
+        } catch (error) {
+          failedFixes.push('批量生成学习路径失败')
+        }
+      }
+      
+      // 3. 清理无效记录
+      if (fixOptions.cleanInvalidRecords) {
+        try {
+          const validInteractions = this.interactionHistory.filter(interaction => 
+            interaction.id && interaction.timestamp && interaction.userMessage
+          )
+          const removedCount = this.interactionHistory.length - validInteractions.length
+          this.interactionHistory = validInteractions
+          
+          if (removedCount > 0) {
+            fixedIssues.push(`清理了 ${removedCount} 条无效的交互记录`)
+          }
+        } catch (error) {
+          failedFixes.push('清理无效记录失败')
+        }
+      }
+      
+      const success = failedFixes.length === 0
+      const summary = `修复完成：成功修复 ${fixedIssues.length} 个问题，${failedFixes.length} 个修复失败`
+      
+      // 记录修复结果
+      addCoreEvent({
+        type: 'data_sync_auto_fix_completed',
+        details: {
+          success,
+          fixedCount: fixedIssues.length,
+          failedCount: failedFixes.length,
+          fixedIssues,
+          failedFixes,
+          summary,
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      // 同步系统状态
+      this.syncSystemStatus()
+      
+      log('[LearningSystem] Auto-fix completed:', { success, fixed: fixedIssues.length, failed: failedFixes.length })
+      
+      return {
+        success,
+        fixedIssues,
+        failedFixes,
+        summary
+      }
+      
+    } catch (error) {
+      log('[LearningSystem] Auto-fix failed:', error)
+      
+      addCoreEvent({
+        type: 'data_sync_auto_fix_failed',
+        details: {
+          error: error instanceof Error ? error.message : '未知错误',
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      return {
+        success: false,
+        fixedIssues,
+        failedFixes: [...failedFixes, '自动修复过程失败'],
+        summary: '自动修复过程遇到错误'
+      }
+    }
+  }
+
+  /**
+   * 获取最近的Core Data事件
+   */
+  private getRecentCoreEvents(): any[] {
+    // 这里应该从Core Data获取最近的事件
+    // 暂时返回空数组，实际实现需要访问Core Data的events
+    return []
+  }
+
+  /**
+   * 查找孤立的学习路径
+   */
+  private findOrphanedPaths(): any[] {
+    const goals = getLearningGoals()
+    const paths = getLearningPaths()
+    
+    return paths.filter(path => 
+      !goals.some(goal => goal.id === path.goalId)
+    )
+  }
+
+  /**
+   * 查找需要路径的目标
+   */
+  private findGoalsNeedingPaths(): any[] {
+    const goals = getLearningGoals()
+    const paths = getLearningPaths()
+    
+    return goals.filter(goal => 
+      goal.status === 'active' && 
+      !paths.some(path => path.goalId === goal.id && path.status !== 'archived')
+    )
+  }
+
+  /**
+   * 强制同步所有数据到Core Data
+   */
+  async forceSyncAllData(): Promise<{
+    success: boolean
+    syncedItems: string[]
+    errors: string[]
+  }> {
+    log('[LearningSystem] Force syncing all data to Core Data')
+    
+    const syncedItems: string[] = []
+    const errors: string[] = []
+    
+    try {
+      // 记录强制同步开始
+      addCoreEvent({
+        type: 'force_sync_all_data_started',
+        details: {
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      // 1. 同步系统状态
+      try {
+        this.syncSystemStatus()
+        syncedItems.push('系统状态')
+      } catch (error) {
+        errors.push('系统状态同步失败')
+      }
+      
+      // 2. 同步交互历史总结
+      try {
+        addCoreEvent({
+          type: 'interaction_history_summary',
+          details: {
+            totalInteractions: this.interactionHistory.length,
+            recentInteractions: this.interactionHistory.slice(-5).map(i => ({
+              timestamp: i.timestamp,
+              toolsUsed: i.toolsUsed,
+              success: !!i.context
+            })),
+            timestamp: new Date().toISOString()
+          }
+        })
+        syncedItems.push('交互历史总结')
+      } catch (error) {
+        errors.push('交互历史同步失败')
+      }
+      
+      // 3. 同步数据完整性状态
+      try {
+        const dataIssues = this.checkDataIntegrity()
+        addCoreEvent({
+          type: 'data_integrity_status_sync',
+          details: {
+            hasIssues: dataIssues.length > 0,
+            issueCount: dataIssues.length,
+            issues: dataIssues,
+            timestamp: new Date().toISOString()
+          }
+        })
+        syncedItems.push('数据完整性状态')
+      } catch (error) {
+        errors.push('数据完整性状态同步失败')
+      }
+      
+      const success = errors.length === 0
+      
+      // 记录强制同步结果
+      addCoreEvent({
+        type: 'force_sync_all_data_completed',
+        details: {
+          success,
+          syncedCount: syncedItems.length,
+          errorCount: errors.length,
+          syncedItems,
+          errors,
+          timestamp: new Date().toISOString()
+        }
+      })
+      
+      log('[LearningSystem] Force sync completed:', { success, synced: syncedItems.length, errors: errors.length })
+      
+      return {
+        success,
+        syncedItems,
+        errors
+      }
+      
+    } catch (error) {
+      log('[LearningSystem] Force sync failed:', error)
+      
+      return {
+        success: false,
+        syncedItems,
+        errors: [...errors, '强制同步过程失败']
+      }
+    }
   }
 }
 

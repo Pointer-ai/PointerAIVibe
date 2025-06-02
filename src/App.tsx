@@ -7,6 +7,7 @@ import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
 import { PathPlanView } from './modules/pathPlan'
+import { CourseContentView } from './modules/courseContent'
 import { GlobalAIAssistant } from './components/AIAssistant'
 import AgentDemo from './demo/AgentDemo'
 import DataInspector from './components/DataInspector'
@@ -196,14 +197,7 @@ const App = () => {
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                  <div className="text-center">
-                    <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                      课程内容
-                    </h2>
-                    <p className="text-gray-600">该模块正在开发中...</p>
-                  </div>
-                </div>
+                <CourseContentView />
               </Layout>
             )
           

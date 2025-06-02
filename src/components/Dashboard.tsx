@@ -101,8 +101,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-orange-500 to-red-500',
       bgGradient: 'from-orange-500/10 to-red-500/10',
       iconBg: 'from-orange-500 to-red-500',
-      status: '待开发',
-      available: false
+      status: '可使用',
+      available: true
     },
     {
       id: 'runner',

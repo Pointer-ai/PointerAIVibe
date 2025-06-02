@@ -18,6 +18,7 @@ import {
 } from '../modules/coreData/goalActivationManager'
 import { LearningGoal } from '../modules/coreData/types'
 import { log } from '../utils/logger'
+import { DeleteConfirmDialog, useToast } from './common'
 
 interface GoalFormData {
   title: string
@@ -50,6 +51,16 @@ export const GoalSetting: React.FC = () => {
     requiredSkills: [],
     outcomes: []
   })
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success')
+  
+  // 删除确认对话框状态
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    goalId: string
+    goalTitle: string
+  } | null>(null)
+  
+  // Toast组件
+  const { showSuccess, showError, ToastContainer } = useToast()
 
   // 刷新数据
   const refreshData = async () => {
@@ -71,56 +82,53 @@ export const GoalSetting: React.FC = () => {
 
   // 显示消息
   const showMessage = (msg: string, isError = false) => {
+    if (isError) {
+      showError(msg)
+    } else {
+      showSuccess(msg, '操作成功')
+    }
     setMessage(msg)
-    setTimeout(() => setMessage(''), 3000)
+    setMessageType(isError ? 'error' : 'success')
   }
 
   // 显示激活结果
   const showActivationResult = (result: ActivationResult) => {
     if (result.success) {
-      showMessage(`✅ ${result.message}`)
-      if (result.systemRecommendations.length > 0) {
-        log('System recommendations:', result.systemRecommendations)
-      }
+      showSuccess(result.message, '操作成功')
     } else {
-      showMessage(`❌ ${result.message}`, true)
-      if (result.systemRecommendations.length > 0) {
-        log('Suggestions:', result.systemRecommendations)
-      }
+      showError(result.message, '操作失败')
     }
+    setMessage(result.message)
+    setMessageType(result.success ? 'success' : 'error')
   }
 
   // 创建新目标 - 使用Learning System服务
   const handleCreateGoal = async () => {
     if (!formData.title.trim()) {
-      showMessage('❌ 请输入目标标题', true)
+      showError('请填写目标标题')
       return
     }
 
     setLoading(true)
     try {
-      // 使用Learning System统一服务
-      const goalRecommendation = {
-        category: formData.category,
+      const newGoal = createLearningGoal({
         title: formData.title,
         description: formData.description,
+        category: formData.category,
         priority: formData.priority,
-        reasoning: '用户手动创建的学习目标',
+        targetLevel: formData.targetLevel,
         estimatedTimeWeeks: formData.estimatedTimeWeeks,
         requiredSkills: formData.requiredSkills,
-        outcomes: formData.outcomes
-      }
+        outcomes: formData.outcomes,
+        status: 'active'
+      })
       
-      // 通过Learning System创建目标，确保与其他模块集成
-      const goalService = new (await import('../modules/goalSetting')).GoalSettingService()
-      await goalService.createGoal(goalRecommendation)
-
-      showMessage(`✅ 成功创建目标: ${formData.title}`)
+      showSuccess(`目标创建成功: ${newGoal.title}`, '创建成功')
       setShowForm(false)
       resetForm()
       await refreshData()
     } catch (error) {
-      showMessage(`❌ 创建失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`创建失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -130,37 +138,46 @@ export const GoalSetting: React.FC = () => {
   const handleUpdateGoal = async (goalId: string, updates: Partial<LearningGoal>) => {
     setLoading(true)
     try {
-      const updatedGoal = await updateLearningGoal(goalId, updates)
-      if (updatedGoal) {
-        showMessage(`✅ 目标更新成功`)
+      const updated = await updateLearningGoal(goalId, updates)
+      if (updated) {
+        showSuccess('目标状态更新成功')
         await refreshData()
       }
     } catch (error) {
-      showMessage(`❌ 更新失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
   }
 
-  // 删除目标
-  const handleDeleteGoal = async (goalId: string) => {
-    if (!confirm('确定要删除此目标吗？相关的学习路径也会被删除。')) {
-      return
-    }
+  // 删除目标 - 显示确认对话框
+  const handleDeleteGoal = (goalId: string, goalTitle: string) => {
+    setDeleteConfirm({ goalId, goalTitle })
+  }
+
+  // 确认删除目标
+  const confirmDeleteGoal = async () => {
+    if (!deleteConfirm) return
 
     setLoading(true)
     try {
-      const deleted = await deleteLearningGoal(goalId)
+      const deleted = await deleteLearningGoal(deleteConfirm.goalId)
       if (deleted) {
-        showMessage(`✅ 目标删除成功`)
+        showSuccess('目标删除成功', '删除成功')
         setSelectedGoal(null)
         await refreshData()
       }
     } catch (error) {
-      showMessage(`❌ 删除失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
+      setDeleteConfirm(null)
     }
+  }
+
+  // 取消删除
+  const cancelDelete = () => {
+    setDeleteConfirm(null)
   }
 
   // 高级激活目标
@@ -173,7 +190,7 @@ export const GoalSetting: React.FC = () => {
       showActivationResult(result)
       await refreshData()
     } catch (error) {
-      showMessage(`❌ 激活失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`激活失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -187,7 +204,7 @@ export const GoalSetting: React.FC = () => {
       showActivationResult(result)
       await refreshData()
     } catch (error) {
-      showMessage(`❌ 暂停失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`暂停失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -204,7 +221,7 @@ export const GoalSetting: React.FC = () => {
       showActivationResult(result)
       await refreshData()
     } catch (error) {
-      showMessage(`❌ 完成操作失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`完成操作失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -266,13 +283,13 @@ export const GoalSetting: React.FC = () => {
       })
       
       if (updated) {
-        showMessage(`✅ 目标更新成功`)
+        showSuccess('目标更新成功')
         setShowForm(false)
         resetForm()
         await refreshData()
       }
     } catch (error) {
-      showMessage(`❌ 更新失败: ${error instanceof Error ? error.message : '未知错误'}`, true)
+      showError(`更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
@@ -398,7 +415,7 @@ export const GoalSetting: React.FC = () => {
       {/* 消息提示 */}
       {message && (
         <div className={`mb-6 p-4 rounded-lg border-l-4 ${
-          message.startsWith('✅') 
+          messageType === 'success' 
             ? 'bg-green-50 border-green-400 text-green-700' 
             : 'bg-red-50 border-red-400 text-red-700'
         }`}>
@@ -928,7 +945,7 @@ export const GoalSetting: React.FC = () => {
                     )}
                     
                     <button
-                      onClick={() => handleDeleteGoal(goal.id)}
+                      onClick={() => handleDeleteGoal(goal.id, goal.title)}
                       className="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors"
                     >
                       🗑️ 删除
@@ -962,6 +979,22 @@ export const GoalSetting: React.FC = () => {
             <strong>限制规则：</strong> 为保持专注，最多同时激活3个目标。超出限制时请先暂停或完成现有目标。
           </div>
         </div>
+      </div>
+
+      {/* 删除确认对话框 */}
+      {deleteConfirm && (
+        <DeleteConfirmDialog
+          isOpen={!!deleteConfirm}
+          onConfirm={confirmDeleteGoal}
+          onCancel={cancelDelete}
+          title="确认删除目标"
+          message={`你确定要删除目标 "${deleteConfirm.goalTitle}"? 相关的学习路径也会被删除。`}
+        />
+      )}
+
+      {/* Toast容器 */}
+      <div className="fixed bottom-0 right-0 p-4">
+        <ToastContainer />
       </div>
     </div>
   )

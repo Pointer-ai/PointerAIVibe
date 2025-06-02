@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { getProfiles, createProfile, verifyPassword, setCurrentProfile, deleteProfile, type Profile } from '../utils/profile'
+import { DeleteConfirmDialog, useToast } from './common'
 
 interface ProfileManagerProps {
   onLogin: () => void
@@ -14,6 +15,10 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ onLogin }) => {
   const [newProfilePassword, setNewProfilePassword] = useState('')
   const [newProfileAvatar, setNewProfileAvatar] = useState('👤')
   const [error, setError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<{ profileId: string; profileName: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  const { showSuccess, showError, ToastContainer } = useToast()
 
   // 可选的头像
   const avatarOptions = ['👤', '🧑‍💻', '👩‍💻', '🤖', '🎯', '🚀', '⭐', '🔥', '💎', '🌟', '🎨', '📚']
@@ -73,15 +78,32 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ onLogin }) => {
     onLogin()
   }
 
-  const handleDeleteProfile = (profileId: string, e: React.MouseEvent) => {
+  const handleDeleteProfile = (profileId: string, profileName: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (window.confirm('确定要删除这个 Profile 吗？所有数据将被清除。')) {
-      deleteProfile(profileId)
+    setDeleteConfirm({ profileId, profileName })
+  }
+
+  const confirmDeleteProfile = async () => {
+    if (!deleteConfirm) return
+    
+    setIsDeleting(true)
+    try {
+      deleteProfile(deleteConfirm.profileId)
       loadProfiles()
-      if (selectedProfile?.id === profileId) {
+      if (selectedProfile?.id === deleteConfirm.profileId) {
         setSelectedProfile(null)
       }
+      showSuccess('Profile 删除成功', '删除成功')
+    } catch (error) {
+      showError('删除 Profile 失败，请重试', '删除失败')
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirm(null)
     }
+  }
+
+  const cancelDelete = () => {
+    setDeleteConfirm(null)
   }
 
   const formatDate = (dateString: string) => {
@@ -161,7 +183,7 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ onLogin }) => {
                           </div>
                         )}
                         <button
-                          onClick={(e) => handleDeleteProfile(profile.id, e)}
+                          onClick={(e) => handleDeleteProfile(profile.id, profile.name, e)}
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,6 +322,24 @@ const ProfileManager: React.FC<ProfileManagerProps> = ({ onLogin }) => {
               </button>
             </div>
           )}
+
+          {/* Delete Confirmation Dialog */}
+          {deleteConfirm && (
+            <DeleteConfirmDialog
+              isOpen={!!deleteConfirm}
+              title="删除 Profile"
+              message={`确定要删除 Profile "${deleteConfirm.profileName}" 吗？`}
+              itemType="profile"
+              dangerLevel="high"
+              cascadeMessage="所有相关的学习数据、目标设置和历史记录都将被永久删除"
+              onConfirm={confirmDeleteProfile}
+              onCancel={cancelDelete}
+              isLoading={isDeleting}
+            />
+          )}
+
+          {/* Toast Notifications */}
+          <ToastContainer />
         </div>
       </div>
     </div>

@@ -138,7 +138,6 @@ export const DataInspector: React.FC = () => {
     } catch (error) {
       setMessage(`❌ 创建目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
-      setIsDeleting(false)
       setLoading(false)
     }
   }
@@ -186,7 +185,6 @@ export const DataInspector: React.FC = () => {
     } catch (error) {
       setMessage(`❌ 生成路径失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
-      setIsDeleting(false)
       setLoading(false)
     }
   }
@@ -340,7 +338,7 @@ export const DataInspector: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    showSuccess('已复制到剪贴板')
+    alert('已复制到剪贴板')
   }
 
   const handleDelete = async (type: 'goal' | 'path' | 'unit', id: string, title: string) => {
@@ -348,7 +346,6 @@ export const DataInspector: React.FC = () => {
   }
 
   const confirmDelete = async () => {
-    setIsDeleting(true)
     if (!deleteConfirm) return
 
     try {
@@ -383,14 +380,14 @@ export const DataInspector: React.FC = () => {
           }
         })
 
-        showSuccess(message, "删除成功")
+        alert(message)
         refreshData()
       } else {
-        showError(message, "删除失败")
+        alert(message)
       }
     } catch (error) {
       const errorMessage = `删除失败: ${error instanceof Error ? error.message : '未知错误'}`
-      showError(errorMessage, "删除失败")
+      alert(errorMessage)
       
       // 记录失败的删除操作
       addActivityRecord({
@@ -405,7 +402,6 @@ export const DataInspector: React.FC = () => {
         }
       })
     } finally {
-      setIsDeleting(false)
       setDeleteConfirm(null)
     }
   }
@@ -492,7 +488,6 @@ export const DataInspector: React.FC = () => {
     } catch (error) {
       setMessage(`❌ 创建课程单元失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
-      setIsDeleting(false)
       setLoading(false)
     }
   }
@@ -2049,23 +2044,14 @@ export const DataInspector: React.FC = () => {
       {deleteConfirm && (
         <DeleteConfirmDialog
           isOpen={deleteConfirm !== null}
-          title="确认删除"
-          message={`确定要删除这个${deleteConfirm.type === 'goal' ? '学习目标' : deleteConfirm.type === 'path' ? '学习路径' : '课程单元'}吗？`}
-          itemName={deleteConfirm.title}
-          itemType={deleteConfirm.type}
-          cascadeMessage={deleteConfirm.type === 'goal' ? '删除目标会同时删除相关的学习路径和课程内容。' : undefined}
+          onClose={() => setDeleteConfirm(null)}
           onConfirm={confirmDelete}
-          onCancel={() => setDeleteConfirm(null)}
-          isLoading={isDeleting}
-          dangerLevel={deleteConfirm.type === 'goal' ? 'high' : 'medium'}
+          itemType={deleteConfirm?.type}
+          itemTitle={deleteConfirm?.title}
         />
       )}
-
-      {/* Toast容器 */}
-      <ToastContainer />
     </div>
   )
 }
 
-export default DataInspector
-
+export default DataInspector 

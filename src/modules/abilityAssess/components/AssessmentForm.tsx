@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { AssessmentInput, QuestionnaireResponse } from '../types'
 import { parsePDF, isPDF, validatePDFFile } from '../../../utils/pdfParser'
 import { log } from '../../../utils/logger'
+import { useToast } from '../../../components/common'
 
 interface AssessmentFormProps {
   onSubmit: (input: AssessmentInput) => void
@@ -22,6 +23,8 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
     skills: {}
   })
 
+  const { showSuccess, showError, showWarning, ToastContainer } = useToast()
+
   // 处理文件上传（支持文本和 PDF）
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -32,7 +35,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
       // 先验证文件
       const validation = validatePDFFile(file)
       if (!validation.valid) {
-        alert(validation.error)
+        showError(validation.error || '文件验证失败', '文件验证失败')
         e.target.value = '' // 清空文件选择
         return
       }
@@ -43,17 +46,17 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
         const text = await parsePDF(file)
         
         if (text.length < 50) {
-          alert('PDF 解析成功，但内容较少。请确保 PDF 包含完整的简历信息。')
+          showWarning('PDF 解析成功，但内容较少。请确保 PDF 包含完整的简历信息。', 'PDF 内容提醒')
         }
         
         setResumeText(text)
         log('[AssessmentForm] PDF parsed successfully')
-        alert(`PDF 解析成功！提取了 ${text.length} 个字符的文本内容。`)
+        showSuccess(`PDF 解析成功！提取了 ${text.length} 个字符的文本内容。`, 'PDF 解析成功')
         
       } catch (error) {
         console.error('PDF parsing error:', error)
         const errorMessage = error instanceof Error ? error.message : 'PDF 解析失败'
-        alert(errorMessage)
+        showError(errorMessage, 'PDF 解析失败')
         e.target.value = '' // 清空文件选择
       } finally {
         setUploadingPDF(false)
@@ -64,7 +67,7 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
     // 处理文本文件
     if (file.type.startsWith('text/') || file.name.toLowerCase().endsWith('.txt')) {
       if (file.size > 1024 * 1024) { // 1MB limit for text files
-        alert('文本文件过大，请选择小于 1MB 的文件')
+        showError('文本文件过大，请选择小于 1MB 的文件', '文件大小限制')
         e.target.value = ''
         return
       }
@@ -73,15 +76,15 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
       reader.onload = (event) => {
         const content = event.target?.result as string
         setResumeText(content)
-        alert(`文本文件读取成功！内容长度：${content.length} 个字符。`)
+        showSuccess(`文本文件读取成功！内容长度：${content.length} 个字符。`, '文件读取成功')
       }
       reader.onerror = () => {
-        alert('文件读取失败，请重试')
+        showError('文件读取失败，请重试', '文件读取失败')
         e.target.value = ''
       }
       reader.readAsText(file, 'UTF-8')
     } else {
-      alert('请上传文本文件（.txt）或 PDF 文件（.pdf）')
+      showError('请上传文本文件（.txt）或 PDF 文件（.pdf）', '文件格式错误')
       e.target.value = ''
     }
   }
@@ -360,6 +363,9 @@ export const AssessmentForm: React.FC<AssessmentFormProps> = ({ onSubmit, loadin
           )}
         </button>
       </form>
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   )
 } 

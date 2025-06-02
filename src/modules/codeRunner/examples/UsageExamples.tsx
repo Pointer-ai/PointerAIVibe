@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { 
   RuntimeProvider,
   IntegratedCodeRunner,
@@ -8,6 +8,7 @@ import {
   CompactCodeRunner,
   CodeDisplay 
 } from '../index'
+import { DeleteConfirmDialog, useToast } from '../../../components/common'
 
 /**
  * 场景1：学习模块中的完整代码练习
@@ -284,6 +285,35 @@ int main() {
  * 场景6：自定义配置和高级用法
  */
 export const AdvancedUsageExample: React.FC = () => {
+  const [showRunConfirm, setShowRunConfirm] = useState(false)
+  const [pendingCode, setPendingCode] = useState('')
+  const [runCallback, setRunCallback] = useState<((value: boolean) => void) | null>(null)
+  const { ToastContainer } = useToast()
+
+  const handleBeforeRun = async (code: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setPendingCode(code)
+      setRunCallback(() => resolve)
+      setShowRunConfirm(true)
+    })
+  }
+
+  const confirmRun = () => {
+    setShowRunConfirm(false)
+    if (runCallback) {
+      runCallback(true)
+      setRunCallback(null)
+    }
+  }
+
+  const cancelRun = () => {
+    setShowRunConfirm(false)
+    if (runCallback) {
+      runCallback(false)
+      setRunCallback(null)
+    }
+  }
+
   return (
     <RuntimeProvider 
       config={{
@@ -305,10 +335,7 @@ export const AdvancedUsageExample: React.FC = () => {
           autoInitialize={true}
           runButtonText="执行长时间任务"
           onCodeChange={(code) => console.log('代码变更:', code.length, '字符')}
-          onBeforeRun={async (code) => {
-            console.log('准备运行代码')
-            return confirm('这段代码可能需要几秒钟运行，确定继续？')
-          }}
+          onBeforeRun={handleBeforeRun}
           onRunComplete={(execution) => {
             console.log('执行完成，用时:', execution.executionTime, 'ms')
           }}
@@ -317,6 +344,20 @@ export const AdvancedUsageExample: React.FC = () => {
           }}
           className="border-2 border-dashed border-gray-300 rounded-lg p-4"
         />
+
+        {/* Run Confirmation Dialog */}
+        <DeleteConfirmDialog
+          isOpen={showRunConfirm}
+          title="确认执行代码"
+          message="这段代码可能需要几秒钟运行，确定继续？"
+          itemType="general"
+          dangerLevel="low"
+          onConfirm={confirmRun}
+          onCancel={cancelRun}
+        />
+
+        {/* Toast Notifications */}
+        <ToastContainer />
       </div>
     </RuntimeProvider>
   )

@@ -9,13 +9,12 @@ import { CodeRunnerView } from './modules/codeRunner'
 import { PathPlanView } from './modules/pathPlan'
 import { GlobalAIAssistant } from './components/AIAssistant'
 import AgentDemo from './demo/AgentDemo'
-import LearningPathView from './components/LearningPathView'
 import DataInspector from './components/DataInspector'
 import { getCurrentProfileId } from './utils/profile'
 import { TestRandomSearch } from './pages/TestRandomSearch'
 import { GoalSetting } from './components/GoalSetting'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector'
+type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'data-inspector'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -146,19 +145,6 @@ const App = () => {
                 onProfileSwitch={handleProfileSwitch}
               >
                 <AgentDemo />
-              </Layout>
-            )
-          
-          case 'learning-path-view':
-            return (
-              <Layout 
-                title="学习路径管理" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <LearningPathView />
               </Layout>
             )
           

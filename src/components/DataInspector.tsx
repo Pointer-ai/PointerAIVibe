@@ -7,10 +7,15 @@ import {
   getAgentActions,
   deleteLearningGoal,
   deleteLearningPath,
-  deleteCourseUnit
+  deleteCourseUnit,
+  updateLearningGoal,
+  updateLearningPath,
+  getGoalStatusStats
 } from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { addActivityRecord } from '../modules/profileSettings/service'
+import { agentToolExecutor } from '../modules/coreData'
+import { LearningGoal, LearningPath } from '../modules/coreData/types'
 
 export const DataInspector: React.FC = () => {
   const [profileData, setProfileData] = useState<any>(null)
@@ -20,6 +25,14 @@ export const DataInspector: React.FC = () => {
     id: string
     title: string
   } | null>(null)
+
+  // 学习路径管理相关状态
+  const [goals, setGoals] = useState<LearningGoal[]>([])
+  const [paths, setPaths] = useState<LearningPath[]>([])
+  const [selectedGoal, setSelectedGoal] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<string>('')
+  const [goalStats, setGoalStats] = useState<any>(null)
 
   const refreshData = () => {
     const profile = getCurrentProfile()
@@ -39,11 +52,234 @@ export const DataInspector: React.FC = () => {
         currentAssessment: getCurrentAssessment()
       })
     }
+
+    // 刷新学习路径管理数据
+    setGoals(getLearningGoals())
+    setPaths(getLearningPaths())
+    setGoalStats(getGoalStatusStats())
   }
 
   useEffect(() => {
     refreshData()
   }, [])
+
+  // 创建新目标
+  const createNewGoal = async () => {
+    setLoading(true)
+    try {
+      const assessment = getCurrentAssessment()
+      
+      const goal = await agentToolExecutor.executeTool('create_learning_goal', {
+        title: '新的学习目标',
+        description: '请编辑此目标的详细信息',
+        category: 'frontend',
+        priority: 3,
+        targetLevel: assessment ? 
+          (assessment.overallScore >= 70 ? 'advanced' : 
+           assessment.overallScore >= 40 ? 'intermediate' : 'beginner') : 'beginner',
+        estimatedTimeWeeks: 8,
+        requiredSkills: ['编程基础'],
+        outcomes: ['掌握新技能']
+      })
+
+      setMessage(`✅ 成功创建目标: ${goal.title}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 创建目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 为目标生成学习路径
+  const generatePathForGoal = async (goalId: string) => {
+    setLoading(true)
+    try {
+      // 首先冻结现有路径
+      const existingPaths = paths.filter(p => p.goalId === goalId && p.status === 'active')
+      for (const path of existingPaths) {
+        await agentToolExecutor.executeTool('update_learning_path', {
+          pathId: path.id,
+          updates: { status: 'frozen' }
+        })
+      }
+
+      // 生成新的学习路径节点
+      const assessment = getCurrentAssessment()
+      const userLevel = assessment ? 
+        (assessment.overallScore >= 70 ? 'intermediate' : 
+         assessment.overallScore >= 40 ? 'beginner' : 'novice') : 'beginner'
+
+      const nodes = await agentToolExecutor.executeTool('generate_path_nodes', {
+        goalId: goalId,
+        userLevel: userLevel,
+        preferences: { 
+          learningStyle: 'project-based', 
+          pace: 'normal' 
+        }
+      })
+
+      // 创建新的学习路径
+      const path = await agentToolExecutor.executeTool('create_learning_path', {
+        goalId: goalId,
+        title: `${goals.find(g => g.id === goalId)?.title} - 学习路径`,
+        description: '个性化学习路径',
+        nodes: nodes,
+        dependencies: [],
+        milestones: []
+      })
+
+      setMessage(`✅ 成功为目标生成学习路径: ${path.nodes.length} 个节点`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 生成路径失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 更新目标状态
+  const updateGoalStatus = async (goalId: string, status: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_goal', {
+        goalId: goalId,
+        updates: { status }
+      })
+
+      // 如果目标被暂停或取消，相关路径也要更新
+      if (status === 'paused' || status === 'cancelled') {
+        const relatedPaths = paths.filter(p => p.goalId === goalId && p.status === 'active')
+        for (const path of relatedPaths) {
+          await agentToolExecutor.executeTool('update_learning_path', {
+            pathId: path.id,
+            updates: { status: status === 'paused' ? 'paused' : 'archived' }
+          })
+        }
+      }
+
+      setMessage(`✅ 目标状态已更新为: ${status}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 更新路径状态
+  const updatePathStatus = async (pathId: string, status: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status }
+      })
+
+      setMessage(`✅ 路径状态已更新为: ${getStatusText(status)}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 更新路径状态失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 激活冻结的路径
+  const activateFrozenPath = async (pathId: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status: 'active' }
+      })
+
+      setMessage(`✅ 路径已激活`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 激活失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 暂停路径
+  const pausePath = async (pathId: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status: 'paused' }
+      })
+
+      setMessage(`✅ 路径已暂停`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 暂停失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 完成路径
+  const completePath = async (pathId: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status: 'completed' }
+      })
+
+      setMessage(`✅ 路径已完成`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 完成失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 恢复暂停的路径
+  const resumePath = async (pathId: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status: 'active' }
+      })
+
+      setMessage(`✅ 路径已恢复`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 恢复失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 删除路径
+  const deletePathAdvanced = async (pathId: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status: 'archived' }
+      })
+
+      setMessage(`✅ 路径已归档`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 删除失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 获取状态颜色
+  const getStatusColor = (status: string): string => {
+    switch (status) {
+      case 'active': return '#4CAF50'
+      case 'completed': return '#2196F3'
+      case 'paused': return '#FF9800'
+      case 'cancelled': return '#f44336'
+      case 'frozen': return '#9E9E9E'
+      case 'archived': return '#795548'
+      default: return '#6c757d'
+    }
+  }
+
+  // 获取状态中文
+  const getStatusText = (status: string): string => {
+    switch (status) {
+      case 'active': return '进行中'
+      case 'completed': return '已完成'
+      case 'paused': return '已暂停'
+      case 'cancelled': return '已取消'
+      case 'frozen': return '已冻结'
+      case 'archived': return '已归档'
+      case 'draft': return '草稿'
+      default: return '未知'
+    }
+  }
 
   const formatJSON = (obj: any): string => {
     return JSON.stringify(obj, null, 2)
@@ -128,20 +364,80 @@ export const DataInspector: React.FC = () => {
         marginBottom: '20px'
       }}>
         <h1>🗂️ 数据管理</h1>
-        <button
-          onClick={refreshData}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-        >
-          🔄 刷新数据
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={createNewGoal}
+            disabled={loading}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1
+            }}
+          >
+            ➕ 新建目标
+          </button>
+          <button
+            onClick={refreshData}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer'
+            }}
+          >
+            🔄 刷新数据
+          </button>
+        </div>
       </div>
+
+      {/* 消息显示区域 */}
+      {message && (
+        <div style={{
+          padding: '10px 15px',
+          marginBottom: '20px',
+          backgroundColor: message.includes('✅') ? '#d1ecf1' : '#f8d7da',
+          border: `1px solid ${message.includes('✅') ? '#bee5eb' : '#f5c6cb'}`,
+          borderRadius: '8px',
+          color: message.includes('✅') ? '#0c5460' : '#721c24'
+        }}>
+          {message}
+        </div>
+      )}
+
+      {/* 操作提示 */}
+      <div style={{
+        padding: '15px',
+        backgroundColor: '#e3f2fd',
+        borderRadius: '8px',
+        border: '1px solid #bbdefb',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#1976d2' }}>💡 状态管理操作指南</h4>
+        <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+          <p><strong>🎯 目标操作：</strong>点击目标卡片展开操作按钮，支持暂停、完成、取消、重新激活等操作</p>
+          <p><strong>🛤️ 路径操作：</strong>每个路径都有对应的状态管理按钮，可以灵活控制学习进度</p>
+          <p><strong>🔄 智能同步：</strong>目标状态变化会自动同步相关路径，保持数据一致性</p>
+          <p><strong>📊 实时反馈：</strong>所有操作都会显示结果消息，并更新数据统计</p>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '5px',
+          marginBottom: '20px'
+        }}>
+          ⏳ 处理中...
+        </div>
+      )}
 
       <div style={{ 
         display: 'grid', 
@@ -214,170 +510,681 @@ export const DataInspector: React.FC = () => {
         </div>
       </div>
 
-      {/* 数据管理区域 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* 学习目标管理 */}
-        {coreData?.goals?.length > 0 && (
-          <div style={{
-            padding: '15px',
-            backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #ddd'
+      {/* 目标状态统计卡片 */}
+      {goalStats && (
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          border: '1px solid #dee2e6'
+        }}>
+          <h3 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            📊 目标状态统计
+            {!goalStats.canActivateMore && (
+              <span style={{
+                padding: '4px 8px',
+                backgroundColor: '#ff6b6b',
+                color: 'white',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: 'normal'
+              }}>
+                已达上限
+              </span>
+            )}
+          </h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', 
+            gap: '15px' 
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>🎯 学习目标管理</h3>
-              <button
-                onClick={() => copyToClipboard(formatJSON(coreData.goals))}
-                style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                📋 复制数据
-              </button>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4CAF50' }}>
+                {goalStats.active}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>激活中</div>
+              <div style={{ fontSize: '10px', color: '#999' }}>最多3个</div>
             </div>
-            
-            {/* 目标列表 */}
-            <div style={{ marginTop: '15px' }}>
-              {coreData.goals.map((goal: any) => (
-                <div key={goal.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '10px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '4px',
-                  marginBottom: '8px'
-                }}>
-                  <div>
-                    <strong>{goal.title}</strong>
-                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
-                      {goal.category} | {goal.status} | 优先级: {goal.priority}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleDelete('goal', goal.id, goal.title)}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2196F3' }}>
+                {goalStats.completed}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已完成</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#FF9800' }}>
+                {goalStats.paused}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已暂停</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f44336' }}>
+                {goalStats.cancelled}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>已取消</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#6c757d' }}>
+                {goalStats.total}
+              </div>
+              <div style={{ fontSize: '12px', color: '#666' }}>总计</div>
+            </div>
+          </div>
+          
+          {/* 激活限制提醒 */}
+          {!goalStats.canActivateMore && (
+            <div style={{
+              marginTop: '15px',
+              padding: '10px',
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffeaa7',
+              borderRadius: '5px',
+              color: '#856404'
+            }}>
+              <strong>⚠️ 提醒：</strong> 您已激活3个目标（上限）。要激活新目标，请先暂停或完成现有目标。
+            </div>
+          )}
+          
+          {goalStats.canActivateMore && goalStats.active > 0 && (
+            <div style={{
+              marginTop: '15px',
+              padding: '10px',
+              backgroundColor: '#d1ecf1',
+              border: '1px solid #bee5eb',
+              borderRadius: '5px',
+              color: '#0c5460'
+            }}>
+              <strong>💡 提示：</strong> 您还可以激活 {3 - goalStats.active} 个目标。
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px', marginBottom: '20px' }}>
+        {/* 学习目标管理 */}
+        <div>
+          <h2>📋 学习目标管理 ({goals.length})</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {goals.map((goal) => (
+              <div
+                key={goal.id}
+                style={{
+                  padding: '15px',
+                  border: `2px solid ${selectedGoal === goal.id ? '#007bff' : '#ddd'}`,
+                  borderRadius: '8px',
+                  backgroundColor: selectedGoal === goal.id ? '#f8f9fa' : 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => setSelectedGoal(selectedGoal === goal.id ? null : goal.id)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: '0 0 5px 0', fontSize: '16px' }}>{goal.title}</h3>
+                  <span
                     style={{
-                      padding: '4px 8px',
-                      backgroundColor: '#dc3545',
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
                       color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
+                      backgroundColor: getStatusColor(goal.status)
                     }}
                   >
-                    🗑️ 删除
-                  </button>
+                    {getStatusText(goal.status)}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
+                  {goal.description}
+                </p>
+                <div style={{ fontSize: '12px', color: '#888' }}>
+                  📂 {goal.category} | ⏱️ {goal.estimatedTimeWeeks}周 | 📈 {goal.targetLevel}
+                </div>
+                
+                {selectedGoal === goal.id && (
+                  <div style={{ 
+                    marginTop: '10px', 
+                    paddingTop: '10px', 
+                    borderTop: '1px solid #eee',
+                    display: 'flex',
+                    gap: '5px',
+                    flexWrap: 'wrap'
+                  }}>
+                    {goal.status === 'active' && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            generatePathForGoal(goal.id)
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🛤️ 生成路径
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            updateGoalStatus(goal.id, 'paused')
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#ffc107',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⏸️ 暂停
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            updateGoalStatus(goal.id, 'completed')
+                          }}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✅ 完成
+                        </button>
+                      </>
+                    )}
+                    {goal.status === 'paused' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateGoalStatus(goal.id, 'active')
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ▶️ 恢复
+                      </button>
+                    )}
+                    {goal.status === 'completed' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateGoalStatus(goal.id, 'active')
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#17a2b8',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔄 重新开始
+                      </button>
+                    )}
+                    {['active', 'paused'].includes(goal.status) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateGoalStatus(goal.id, 'cancelled')
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ❌ 取消
+                      </button>
+                    )}
+                    {goal.status === 'cancelled' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          updateGoalStatus(goal.id, 'active')
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔄 重新激活
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete('goal', goal.id, goal.title)
+                      }}
+                      style={{
+                        padding: '5px 10px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🗑️ 删除
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
             
-            <details style={{ marginTop: '10px' }}>
-              <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看完整数据 ({coreData.goals.length} 个目标)
-              </summary>
-              <pre style={{
-                backgroundColor: '#f8f9fa',
-                padding: '10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                overflow: 'auto',
-                maxHeight: '300px',
-                marginTop: '10px'
+            {goals.length === 0 && (
+              <div style={{
+                padding: '40px',
+                textAlign: 'center',
+                color: '#888',
+                backgroundColor: '#f9f9f9',
+                borderRadius: '8px',
+                border: '2px dashed #ddd'
               }}>
-                {formatJSON(coreData.goals)}
-              </pre>
-            </details>
+                <div style={{ fontSize: '48px', marginBottom: '10px' }}>🎯</div>
+                <p>还没有学习目标</p>
+                <p style={{ fontSize: '14px' }}>点击"新建目标"开始您的学习之旅</p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* 学习路径管理 */}
-        {coreData?.paths?.length > 0 && (
-          <div style={{
-            padding: '15px',
-            backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #ddd'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>🛤️ 学习路径管理</h3>
-              <button
-                onClick={() => copyToClipboard(formatJSON(coreData.paths))}
-                style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-              >
-                📋 复制数据
-              </button>
-            </div>
-            
-            {/* 路径列表 */}
-            <div style={{ marginTop: '15px' }}>
-              {coreData.paths.map((path: any) => (
-                <div key={path.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '10px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '4px',
-                  marginBottom: '8px'
-                }}>
-                  <div>
-                    <strong>{path.title}</strong>
-                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
-                      {path.nodes.length} 节点 | {path.status} | {path.totalEstimatedHours}h
+        <div>
+          <h2>🛤️ 学习路径管理 ({paths.length})</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {paths.map((path) => {
+              const relatedGoal = goals.find(g => g.id === path.goalId)
+              const completedNodes = path.nodes.filter(n => n.status === 'completed')
+              const progress = path.nodes.length > 0 ? 
+                (completedNodes.length / path.nodes.length) * 100 : 0
+
+              return (
+                <div
+                  key={path.id}
+                  style={{
+                    padding: '15px',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    backgroundColor: 'white'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: '0 0 5px 0', fontSize: '16px' }}>{path.title}</h3>
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        color: 'white',
+                        backgroundColor: getStatusColor(path.status)
+                      }}
+                    >
+                      {getStatusText(path.status)}
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleDelete('path', path.id, path.title)}
-                    style={{
-                      padding: '4px 8px',
-                      backgroundColor: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    🗑️ 删除
-                  </button>
-                </div>
-              ))}
-            </div>
-            
-            <details style={{ marginTop: '10px' }}>
-              <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看完整数据 ({coreData.paths.length} 条路径)
-              </summary>
-              <pre style={{
-                backgroundColor: '#f8f9fa',
-                padding: '10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                overflow: 'auto',
-                maxHeight: '300px',
-                marginTop: '10px'
-              }}>
-                {formatJSON(coreData.paths)}
-              </pre>
-            </details>
-          </div>
-        )}
+                  
+                  {relatedGoal && (
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: '#666',
+                      marginBottom: '10px'
+                    }}>
+                      📋 目标: {relatedGoal.title}
+                    </div>
+                  )}
 
+                  <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
+                    {path.description}
+                  </p>
+
+                  {/* 进度条 */}
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '5px'
+                    }}>
+                      <span style={{ fontSize: '12px', color: '#888' }}>
+                        进度: {completedNodes.length}/{path.nodes.length} 节点
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#888' }}>
+                        {Math.round(progress)}%
+                      </span>
+                    </div>
+                    <div style={{
+                      width: '100%',
+                      height: '6px',
+                      backgroundColor: '#e9ecef',
+                      borderRadius: '3px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${progress}%`,
+                        height: '100%',
+                        backgroundColor: progress > 80 ? '#28a745' : 
+                                      progress > 50 ? '#ffc107' : '#007bff',
+                        transition: 'width 0.3s ease'
+                      }} />
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#888',
+                    marginTop: '8px'
+                  }}>
+                    ⏱️ 预计 {path.totalEstimatedHours}小时 | 🆔 {path.id}
+                  </div>
+
+                  {/* 路径节点预览 */}
+                  {path.nodes.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <details>
+                        <summary style={{ cursor: 'pointer', fontSize: '12px', color: '#007bff' }}>
+                          📚 查看节点 ({path.nodes.length}个)
+                        </summary>
+                        <div style={{ marginTop: '8px', paddingLeft: '10px' }}>
+                          {path.nodes.slice(0, 5).map((node, index) => (
+                            <div key={node.id} style={{
+                              fontSize: '11px',
+                              padding: '2px 0',
+                              color: node.status === 'completed' ? '#28a745' : 
+                                    node.status === 'in_progress' ? '#ffc107' : '#6c757d'
+                            }}>
+                              {index + 1}. {node.title} ({node.estimatedHours}h)
+                              {node.status === 'completed' && ' ✅'}
+                              {node.status === 'in_progress' && ' 🔄'}
+                            </div>
+                          ))}
+                          {path.nodes.length > 5 && (
+                            <div style={{ fontSize: '11px', color: '#888' }}>
+                              ... 还有 {path.nodes.length - 5} 个节点
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+
+                  {/* 路径操作按钮 */}
+                  <div style={{ 
+                    marginTop: '10px', 
+                    display: 'flex', 
+                    gap: '5px',
+                    flexWrap: 'wrap'
+                  }}>
+                    {/* 激活状态的路径操作 */}
+                    {path.status === 'active' && (
+                      <>
+                        <button
+                          onClick={() => pausePath(path.id)}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#ffc107',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ⏸️ 暂停
+                        </button>
+                        <button
+                          onClick={() => completePath(path.id)}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✅ 完成
+                        </button>
+                        <button
+                          onClick={() => updatePathStatus(path.id, 'archived')}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📦 归档
+                        </button>
+                      </>
+                    )}
+
+                    {/* 暂停状态的路径操作 */}
+                    {path.status === 'paused' && (
+                      <>
+                        <button
+                          onClick={() => resumePath(path.id)}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ▶️ 恢复
+                        </button>
+                        <button
+                          onClick={() => completePath(path.id)}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✅ 完成
+                        </button>
+                        <button
+                          onClick={() => updatePathStatus(path.id, 'archived')}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📦 归档
+                        </button>
+                      </>
+                    )}
+
+                    {/* 冻结状态的路径操作 */}
+                    {path.status === 'frozen' && (
+                      <>
+                        <button
+                          onClick={() => activateFrozenPath(path.id)}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🔥 激活
+                        </button>
+                        <button
+                          onClick={() => updatePathStatus(path.id, 'archived')}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📦 归档
+                        </button>
+                      </>
+                    )}
+
+                    {/* 草稿状态的路径操作 */}
+                    {path.status === 'draft' && (
+                      <>
+                        <button
+                          onClick={() => updatePathStatus(path.id, 'active')}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🚀 启动
+                        </button>
+                        <button
+                          onClick={() => updatePathStatus(path.id, 'archived')}
+                          style={{
+                            padding: '5px 10px',
+                            backgroundColor: '#6c757d',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📦 归档
+                        </button>
+                      </>
+                    )}
+
+                    {/* 已归档状态的路径操作 */}
+                    {path.status === 'archived' && (
+                      <button
+                        onClick={() => updatePathStatus(path.id, 'active')}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#17a2b8',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔄 重新激活
+                      </button>
+                    )}
+
+                    {/* 已完成状态的路径操作 */}
+                    {path.status === 'completed' && (
+                      <button
+                        onClick={() => updatePathStatus(path.id, 'active')}
+                        style={{
+                          padding: '5px 10px',
+                          backgroundColor: '#17a2b8',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔄 重新开始
+                      </button>
+                    )}
+
+                    {/* 通用删除按钮 */}
+                    <button
+                      onClick={() => handleDelete('path', path.id, path.title)}
+                      style={{
+                        padding: '5px 10px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '3px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🗑️ 删除
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {paths.length === 0 && (
+              <div style={{
+                padding: '40px',
+                textAlign: 'center',
+                color: '#888',
+                backgroundColor: '#f9f9f9',
+                borderRadius: '8px',
+                border: '2px dashed #ddd'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '10px' }}>🛤️</div>
+                <p>还没有学习路径</p>
+                <p style={{ fontSize: '14px' }}>先创建学习目标，然后生成学习路径</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 数据管理区域 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* 课程单元管理 */}
         {coreData?.courseUnits?.length > 0 && (
           <div style={{
@@ -553,6 +1360,82 @@ export const DataInspector: React.FC = () => {
         )}
       </div>
 
+      {/* 流程说明 */}
+      <div style={{
+        marginTop: '30px',
+        padding: '20px',
+        backgroundColor: '#e3f2fd',
+        borderRadius: '8px',
+        border: '1px solid #bbdefb'
+      }}>
+        <h3 style={{ margin: '0 0 15px 0', color: '#1976d2' }}>🔄 流程控制说明</h3>
+        <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+          <p><strong>目标状态管理：</strong></p>
+          <ul>
+            <li>🟢 <strong>进行中</strong>：可以生成新的学习路径，可暂停或完成</li>
+            <li>🟡 <strong>已暂停</strong>：相关路径也会暂停，可以恢复或取消</li>
+            <li>🔵 <strong>已完成</strong>：学习目标完成，可以重新开始</li>
+            <li>🔴 <strong>已取消</strong>：目标被取消，相关路径归档，可重新激活</li>
+          </ul>
+          
+          <p><strong>路径状态管理：</strong></p>
+          <ul>
+            <li>🟢 <strong>进行中</strong>：当前活跃的学习路径，可暂停、完成或归档</li>
+            <li>🟡 <strong>已暂停</strong>：暂时停止的路径，可恢复、完成或归档</li>
+            <li>🔒 <strong>已冻结</strong>：生成新路径时，旧路径自动冻结，可激活或归档</li>
+            <li>📝 <strong>草稿</strong>：待激活的路径，可启动或归档</li>
+            <li>🔵 <strong>已完成</strong>：完成的路径，可重新开始</li>
+            <li>📦 <strong>已归档</strong>：不再使用的路径，可重新激活</li>
+          </ul>
+          
+          <p><strong>智能流程控制：</strong></p>
+          <ul>
+            <li>重新设定目标后，原有路径会被冻结，等待重新生成</li>
+            <li>可以激活冻结的路径或者归档不需要的路径</li>
+            <li>支持多个目标和路径的并行管理</li>
+          </ul>
+          
+          <p><strong>状态转换流程：</strong></p>
+          <div style={{ 
+            padding: '10px', 
+            backgroundColor: '#f8f9fa', 
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontFamily: 'monospace'
+          }}>
+            <div><strong>目标状态流转：</strong></div>
+            <div>草稿 → 进行中 ⇄ 已暂停</div>
+            <div>进行中 → 已完成 / 已取消</div>
+            <div>已完成/已取消 → 重新激活</div>
+            <br />
+            <div><strong>路径状态流转：</strong></div>
+            <div>草稿 → 进行中 ⇄ 已暂停</div>
+            <div>进行中 → 已完成 / 已归档</div>
+            <div>已冻结 → 激活 / 归档</div>
+            <div>已完成/已归档 → 重新激活</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 使用说明 */}
+      <div style={{
+        marginTop: '20px',
+        padding: '15px',
+        backgroundColor: '#fff3cd',
+        borderRadius: '8px',
+        border: '1px solid #ffeaa7'
+      }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>💡 使用说明</h4>
+        <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#856404' }}>
+          <li><strong>数据管理：</strong> 可以查看和删除学习目标、路径、课程单元</li>
+          <li><strong>级联删除：</strong> 删除学习目标会自动删除相关的路径和内容</li>
+          <li><strong>活动记录：</strong> 所有删除操作都会记录到活动历史中</li>
+          <li><strong>数据导出：</strong> 点击"复制数据"按钮可以导出JSON格式的数据</li>
+          <li><strong>实时更新：</strong> 点击"刷新数据"按钮可以获取最新的数据状态</li>
+          <li><strong>路径管理：</strong> 支持目标状态控制、路径生成、激活和归档等操作</li>
+        </ul>
+      </div>
+
       {/* 删除确认对话框 */}
       {deleteConfirm && (
         <div style={{
@@ -563,8 +1446,8 @@ export const DataInspector: React.FC = () => {
           bottom: 0,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'center',
+          alignItems: 'center',
           zIndex: 1000
         }}>
           <div style={{
@@ -572,14 +1455,17 @@ export const DataInspector: React.FC = () => {
             padding: '20px',
             borderRadius: '8px',
             maxWidth: '400px',
-            width: '90%'
+            width: '90%',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}>
             <h3 style={{ margin: '0 0 15px 0', color: '#dc3545' }}>⚠️ 确认删除</h3>
             <p style={{ margin: '0 0 20px 0' }}>
-              您确定要删除 <strong>"{deleteConfirm.title}"</strong> 吗？
-            </p>
-            <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#666' }}>
-              此操作不可撤销。删除学习目标会同时删除相关的学习路径和课程内容。
+              确定要删除 <strong>"{deleteConfirm.title}"</strong> 吗？
+              {deleteConfirm.type === 'goal' && (
+                <span style={{ color: '#dc3545', display: 'block', marginTop: '5px', fontSize: '14px' }}>
+                  注意：删除目标会同时删除相关的学习路径和课程内容。
+                </span>
+              )}
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
@@ -612,24 +1498,6 @@ export const DataInspector: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* 使用说明 */}
-      <div style={{
-        marginTop: '30px',
-        padding: '15px',
-        backgroundColor: '#fff3cd',
-        borderRadius: '8px',
-        border: '1px solid #ffeaa7'
-      }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>💡 使用说明</h4>
-        <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#856404' }}>
-          <li><strong>数据管理：</strong> 可以查看和删除学习目标、路径、课程单元</li>
-          <li><strong>级联删除：</strong> 删除学习目标会自动删除相关的路径和内容</li>
-          <li><strong>活动记录：</strong> 所有删除操作都会记录到活动历史中</li>
-          <li><strong>数据导出：</strong> 点击"复制数据"按钮可以导出JSON格式的数据</li>
-          <li><strong>实时更新：</strong> 点击"刷新数据"按钮可以获取最新的数据状态</li>
-        </ul>
-      </div>
     </div>
   )
 }

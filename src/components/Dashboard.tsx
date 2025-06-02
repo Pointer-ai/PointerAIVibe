@@ -5,7 +5,7 @@ import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface DashboardProps {
   onLogout: () => void
-  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'learning-path-view' | 'data-inspector') => void
+  onNavigate: (view: 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'data-inspector') => void
   onHome: () => void
 }
 
@@ -106,20 +106,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       ),
       color: 'from-indigo-500 to-purple-500',
       status: '已开发',
-      available: true
-    },
-    {
-      id: 'learning-path',
-      view: 'learning-path-view' as const,
-      title: '学习路径管理',
-      description: '可视化管理学习目标和路径，支持流程控制',
-      icon: (
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6m3-3l3 3-3 3" />
-        </svg>
-      ),
-      color: 'from-emerald-500 to-teal-500',
-      status: '可使用',
       available: true
     },
     {

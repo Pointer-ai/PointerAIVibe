@@ -15,15 +15,13 @@ import {
 } from './refactor'
 import { PathPlanningPage } from './refactor/pages/PathPlanning'
 import { CourseContentPage } from './refactor/pages/CourseContent'
-import { PathActivationDebugPage } from './refactor/pages/PathActivationDebug'
 
 // CodeRunner重构版本 (使用refactor目录下的)
 import { IntegratedCodeRunner } from './refactor/components/features/CodeRunner'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'profile-settings' |
   'refactor-assessment' | 'refactor-goal-management' | 'refactor-path-planning' | 
-  'refactor-course-content' | 'refactor-code-runner' | 'refactor-data-management' |
-  'refactor-path-activation-debug'
+  'refactor-course-content' | 'refactor-code-runner' | 'refactor-data-management'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -204,22 +202,9 @@ const App = () => {
               </Layout>
             )
 
-          case 'refactor-path-activation-debug':
-            return (
-              <Layout 
-                title="🧪 路径激活调试" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <PathActivationDebugPage onNavigate={handleRefactorNavigate} />
-              </Layout>
-            )
-
           default:
-            return <LandingPage 
-              onGetStarted={handleGetStarted} 
+            return <LandingPage
+              onGetStarted={handleGetStarted}
               onLogin={handleProfileLogin}
               onDashboard={handleBackToDashboard}
               onProfileSwitch={handleProfileSwitch}

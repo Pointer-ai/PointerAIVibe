@@ -10,12 +10,19 @@ import {
   deleteCourseUnit,
   updateLearningGoal,
   updateLearningPath,
-  getGoalStatusStats
+  getGoalStatusStats,
+  getCourseUnitsByNode,
+  getNodeLearningStats,
+  updateCourseProgress,
+  markSectionComplete,
+  startCourseUnit,
+  getCourseStats,
+  createCourseUnit
 } from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { addActivityRecord } from '../modules/profileSettings/service'
 import { agentToolExecutor } from '../modules/coreData'
-import { LearningGoal, LearningPath } from '../modules/coreData/types'
+import { LearningGoal, LearningPath, CourseUnit } from '../modules/coreData/types'
 
 export const DataInspector: React.FC = () => {
   const [profileData, setProfileData] = useState<any>(null)
@@ -33,6 +40,13 @@ export const DataInspector: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string>('')
   const [goalStats, setGoalStats] = useState<any>(null)
+
+  // 课程内容管理相关状态
+  const [courseUnits, setCourseUnits] = useState<CourseUnit[]>([])
+  const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  const [selectedUnit, setSelectedUnit] = useState<CourseUnit | null>(null)
+  const [courseStats, setCourseStats] = useState<any>(null)
+  const [showCourseManagement, setShowCourseManagement] = useState(false)
 
   const refreshData = () => {
     const profile = getCurrentProfile()
@@ -57,6 +71,10 @@ export const DataInspector: React.FC = () => {
     setGoals(getLearningGoals())
     setPaths(getLearningPaths())
     setGoalStats(getGoalStatusStats())
+    
+    // 刷新课程内容管理数据
+    setCourseUnits(getCourseUnits())
+    setCourseStats(getCourseStats())
   }
 
   useEffect(() => {
@@ -353,6 +371,102 @@ export const DataInspector: React.FC = () => {
     } finally {
       setDeleteConfirm(null)
     }
+  }
+
+  // 开始学习课程单元
+  const startLearning = async (unitId: string) => {
+    try {
+      const result = startCourseUnit(unitId)
+      if (result) {
+        setMessage(`✅ 开始学习: ${result.title}`)
+        refreshData()
+      } else {
+        setMessage(`❌ 无法开始学习该课程单元`)
+      }
+    } catch (error) {
+      setMessage(`❌ 开始学习失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 标记章节完成
+  const completeSection = async (unitId: string, section: 'reading' | 'practice' | 'summary', timeSpent: number = 0) => {
+    try {
+      const result = markSectionComplete(unitId, section, timeSpent)
+      if (result) {
+        setMessage(`✅ ${section === 'reading' ? '阅读' : section === 'practice' ? '练习' : '总结'}部分已完成`)
+        refreshData()
+      } else {
+        setMessage(`❌ 无法完成该章节`)
+      }
+    } catch (error) {
+      setMessage(`❌ 完成章节失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 创建新的课程单元
+  const createNewCourseUnit = async (nodeId: string) => {
+    if (!nodeId) {
+      setMessage(`❌ 请先选择一个路径节点`)
+      return
+    }
+    
+    try {
+      setLoading(true)
+      
+      // 获取节点现有的课程单元数量，用于排序
+      const existingUnits = getCourseUnitsByNode(nodeId)
+      const order = existingUnits.length + 1
+      
+      const newUnit = createCourseUnit({
+        nodeId: nodeId,
+        title: `新课程单元 ${order}`,
+        description: '请编辑此课程单元的详细信息',
+        type: 'theory',
+        content: {
+          reading: {
+            markdown: '# 课程内容\n\n请在此处添加课程的阅读内容...',
+            estimatedTime: 30,
+            keyPoints: ['关键点1', '关键点2'],
+            resources: []
+          },
+          practice: {
+            exercises: [],
+            totalEstimatedTime: 20
+          },
+          summary: {
+            markdown: '## 课程总结\n\n请在此处添加课程总结...',
+            keyTakeaways: ['要点1', '要点2'],
+            nextSteps: ['下一步1', '下一步2'],
+            relatedTopics: ['相关主题1', '相关主题2']
+          }
+        },
+        metadata: {
+          difficulty: 3,
+          estimatedTime: 50,
+          keywords: ['新课程'],
+          learningObjectives: ['学会新技能'],
+          prerequisites: [],
+          order: order
+        }
+      })
+
+      setMessage(`✅ 成功创建课程单元: ${newUnit.title}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 创建课程单元失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 获取节点的课程单元
+  const getNodeUnits = (nodeId: string) => {
+    return getCourseUnitsByNode(nodeId)
+  }
+
+  // 获取节点学习统计
+  const getNodeStats = (nodeId: string) => {
+    return getNodeLearningStats(nodeId)
   }
 
   return (
@@ -1185,86 +1299,411 @@ export const DataInspector: React.FC = () => {
 
       {/* 数据管理区域 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* 课程单元管理 */}
-        {coreData?.courseUnits?.length > 0 && (
-          <div style={{
-            padding: '15px',
-            backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #ddd'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: '#333' }}>📚 课程单元管理</h3>
+        {/* 课程内容管理 */}
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          border: '1px solid #ddd'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, color: '#333' }}>📚 课程内容管理</h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={() => copyToClipboard(formatJSON(coreData.courseUnits))}
+                onClick={() => setShowCourseManagement(!showCourseManagement)}
                 style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#28a745',
+                  padding: '8px 15px',
+                  backgroundColor: '#007bff',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '3px',
+                  borderRadius: '5px',
                   cursor: 'pointer',
-                  fontSize: '12px'
+                  fontSize: '14px'
                 }}
               >
-                📋 复制数据
+                {showCourseManagement ? '收起管理' : '展开管理'}
               </button>
             </div>
-            
-            {/* 单元列表 */}
-            <div style={{ marginTop: '15px' }}>
-              {coreData.courseUnits.map((unit: any) => (
-                <div key={unit.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '10px',
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '4px',
-                  marginBottom: '8px'
-                }}>
-                  <div>
-                    <strong>{unit.title}</strong>
-                    <span style={{ marginLeft: '10px', color: '#666', fontSize: '12px' }}>
-                      {unit.type} | 难度: {unit.metadata?.difficulty || 'N/A'}
-                    </span>
+          </div>
+
+          {/* 课程统计卡片 */}
+          {courseStats && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: '1px solid #dee2e6'
+            }}>
+              <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>📊 课程学习统计</h4>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
+                gap: '15px' 
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>
+                    {courseStats.completedUnits}
                   </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>已完成</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ffc107' }}>
+                    {courseStats.inProgressUnits}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>进行中</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6c757d' }}>
+                    {courseStats.notStartedUnits}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>未开始</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#17a2b8' }}>
+                    {Math.round(courseStats.totalTimeSpent / 60)}h
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>学习时长</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc3545' }}>
+                    {courseStats.averageScore}%
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>平均分数</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCourseManagement && (
+            <>
+              {/* 节点选择器 */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  🎯 选择路径节点：
+                </label>
+                <select
+                  value={selectedNode || ''}
+                  onChange={(e) => setSelectedNode(e.target.value)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    fontSize: '14px',
+                    minWidth: '300px'
+                  }}
+                >
+                  <option value="">-- 选择节点 --</option>
+                  {paths.flatMap(path => 
+                    path.nodes.map(node => (
+                      <option key={node.id} value={node.id}>
+                        {path.title} - {node.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+                
+                {selectedNode && (
                   <button
-                    onClick={() => handleDelete('unit', unit.id, unit.title)}
+                    onClick={() => createNewCourseUnit(selectedNode)}
                     style={{
-                      padding: '4px 8px',
-                      backgroundColor: '#dc3545',
+                      marginLeft: '10px',
+                      padding: '8px 15px',
+                      backgroundColor: '#28a745',
                       color: 'white',
                       border: 'none',
-                      borderRadius: '3px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    ➕ 创建课程单元
+                  </button>
+                )}
+              </div>
+
+              {/* 选中节点的统计信息 */}
+              {selectedNode && (
+                <div style={{
+                  padding: '15px',
+                  backgroundColor: '#e3f2fd',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  border: '1px solid #bbdefb'
+                }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#1976d2' }}>📈 节点学习统计</h4>
+                  {(() => {
+                    const stats = getNodeStats(selectedNode)
+                    return (
+                      <div style={{ display: 'flex', gap: '20px', fontSize: '14px' }}>
+                        <span><strong>课程单元：</strong> {stats.totalUnits} 个</span>
+                        <span><strong>完成进度：</strong> {stats.progress}%</span>
+                        <span><strong>学习时长：</strong> {Math.round(stats.totalTime)} 分钟</span>
+                        <span><strong>预计时长：</strong> {stats.estimatedTime} 分钟</span>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* 课程单元列表 */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ marginBottom: '15px', color: '#495057' }}>
+                  📋 课程单元 ({selectedNode ? getNodeUnits(selectedNode).length : courseUnits.length} 个)
+                </h4>
+                
+                {(selectedNode ? getNodeUnits(selectedNode) : courseUnits).map((unit: CourseUnit) => (
+                  <div key={unit.id} style={{
+                    border: '1px solid #dee2e6',
+                    borderRadius: '8px',
+                    padding: '15px',
+                    marginBottom: '15px',
+                    backgroundColor: '#ffffff'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <div>
+                        <h5 style={{ margin: '0 0 5px 0', color: '#333' }}>{unit.title}</h5>
+                        <div style={{ fontSize: '13px', color: '#666', marginBottom: '5px' }}>
+                          {unit.description}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#999' }}>
+                          类型: {unit.type} | 难度: {unit.metadata.difficulty}/5 | 
+                          预计: {unit.metadata.estimatedTime}min | 排序: {unit.metadata.order}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <button
+                          onClick={() => setSelectedUnit(unit)}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#17a2b8',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          📝 详情
+                        </button>
+                        <button
+                          onClick={() => handleDelete('unit', unit.id, unit.title)}
+                          style={{
+                            padding: '4px 8px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          🗑️ 删除
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 进度条 */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        marginBottom: '5px'
+                      }}>
+                        <span style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                          学习进度: {unit.progress?.overallProgress || 0}%
+                        </span>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          padding: '2px 6px',
+                          borderRadius: '10px',
+                          backgroundColor: unit.progress?.status === 'completed' ? '#28a745' : 
+                                          unit.progress?.status === 'not_started' ? '#6c757d' : '#ffc107',
+                          color: 'white'
+                        }}>
+                          {unit.progress?.status === 'not_started' ? '未开始' :
+                           unit.progress?.status === 'reading' ? '阅读中' :
+                           unit.progress?.status === 'practicing' ? '练习中' :
+                           unit.progress?.status === 'summarizing' ? '总结中' : '已完成'}
+                        </span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '6px',
+                        backgroundColor: '#e9ecef',
+                        borderRadius: '3px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          width: `${unit.progress?.overallProgress || 0}%`,
+                          height: '100%',
+                          backgroundColor: '#28a745',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* 章节状态 */}
+                    <div style={{ display: 'flex', gap: '10px', fontSize: '12px' }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px',
+                        color: unit.progress?.sections?.reading?.completed ? '#28a745' : '#6c757d'
+                      }}>
+                        {unit.progress?.sections?.reading?.completed ? '✅' : '📖'} 
+                        阅读 ({unit.progress?.sections?.reading?.timeSpent}min)
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px',
+                        color: unit.progress?.sections?.practice?.completed ? '#28a745' : '#6c757d'
+                      }}>
+                        {unit.progress?.sections?.practice?.completed ? '✅' : '💻'} 
+                        练习 ({unit.progress?.sections?.practice?.timeSpent}min)
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px',
+                        color: unit.progress?.sections?.summary?.completed ? '#28a745' : '#6c757d'
+                      }}>
+                        {unit.progress?.sections?.summary?.completed ? '✅' : '📝'} 
+                        总结 ({unit.progress?.sections?.summary?.timeSpent}min)
+                      </div>
+                    </div>
+
+                    {/* 操作按钮 */}
+                    {unit.progress?.status !== 'completed' && (
+                      <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                        {unit.progress?.status === 'not_started' && (
+                          <button
+                            onClick={() => startLearning(unit.id)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            🚀 开始学习
+                          </button>
+                        )}
+                        
+                        {unit.progress?.status !== 'not_started' && !unit.progress?.sections?.reading?.completed && (
+                          <button
+                            onClick={() => completeSection(unit.id, 'reading', 30)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ✅ 完成阅读
+                          </button>
+                        )}
+                        
+                        {unit.progress?.sections?.reading?.completed && !unit.progress?.sections?.practice?.completed && (
+                          <button
+                            onClick={() => completeSection(unit.id, 'practice', 45)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#ffc107',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ✅ 完成练习
+                          </button>
+                        )}
+                        
+                        {unit.progress?.sections?.reading?.completed && unit.progress?.sections?.practice?.completed && !unit.progress?.sections?.summary?.completed && (
+                          <button
+                            onClick={() => completeSection(unit.id, 'summary', 15)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#6f42c1',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ✅ 完成总结
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* 快速操作面板 */}
+              <div style={{
+                padding: '15px',
+                backgroundColor: '#fff3cd',
+                borderRadius: '8px',
+                border: '1px solid #ffeaa7'
+              }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚡ 快速操作</h4>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => copyToClipboard(formatJSON(selectedNode ? getNodeUnits(selectedNode) : courseUnits))}
+                    style={{
+                      padding: '8px 15px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
                       cursor: 'pointer',
                       fontSize: '12px'
                     }}
                   >
-                    🗑️ 删除
+                    📋 复制数据
+                  </button>
+                  <button
+                    onClick={refreshData}
+                    style={{
+                      padding: '8px 15px',
+                      backgroundColor: '#17a2b8',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🔄 刷新数据
                   </button>
                 </div>
-              ))}
+              </div>
+            </>
+          )}
+
+          {/* 简化视图 */}
+          {!showCourseManagement && coreData?.courseUnits?.length > 0 && (
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              <p>总课程单元数: <strong>{coreData.courseUnits.length}</strong></p>
+              {courseStats && (
+                <p>完成率: <strong>{courseStats.completionRate}%</strong> 
+                   | 总学习时长: <strong>{Math.round(courseStats.totalTimeSpent / 60)}小时</strong></p>
+              )}
             </div>
-            
-            <details style={{ marginTop: '10px' }}>
-              <summary style={{ cursor: 'pointer', color: '#007bff' }}>
-                展开查看完整数据 ({coreData.courseUnits.length} 个单元)
-              </summary>
-              <pre style={{
-                backgroundColor: '#f8f9fa',
-                padding: '10px',
-                borderRadius: '4px',
-                fontSize: '12px',
-                overflow: 'auto',
-                maxHeight: '300px',
-                marginTop: '10px'
-              }}>
-                {formatJSON(coreData.courseUnits)}
-              </pre>
-            </details>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* AI动作记录 */}
         {coreData?.agentActions?.length > 0 && (
@@ -1428,7 +1867,7 @@ export const DataInspector: React.FC = () => {
         <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>💡 使用说明</h4>
         <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px', color: '#856404' }}>
           <li><strong>数据管理：</strong> 可以查看和删除学习目标、路径、课程单元</li>
-          <li><strong>级联删除：</strong> 删除学习目标会自动删除相关的路径和内容</li>
+          <li><strong>级联删除：</strong> 删除学习目标会自动删除相关的学习路径和课程内容</li>
           <li><strong>活动记录：</strong> 所有删除操作都会记录到活动历史中</li>
           <li><strong>数据导出：</strong> 点击"复制数据"按钮可以导出JSON格式的数据</li>
           <li><strong>实时更新：</strong> 点击"刷新数据"按钮可以获取最新的数据状态</li>

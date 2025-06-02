@@ -385,25 +385,115 @@ export const deleteLearningPath = (id: string): boolean => {
 }
 
 // 课程单元相关
-export const createCourseUnit = (unit: Omit<CourseUnit, 'id' | 'createdAt' | 'updatedAt'>): CourseUnit => {
+export const createCourseUnit = (unit: Omit<CourseUnit, 'id' | 'createdAt' | 'updatedAt' | 'progress'>): CourseUnit => {
   const coreData = getUserCoreData()
+  
+  // 初始化进度状态
+  const initialProgress = {
+    status: 'not_started' as const,
+    sections: {
+      reading: {
+        completed: false,
+        timeSpent: 0
+      },
+      practice: {
+        completed: false,
+        timeSpent: 0,
+        completedExercises: [],
+        scores: {}
+      },
+      summary: {
+        completed: false,
+        timeSpent: 0,
+        selfAssessmentCompleted: false
+      }
+    },
+    overallProgress: 0
+  }
   
   const newUnit: CourseUnit = {
     id: Date.now().toString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    progress: initialProgress,
     ...unit
   }
   
   coreData.courseUnits.push(newUnit)
   saveUserCoreData(coreData)
   
+  // 记录事件
+  addCoreEvent({
+    type: 'course_unit_created',
+    data: { unitId: newUnit.id, nodeId: newUnit.nodeId, title: newUnit.title }
+  })
+  
   return newUnit
+}
+
+// 确保课程单元有progress属性的辅助函数
+const ensureUnitProgress = (unit: CourseUnit): CourseUnit => {
+  if (!unit.progress) {
+    return {
+      ...unit,
+      progress: {
+        status: 'not_started' as const,
+        sections: {
+          reading: { completed: false, timeSpent: 0 },
+          practice: { completed: false, timeSpent: 0, completedExercises: [], scores: {} },
+          summary: { completed: false, timeSpent: 0, selfAssessmentCompleted: false }
+        },
+        overallProgress: 0
+      }
+    }
+  }
+  return unit
 }
 
 export const getCourseUnits = (): CourseUnit[] => {
   const coreData = getUserCoreData()
+  // 确保所有课程单元都有progress属性
+  return coreData.courseUnits.map(ensureUnitProgress)
+}
+
+// 根据节点ID获取课程单元
+export const getCourseUnitsByNode = (nodeId: string): CourseUnit[] => {
+  const coreData = getUserCoreData()
   return coreData.courseUnits
+    .filter(unit => unit.nodeId === nodeId)
+    .map(ensureUnitProgress)
+    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+}
+
+// 获取节点的学习统计
+export const getNodeLearningStats = (nodeId: string) => {
+  const units = getCourseUnitsByNode(nodeId)
+  if (units.length === 0) {
+    return {
+      totalUnits: 0,
+      completedUnits: 0,
+      progress: 0,
+      totalTime: 0,
+      estimatedTime: 0
+    }
+  }
+  
+  const completedUnits = units.filter(unit => unit.progress?.status === 'completed').length
+  const totalTime = units.reduce((sum, unit) => {
+    if (!unit.progress) return sum
+    return sum + (unit.progress.sections.reading.timeSpent || 0) + 
+           (unit.progress.sections.practice.timeSpent || 0) + 
+           (unit.progress.sections.summary.timeSpent || 0)
+  }, 0)
+  const estimatedTime = units.reduce((sum, unit) => sum + (unit.metadata.estimatedTime || 0), 0)
+  
+  return {
+    totalUnits: units.length,
+    completedUnits,
+    progress: Math.round((completedUnits / units.length) * 100),
+    totalTime,
+    estimatedTime
+  }
 }
 
 export const updateCourseUnit = (id: string, updates: Partial<CourseUnit>): CourseUnit | null => {
@@ -418,7 +508,171 @@ export const updateCourseUnit = (id: string, updates: Partial<CourseUnit>): Cour
   }
   
   saveUserCoreData(coreData)
+  
+  // 记录事件
+  addCoreEvent({
+    type: 'course_unit_updated',
+    data: { unitId: id, updates: Object.keys(updates) }
+  })
+  
   return coreData.courseUnits[index]
+}
+
+// 更新课程进度
+export const updateCourseProgress = (unitId: string, progressUpdates: Partial<CourseUnit['progress']>): CourseUnit | null => {
+  const coreData = getUserCoreData()
+  const index = coreData.courseUnits.findIndex(u => u.id === unitId)
+  if (index === -1) return null
+  
+  const unit = coreData.courseUnits[index]
+  // 确保单元有progress属性
+  const unitWithProgress = ensureUnitProgress(unit)
+  
+  const updatedProgress = {
+    ...unitWithProgress.progress,
+    ...progressUpdates,
+    lastActivity: new Date().toISOString()
+  }
+  
+  // 重新计算总体进度
+  updatedProgress.overallProgress = calculateUnitProgress(updatedProgress)
+  
+  // 更新状态
+  if (updatedProgress.overallProgress === 100 && updatedProgress.status !== 'completed') {
+    updatedProgress.status = 'completed'
+    updatedProgress.completedAt = new Date().toISOString()
+  }
+  
+  coreData.courseUnits[index] = {
+    ...unitWithProgress,
+    progress: updatedProgress,
+    updatedAt: new Date().toISOString()
+  }
+  
+  saveUserCoreData(coreData)
+  
+  // 记录事件
+  addCoreEvent({
+    type: 'course_progress_updated',
+    data: { 
+      unitId, 
+      progress: updatedProgress.overallProgress,
+      status: updatedProgress.status
+    }
+  })
+  
+  return coreData.courseUnits[index]
+}
+
+// 标记章节完成
+export const markSectionComplete = (
+  unitId: string, 
+  section: 'reading' | 'practice' | 'summary',
+  timeSpent: number = 0,
+  additionalData?: any
+): CourseUnit | null => {
+  const units = getCourseUnits()
+  const unit = units.find(u => u.id === unitId)
+  if (!unit) return null
+  
+  // 确保单元有progress属性
+  const unitWithProgress = ensureUnitProgress(unit)
+  
+  const sectionProgress = { ...unitWithProgress.progress.sections[section] }
+  sectionProgress.completed = true
+  sectionProgress.timeSpent += timeSpent
+  sectionProgress.completedAt = new Date().toISOString()
+  
+  // 处理特定章节的额外数据
+  if (section === 'practice' && additionalData?.exerciseId && additionalData?.score !== undefined) {
+    const practiceProgress = sectionProgress as typeof unitWithProgress.progress.sections.practice
+    practiceProgress.completedExercises.push(additionalData.exerciseId)
+    practiceProgress.scores[additionalData.exerciseId] = additionalData.score
+  }
+  
+  if (section === 'summary' && additionalData?.selfAssessmentCompleted) {
+    const summaryProgress = sectionProgress as typeof unitWithProgress.progress.sections.summary
+    summaryProgress.selfAssessmentCompleted = true
+  }
+  
+  return updateCourseProgress(unitId, {
+    sections: {
+      ...unitWithProgress.progress.sections,
+      [section]: sectionProgress
+    }
+  })
+}
+
+// 开始学习课程单元
+export const startCourseUnit = (unitId: string): CourseUnit | null => {
+  const units = getCourseUnits()
+  const unit = units.find(u => u.id === unitId)
+  if (!unit) return null
+  
+  // 确保单元有progress属性
+  const unitWithProgress = ensureUnitProgress(unit)
+  
+  if (unitWithProgress.progress.status !== 'not_started') {
+    return unitWithProgress
+  }
+  
+  return updateCourseProgress(unitId, {
+    status: 'reading',
+    startedAt: new Date().toISOString()
+  })
+}
+
+// 计算单元进度百分比
+const calculateUnitProgress = (progress: CourseUnit['progress']): number => {
+  let totalSections = 0
+  let completedSections = 0
+  
+  // 阅读部分
+  totalSections += 1
+  if (progress.sections.reading.completed) completedSections += 1
+  
+  // 练习部分
+  totalSections += 1
+  if (progress.sections.practice.completed) completedSections += 1
+  
+  // 总结部分  
+  totalSections += 1
+  if (progress.sections.summary.completed) completedSections += 1
+  
+  return Math.round((completedSections / totalSections) * 100)
+}
+
+// 获取课程学习统计
+export const getCourseStats = () => {
+  const units = getCourseUnits() // 现在已经确保所有单元都有progress属性
+  const totalUnits = units.length
+  
+  const completedUnits = units.filter(u => u.progress.status === 'completed').length
+  const inProgressUnits = units.filter(u => u.progress.status !== 'not_started' && u.progress.status !== 'completed').length
+  
+  const totalTimeSpent = units.reduce((sum, unit) => {
+    return sum + unit.progress.sections.reading.timeSpent + 
+           unit.progress.sections.practice.timeSpent + 
+           unit.progress.sections.summary.timeSpent
+  }, 0)
+  
+  const averageScore = units
+    .filter(unit => Object.keys(unit.progress.sections.practice.scores).length > 0)
+    .reduce((sum, unit) => {
+      const scores = Object.values(unit.progress.sections.practice.scores)
+      const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length
+      return sum + avgScore
+    }, 0) / Math.max(1, units.filter(u => Object.keys(u.progress.sections.practice.scores).length > 0).length)
+  
+  return {
+    totalUnits,
+    completedUnits,
+    inProgressUnits,
+    notStartedUnits: totalUnits - completedUnits - inProgressUnits,
+    totalTimeSpent: Math.round(totalTimeSpent),
+    averageScore: Math.round(averageScore || 0),
+    completionRate: totalUnits > 0 ? Math.round((completedUnits / totalUnits) * 100) : 0
+  }
 }
 
 export const deleteCourseUnit = (id: string): boolean => {
@@ -426,8 +680,16 @@ export const deleteCourseUnit = (id: string): boolean => {
   const index = coreData.courseUnits.findIndex(u => u.id === id)
   if (index === -1) return false
   
+  const unit = coreData.courseUnits[index]
   coreData.courseUnits.splice(index, 1)
   saveUserCoreData(coreData)
+  
+  // 记录事件
+  addCoreEvent({
+    type: 'course_unit_deleted',
+    data: { unitId: id, nodeId: unit.nodeId, title: unit.title }
+  })
+  
   return true
 }
 

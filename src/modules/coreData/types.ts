@@ -82,6 +82,51 @@ export interface CourseUnit {
   description: string
   type: 'theory' | 'example' | 'exercise' | 'project' | 'quiz'
   content: {
+    reading?: {
+      markdown: string
+      estimatedTime: number
+      keyPoints: string[]
+      resources?: {
+        type: 'article' | 'video' | 'documentation' | 'tutorial'
+        title: string
+        url?: string
+        description?: string
+      }[]
+    }
+    practice?: {
+      exercises: {
+        id: string
+        type: 'coding' | 'multiple-choice' | 'fill-blank' | 'essay' | 'practical'
+        title: string
+        description: string
+        content: {
+          question: string
+          options?: string[]
+          correctAnswer?: string | string[]
+          code?: {
+            language: string
+            starter: string
+            solution: string
+            tests?: string
+          }
+          hints?: string[]
+          explanation?: string
+        }
+        estimatedTime: number
+        difficulty: 1 | 2 | 3 | 4 | 5
+      }[]
+      totalEstimatedTime: number
+    }
+    summary?: {
+      markdown: string
+      keyTakeaways: string[]
+      nextSteps: string[]
+      relatedTopics: string[]
+      selfAssessment?: {
+        questions: string[]
+        reflectionPrompts: string[]
+      }
+    }
     markdown?: string
     code?: {
       language: string
@@ -106,11 +151,40 @@ export interface CourseUnit {
       evaluation: string
     }
   }
+  progress: {
+    status: 'not_started' | 'reading' | 'practicing' | 'summarizing' | 'completed'
+    sections: {
+      reading: {
+        completed: boolean
+        timeSpent: number
+        completedAt?: string
+      }
+      practice: {
+        completed: boolean
+        timeSpent: number
+        completedExercises: string[]
+        scores: { [exerciseId: string]: number }
+        completedAt?: string
+      }
+      summary: {
+        completed: boolean
+        timeSpent: number
+        completedAt?: string
+        selfAssessmentCompleted: boolean
+      }
+    }
+    overallProgress: number
+    startedAt?: string
+    completedAt?: string
+    lastActivity?: string
+  }
   metadata: {
     difficulty: number
     estimatedTime: number
     keywords: string[]
     learningObjectives: string[]
+    prerequisites: string[]
+    order: number
   }
   createdAt: string
   updatedAt: string

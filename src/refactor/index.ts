@@ -19,7 +19,6 @@
 // 重构系统统一入口文件
 
 // 导出页面组件
-export { default as RefactorDashboard } from './pages/Dashboard'
 export { default as GoalManagementPage } from './pages/GoalManagement'
 export { default as UIShowcasePage } from './pages/UIShowcase'
 export { default as AssessmentPage } from './pages/Assessment'

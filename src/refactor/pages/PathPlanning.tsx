@@ -46,12 +46,6 @@ interface PathGenerationForm {
   includeExercises: boolean
 }
 
-// Toast function
-const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
-  // Simple console log for now - in a real app this would use a toast library
-  console.log(`${type.toUpperCase()}: ${message}`)
-}
-
 /**
  * 重构版路径规划管理页面
  * 
@@ -212,16 +206,21 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
 
   // 激活路径
   const handleActivatePath = async (path: LearningPath) => {
+    console.log('🔥 激活路径操作开始:', path.id, path.title)
     setLoading(true)
     try {
       const result = await api.activatePath(path.id)
+      console.log('🔥 激活路径API结果:', result)
+      
       if (result.success) {
-        toast.success('路径已激活')
+        toast.success(`✅ 路径"${path.title}"已激活`)
         await refreshData()
       } else {
+        console.error('❌ 激活路径失败:', result.error)
         toast.error(result.error || '激活失败')
       }
     } catch (error) {
+      console.error('❌ 激活路径异常:', error)
       toast.error('激活失败')
     } finally {
       setLoading(false)
@@ -230,16 +229,21 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
 
   // 冻结路径
   const handleFreezePath = async (path: LearningPath) => {
+    console.log('❄️ 冻结路径操作开始:', path.id, path.title)
     setLoading(true)
     try {
       const result = await api.freezePath(path.id)
+      console.log('❄️ 冻结路径API结果:', result)
+      
       if (result.success) {
-        toast.success('路径已冻结')
+        toast.success(`✅ 路径"${path.title}"已冻结`)
         await refreshData()
       } else {
+        console.error('❌ 冻结路径失败:', result.error)
         toast.error(result.error || '冻结失败')
       }
     } catch (error) {
+      console.error('❌ 冻结路径异常:', error)
       toast.error('冻结失败')
     } finally {
       setLoading(false)
@@ -356,21 +360,9 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="secondary" 
-                onClick={() => onNavigate('dashboard')}
-                className="flex items-center gap-2"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                返回
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">🛤️ 路径规划管理</h1>
-                <p className="text-gray-600">管理您的学习路径，跟踪学习进度</p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">🛤️ 路径规划管理</h1>
+              <p className="text-gray-600">管理您的学习路径，跟踪学习进度</p>
             </div>
             <div className="flex items-center gap-4">
               <Button
@@ -632,7 +624,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
                       <div className="flex space-x-2">
                         {path.status === 'frozen' && (
                           <Button
-                            variant="success"
+                            variant="primary"
                             size="sm"
                             onClick={() => handleActivatePath(path)}
                           >

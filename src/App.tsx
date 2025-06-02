@@ -3,17 +3,27 @@ import LandingPage from './components/LandingPage'
 import ProfileManager from './components/ProfileManager'
 import Dashboard from './components/Dashboard'
 import Layout from './components/Layout'
-import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
-import { CodeRunnerView } from './modules/codeRunner'
 import { GlobalAIAssistant } from './components/AIAssistant'
-import LearningPathView from './components/LearningPathView'
-import DataInspector from './components/DataInspector'
-import RefactorDashboard from './components/RefactorDashboard'
 import { getCurrentProfileId } from './utils/profile'
-import { GoalSetting } from './components/GoalSetting'
 
-type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'learning-path-view' | 'data-inspector' | 'refactor-dashboard'
+// 重构系统组件导入
+import { 
+  AssessmentPage,
+  GoalManagementPage,
+  DataManagementPage
+} from './refactor'
+import { PathPlanningPage } from './refactor/pages/PathPlanning'
+import { CourseContentPage } from './refactor/pages/CourseContent'
+import { PathActivationDebugPage } from './refactor/pages/PathActivationDebug'
+
+// CodeRunner重构版本 (使用refactor目录下的)
+import { IntegratedCodeRunner } from './refactor/components/features/CodeRunner'
+
+type AppView = 'landing' | 'profile' | 'dashboard' | 'profile-settings' |
+  'refactor-assessment' | 'refactor-goal-management' | 'refactor-path-planning' | 
+  'refactor-course-content' | 'refactor-code-runner' | 'refactor-data-management' |
+  'refactor-path-activation-debug'
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
@@ -75,6 +85,12 @@ const App = () => {
     setCurrentView('landing')
   }
 
+  // 创建包装的导航函数，用于重构页面
+  const handleRefactorNavigate = (view: string) => {
+    // 这里可以添加类型检查，暂时忽略，因为重构页面的导航可能不需要路由切换
+    console.log('Refactor navigation:', view)
+  }
+
   return (
     <>
       {/* 主界面内容 */}
@@ -95,19 +111,6 @@ const App = () => {
           case 'dashboard':
             return <Dashboard onLogout={handleLogout} onNavigate={handleNavigate} onHome={handleGoHome} />
           
-          case 'ability-assess':
-            return (
-              <Layout 
-                title="能力评估" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <AbilityAssessView />
-              </Layout>
-            )
-          
           case 'profile-settings':
             return (
               <Layout 
@@ -120,98 +123,100 @@ const App = () => {
                 <ProfileSettingsView />
               </Layout>
             )
-          
-          case 'code-runner':
+
+          case 'refactor-assessment':
             return (
               <Layout 
-                title="代码运行器" 
+                title="🔍 能力评估" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <CodeRunnerView />
+                <AssessmentPage />
               </Layout>
             )
-          
-          case 'learning-path-view':
+
+          case 'refactor-goal-management':
             return (
               <Layout 
-                title="学习路径管理" 
+                title="🎯 目标管理" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <LearningPathView />
+                <GoalManagementPage />
               </Layout>
             )
-          
-          case 'data-inspector':
+
+          case 'refactor-path-planning':
             return (
               <Layout 
-                title="数据检查器" 
+                title="🛤️ 路径规划" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <DataInspector />
+                <PathPlanningPage onNavigate={handleRefactorNavigate} />
               </Layout>
             )
-          
-          case 'goal-setting':
+
+          case 'refactor-course-content':
             return (
               <Layout 
-                title="目标设定" 
+                title="📚 课程内容" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <GoalSetting />
+                <CourseContentPage onNavigate={handleRefactorNavigate} />
               </Layout>
             )
-          
-          case 'path-plan':
-          case 'course-content':
-            const titles = {
-              'path-plan': '路径规划',
-              'course-content': '课程内容'
-            }
-            
+
+          case 'refactor-code-runner':
             return (
               <Layout 
-                title={titles[currentView]} 
+                title="💻 代码运行" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                  <div className="text-center">
-                    <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                      {titles[currentView]}
-                    </h2>
-                    <p className="text-gray-600">该模块正在开发中...</p>
-                  </div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                  <IntegratedCodeRunner language="python" />
                 </div>
               </Layout>
             )
-          
-          case 'refactor-dashboard':
+
+          case 'refactor-data-management':
             return (
               <Layout 
-                title="Refactor Dashboard" 
+                title="🗂️ 数据管理" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <RefactorDashboard />
+                <DataManagementPage onNavigate={handleRefactorNavigate} />
               </Layout>
             )
-          
+
+          case 'refactor-path-activation-debug':
+            return (
+              <Layout 
+                title="🧪 路径激活调试" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <PathActivationDebugPage onNavigate={handleRefactorNavigate} />
+              </Layout>
+            )
+
           default:
             return <LandingPage 
               onGetStarted={handleGetStarted} 

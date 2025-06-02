@@ -89,6 +89,10 @@ import {
 
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 
+import { chatWithAgent, getInteractionHistory, clearInteractionHistory } from '../services/ai'
+import type { ChatContext, AgentChatResponse } from '../services/ai'
+import { learningStatusManager } from '../services/learning/statusManager'
+
 /**
  * API响应统一格式
  */
@@ -169,7 +173,7 @@ export class LearningAPI {
    */
   async getSystemStatus(): Promise<APIResponse<LearningSystemStatus>> {
     try {
-      const status = await learningSystemService.getSystemStatus()
+      const status = await learningStatusManager.getSystemStatus()
       return {
         success: true,
         data: status
@@ -192,7 +196,7 @@ export class LearningAPI {
     recommendations: string[]
   }>> {
     try {
-      const recommendations = await learningSystemService.getSmartLearningRecommendations()
+      const recommendations = await learningStatusManager.getSmartLearningRecommendations()
       return {
         success: true,
         data: recommendations
@@ -210,14 +214,12 @@ export class LearningAPI {
   /**
    * 与AI助手对话
    */
-  async chatWithAgent(userMessage: string, context?: any): Promise<APIResponse<{
-    response: string
-    toolsUsed: string[]
-    suggestions: string[]
-    systemStatus: LearningSystemStatus
-  }>> {
+  async chatWithAgent(userMessage: string, context?: ChatContext): Promise<APIResponse<AgentChatResponse>> {
     try {
-      const result = await learningSystemService.chatWithAgent(userMessage, context)
+      const result = await chatWithAgent(userMessage, context, async () => {
+        const statusResponse = await this.getSystemStatus()
+        return statusResponse.data!
+      })
       return {
         success: true,
         data: result
@@ -235,7 +237,7 @@ export class LearningAPI {
    */
   getInteractionHistory(): APIResponse<AgentInteraction[]> {
     try {
-      const history = learningSystemService.getInteractionHistory()
+      const history = getInteractionHistory()
       return {
         success: true,
         data: history
@@ -253,7 +255,7 @@ export class LearningAPI {
    */
   clearInteractionHistory(): APIResponse<boolean> {
     try {
-      learningSystemService.clearInteractionHistory()
+      clearInteractionHistory()
       return {
         success: true,
         data: true,

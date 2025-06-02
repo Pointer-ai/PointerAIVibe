@@ -17,14 +17,24 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Button } from '../components/ui/Button/Button'
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card/Card'
-import { Badge, StatusBadge } from '../components/ui/Badge/Badge'
-import { Alert, toast } from '../components/ui/Alert/Alert'
+import { LearningAPI } from '../../api/learningApi'
+import { 
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardContent,
+  Button,
+  Badge,
+  Alert,
+  ProgressBar
+} from '../components/ui'
+import { getCurrentProfile } from '../../utils/profile'
+// 使用any类型暂时解决类型问题
+type LearningPath = any
+import { StatusBadge } from '../components/ui/Badge/Badge'
 import { ConfirmModal, Modal } from '../components/ui/Modal/Modal'
 import { Loading } from '../components/ui/Loading/Loading'
-import { ProgressBar } from '../components/ui/ProgressBar/ProgressBar'
-import { learningApi } from '../../api'
+import { toast } from '../components/ui/Alert/Alert'
 
 interface DataManagementPageProps {
   onNavigate: (view: string) => void
@@ -63,11 +73,12 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
   // 刷新数据
   const refreshData = async () => {
+    setLoading(true)
     try {
-      setRefreshing(true)
+      const api = LearningAPI.getInstance()
       
       // 获取当前Profile
-      const profileResponse = learningApi.getCurrentProfile()
+      const profileResponse = api.getCurrentProfile()
       if (!profileResponse.success || !profileResponse.data) {
         toast.error('无法获取当前Profile')
         return
@@ -77,15 +88,15 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       setCurrentProfile(profile)
       
       // 获取学习数据
-      const dataResponse = learningApi.getProfileLearningData()
+      const dataResponse = api.getProfileLearningData()
       if (dataResponse.success) {
         setLearningData(dataResponse.data)
         
-        // ⭐新增：获取路径进度数据
-        if (dataResponse.data?.paths?.length > 0) {
+        // 获取路径进度信息
+        if (dataResponse.data.paths) {
           const progressData: Record<string, any> = {}
           for (const path of dataResponse.data.paths) {
-            const progressResponse = learningApi.getPathProgress(path.id)
+            const progressResponse = api.getPathProgress(path.id)
             if (progressResponse.success) {
               progressData[path.id] = progressResponse.data
             }
@@ -95,22 +106,21 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       }
       
       // 获取数据统计
-      const statsResponse = learningApi.getProfileDataStats()
+      const statsResponse = api.getProfileDataStats()
       if (statsResponse.success) {
         setDataStats(statsResponse.data)
       }
       
       // ⭐新增：获取课程内容统计
-      const courseStatsResponse = learningApi.getCourseContentStats()
+      const courseStatsResponse = api.getCourseContentStats()
       if (courseStatsResponse.success) {
         setCourseContentStats(courseStatsResponse.data)
       }
       
     } catch (error) {
-      console.error('Failed to refresh data:', error)
-      toast.error('数据刷新失败')
+      console.error('刷新数据失败:', error)
+      toast.error('刷新数据失败')
     } finally {
-      setRefreshing(false)
       setLoading(false)
     }
   }
@@ -122,25 +132,24 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
   // 复制数据到剪贴板
   const copyToClipboard = (data: any) => {
-    const text = JSON.stringify(data, null, 2)
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success('数据已复制到剪贴板')
-    }).catch(() => {
-      toast.error('复制失败')
-    })
+    const dataStr = JSON.stringify(data, null, 2)
+    navigator.clipboard.writeText(dataStr)
+    toast.success('数据已复制到剪贴板')
   }
 
   // 导出所有数据
   const handleExport = async () => {
     try {
-      const exportResponse = learningApi.exportLearningData()
+      const api = LearningAPI.getInstance()
+      const exportResponse = api.exportLearningData()
       if (exportResponse.success) {
         setExportData(exportResponse.data || null)
+        toast.success('数据导出成功')
       } else {
         toast.error(exportResponse.error || '导出失败')
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '导出失败')
+      toast.error('导出操作失败')
     }
   }
 
@@ -158,16 +167,16 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       switch (deleteConfirm.type) {
         case 'goal':
-          result = await learningApi.deleteLearningGoal(deleteConfirm.id, deleteConfirm.title)
+          result = await LearningAPI.getInstance().deleteLearningGoal(deleteConfirm.id, deleteConfirm.title)
           break
         case 'path':
-          result = await learningApi.deleteLearningPath(deleteConfirm.id, deleteConfirm.title)
+          result = await LearningAPI.getInstance().deleteLearningPath(deleteConfirm.id, deleteConfirm.title)
           break
         case 'unit':
-          result = await learningApi.deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
+          result = await LearningAPI.getInstance().deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
           break
         case 'content':
-          result = await learningApi.deleteCourseContent(deleteConfirm.id)
+          result = await LearningAPI.getInstance().deleteCourseContent(deleteConfirm.id)
           break
       }
 
@@ -221,7 +230,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       for (const path of learningData.paths) {
         try {
-          const result = await learningApi.deleteLearningPath(path.id, path.title)
+          const result = await LearningAPI.getInstance().deleteLearningPath(path.id, path.title)
           if (result.success) {
             successCount++
           } else {
@@ -245,6 +254,75 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
     }
   }
 
+  // ⭐新增：路径激活功能
+  const handleActivatePath = async (path: LearningPath) => {
+    console.log('🔥 [DataManagement] 激活路径操作开始:', path.id, path.title, path.status)
+    try {
+      const api = LearningAPI.getInstance()
+      console.log('🔥 [DataManagement] API实例获取成功，调用activatePath')
+      const result = await api.activatePath(path.id)
+      console.log('🔥 [DataManagement] 激活路径API结果:', result)
+      
+      if (result.success) {
+        toast.success(`✅ 路径"${path.title}"已激活`)
+        console.log('🔥 [DataManagement] 激活成功，开始刷新数据')
+        await refreshData() // 刷新数据
+      } else {
+        console.error('❌ [DataManagement] 激活路径失败:', result.error)
+        toast.error(result.error || '激活路径失败')
+      }
+    } catch (error) {
+      console.error('❌ [DataManagement] 激活路径异常:', error)
+      toast.error('激活路径失败')
+    }
+  }
+
+  // ⭐新增：路径冻结功能  
+  const handleFreezePath = async (path: LearningPath) => {
+    console.log('❄️ [DataManagement] 冻结路径操作开始:', path.id, path.title, path.status)
+    try {
+      const api = LearningAPI.getInstance()
+      console.log('❄️ [DataManagement] API实例获取成功，调用freezePath')
+      const result = await api.freezePath(path.id)
+      console.log('❄️ [DataManagement] 冻结路径API结果:', result)
+      
+      if (result.success) {
+        toast.success(`✅ 路径"${path.title}"已冻结`)
+        console.log('❄️ [DataManagement] 冻结成功，开始刷新数据')
+        await refreshData() // 刷新数据
+      } else {
+        console.error('❌ [DataManagement] 冻结路径失败:', result.error)
+        toast.error(result.error || '冻结路径失败')
+      }
+    } catch (error) {
+      console.error('❌ [DataManagement] 冻结路径异常:', error)
+      toast.error('冻结路径失败')
+    }
+  }
+
+  // ⭐新增：路径归档功能
+  const handleArchivePath = async (path: LearningPath) => {
+    console.log('📦 [DataManagement] 归档路径操作开始:', path.id, path.title, path.status)
+    try {
+      const api = LearningAPI.getInstance()
+      console.log('📦 [DataManagement] API实例获取成功，调用archivePath')
+      const result = await api.archivePath(path.id)
+      console.log('📦 [DataManagement] 归档路径API结果:', result)
+      
+      if (result.success) {
+        toast.success(`✅ 路径"${path.title}"已归档`)
+        console.log('📦 [DataManagement] 归档成功，开始刷新数据')
+        await refreshData() // 刷新数据
+      } else {
+        console.error('❌ [DataManagement] 归档路径失败:', result.error)
+        toast.error(result.error || '归档路径失败')
+      }
+    } catch (error) {
+      console.error('❌ [DataManagement] 归档路径异常:', error)
+      toast.error('归档路径失败')
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -259,21 +337,9 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="secondary" 
-                onClick={() => onNavigate('dashboard')}
-                className="flex items-center gap-2"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                返回
-              </Button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">🗂️ 数据管理</h1>
-                <p className="text-gray-600">管理和查看学习数据，支持删除和导出功能</p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">🗂️ 数据管理</h1>
+              <p className="text-gray-600">管理和查看学习数据，支持删除和导出功能</p>
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -682,6 +748,37 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                           </div>
                           
                           <div className="flex items-center gap-2">
+                            {/* ⭐新增：路径状态管理按钮 */}
+                            {path.status === 'frozen' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleActivatePath(path)}
+                                className="flex items-center gap-1"
+                              >
+                                ▶️ 激活
+                              </Button>
+                            )}
+                            {path.status === 'active' && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleFreezePath(path)}
+                                className="flex items-center gap-1"
+                              >
+                                ❄️ 冻结
+                              </Button>
+                            )}
+                            {(path.status === 'active' || path.status === 'frozen') && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleArchivePath(path)}
+                                className="flex items-center gap-1"
+                              >
+                                📦 归档
+                              </Button>
+                            )}
                             <Button
                               variant="secondary"
                               size="sm"
@@ -850,7 +947,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                       variant="secondary"
                       size="sm"
                       onClick={() => {
-                        const allContent = learningApi.getAllCourseContent()
+                        const allContent = LearningAPI.getInstance().getAllCourseContent()
                         if (allContent.success) {
                           copyToClipboard(allContent.data)
                         }
@@ -894,7 +991,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                 {/* 课程内容列表 */}
                 <div className="space-y-3">
                   {(() => {
-                    const allContent = learningApi.getAllCourseContent()
+                    const allContent = LearningAPI.getInstance().getAllCourseContent()
                     if (!allContent.success || !allContent.data) return null
                     
                     return allContent.data.slice(0, 5).map((content: any) => (
@@ -932,7 +1029,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                           onClick={async () => {
                             const confirmed = window.confirm(`确定要删除课程内容 "${content.title}" 吗？`)
                             if (confirmed) {
-                              const result = await learningApi.deleteCourseContent(content.id)
+                              const result = await LearningAPI.getInstance().deleteCourseContent(content.id)
                               if (result.success) {
                                 toast.success('课程内容已删除')
                                 await refreshData()
@@ -952,7 +1049,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
                 {/* 显示更多内容 */}
                 {(() => {
-                  const allContent = learningApi.getAllCourseContent()
+                  const allContent = LearningAPI.getInstance().getAllCourseContent()
                   if (!allContent.success || !allContent.data || allContent.data.length <= 5) return null
                   
                   return (
@@ -975,7 +1072,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
                   </summary>
                   <pre className="mt-3 p-4 bg-gray-100 rounded-lg text-xs overflow-auto max-h-64">
                     {(() => {
-                      const allContent = learningApi.getAllCourseContent()
+                      const allContent = LearningAPI.getInstance().getAllCourseContent()
                       return JSON.stringify(allContent.success ? allContent.data : [], null, 2)
                     })()}
                   </pre>

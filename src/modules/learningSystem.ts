@@ -599,7 +599,9 @@ export class LearningSystemService {
               difficulty: node.difficulty || 3,
               estimatedTime: node.estimatedMinutes || 60,
               keywords: node.skills || [],
-              learningObjectives: [`掌握${node.title}的核心概念`, `能够应用${node.title}解决实际问题`]
+              learningObjectives: [`掌握${node.title}的核心概念`, `能够应用${node.title}解决实际问题`],
+              prerequisites: node.prerequisites || [],
+              order: path.nodes.indexOf(node) + 1
             }
           }
           

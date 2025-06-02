@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { getCurrentProfile, getProfiles, setCurrentProfile, logout, verifyPassword, createProfile, deleteProfile, type Profile } from '../utils/profile'
 
 interface AppleProfileSwitcherProps {
@@ -360,8 +361,8 @@ const AppleProfileSwitcher: React.FC<AppleProfileSwitcherProps> = ({
       </div>
 
       {/* 密码输入模态框 */}
-      {showPasswordModal && selectedProfileForSwitch && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] animate-fade-in">
+      {showPasswordModal && selectedProfileForSwitch && createPortal(
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[99999] animate-fade-in" style={{ zIndex: 99999 }}>
           <div className="absolute inset-0 flex items-center justify-center min-h-screen p-4">
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-white/20 animate-zoom-in-95 mx-auto my-auto relative">
               <div className="text-center mb-8">
@@ -437,12 +438,13 @@ const AppleProfileSwitcher: React.FC<AppleProfileSwitcherProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 创建Profile模态框 */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] animate-fade-in">
+      {showCreateModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[99999] animate-fade-in" style={{ zIndex: 99999 }}>
           <div className="absolute inset-0 flex items-center justify-center min-h-screen p-4">
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 w-full max-w-md shadow-2xl border border-white/20 animate-zoom-in-95 mx-auto my-auto relative">
               <div className="text-center mb-8">
@@ -551,12 +553,13 @@ const AppleProfileSwitcher: React.FC<AppleProfileSwitcherProps> = ({
               </form>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* 删除Profile确认模态框 */}
-      {showDeleteModal && selectedProfileForDelete && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] animate-fade-in">
+      {showDeleteModal && selectedProfileForDelete && createPortal(
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[99999] animate-fade-in" style={{ zIndex: 99999 }}>
           <div className="absolute inset-0 flex items-center justify-center min-h-screen p-4">
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-white/20 animate-zoom-in-95 mx-auto my-auto relative">
               <div className="text-center mb-8">
@@ -652,7 +655,8 @@ const AppleProfileSwitcher: React.FC<AppleProfileSwitcherProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

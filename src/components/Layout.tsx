@@ -30,9 +30,9 @@ const Layout: React.FC<LayoutProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center">
@@ -40,43 +40,42 @@ const Layout: React.FC<LayoutProps> = ({
               {onHome ? (
                 <button
                   onClick={onHome}
-                  className="text-xl font-bold text-gray-900 hover:text-gray-700 transition-colors mr-4"
+                  className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 transition-all duration-300 mr-6"
                   title="返回首页"
                 >
                   Pointer.ai
                 </button>
               ) : (
-                <h1 className="text-xl font-bold text-gray-900 mr-4">Pointer.ai</h1>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mr-6">Pointer.ai</h1>
               )}
               
               {onBack && (
                 <button
                   onClick={onBack}
-                  className="flex items-center text-gray-600 hover:text-gray-900 mr-4 transition-colors"
+                  className="group flex items-center gap-2 px-4 py-2 bg-white/50 backdrop-blur-md border border-gray-200/50 rounded-full text-gray-600 hover:text-gray-900 hover:bg-white/70 hover:border-gray-300/50 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/25 hover:scale-105 mr-6"
                 >
-                  <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  返回控制台
+                  <span className="text-sm font-medium">返回控制台</span>
                 </button>
               )}
               
               {title && (
-                <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-8 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full"></div>
+                  <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+                </div>
               )}
             </div>
             
             <div className="flex items-center space-x-4">
               {profile && (
-                <div className="relative">
-                  {/* 创建一个渐变背景用于统一样式 */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
-                  <AppleProfileSwitcher
-                    onProfileSwitch={handleProfileSwitch}
-                    onLogout={handleLogout}
-                    className="relative"
-                  />
-                </div>
+                <AppleProfileSwitcher
+                  onProfileSwitch={handleProfileSwitch}
+                  onLogout={handleLogout}
+                  className=""
+                />
               )}
             </div>
           </div>
@@ -84,7 +83,7 @@ const Layout: React.FC<LayoutProps> = ({
       </header>
 
       {/* Main Content */}
-      <main>{children}</main>
+      <main className="relative">{children}</main>
     </div>
   )
 }

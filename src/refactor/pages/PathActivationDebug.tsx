@@ -21,7 +21,7 @@ import { Button } from '../components/ui/Button/Button'
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card/Card'
 import { Badge } from '../components/ui/Badge/Badge'
 import { toast } from '../components/ui/Alert/Alert'
-import { LearningAPI } from '../../api/learningApi'
+import { learningApiV2 } from '../../api/learningApi_v2'
 
 interface PathActivationDebugProps {
   onNavigate: (view: string) => void
@@ -36,13 +36,11 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
   const [loading, setLoading] = useState(false)
   const [apiStatus, setApiStatus] = useState<string>('未测试')
 
-  const api = LearningAPI.getInstance()
-
   // 刷新路径数据
   const refreshPaths = async () => {
     console.log('🔄 刷新路径数据...')
     try {
-      const response = api.getAllPaths()
+      const response = await learningApiV2.getAllPaths()
       console.log('📊 获取路径数据结果:', response)
       
       if (response.success) {
@@ -65,8 +63,8 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
     setLoading(true)
     
     try {
-      console.log('📡 调用 API.activatePath...')
-      const result = await api.activatePath(path.id)
+      console.log('📡 调用 API.updatePath (status: active)...')
+      const result = await learningApiV2.updatePath(path.id, { status: 'active' })
       console.log('📡 API响应:', result)
       
       if (result.success) {
@@ -91,8 +89,8 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
     setLoading(true)
     
     try {
-      console.log('📡 调用 API.freezePath...')
-      const result = await api.freezePath(path.id)
+      console.log('📡 调用 API.updatePath (status: frozen)...')
+      const result = await learningApiV2.updatePath(path.id, { status: 'frozen' })
       console.log('📡 API响应:', result)
       
       if (result.success) {
@@ -118,7 +116,7 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
     
     try {
       // 首先获取一个目标
-      const goalsResponse = api.getAllGoals()
+      const goalsResponse = await learningApiV2.getAllGoals()
       if (!goalsResponse.success || !goalsResponse.data?.length) {
         toast.error('没有可用的目标，请先创建一个目标')
         return
@@ -128,7 +126,7 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
       console.log('🎯 使用目标:', testGoal.title)
       
       // 使用generatePathForGoal方法创建路径，然后冻结它
-      const result = await api.generatePathForGoal(testGoal.id, {
+      const result = await learningApiV2.generatePathForGoal(testGoal.id, {
         learningStyle: 'visual',
         timePreference: 'moderate',
         difficultyProgression: 'gradual',
@@ -138,7 +136,7 @@ export const PathActivationDebugPage: React.FC<PathActivationDebugProps> = ({ on
       
       if (result.success && result.data) {
         // 生成后立即冻结，以便测试激活功能
-        const freezeResult = await api.freezePath(result.data.id)
+        const freezeResult = await learningApiV2.updatePath(result.data.id, { status: 'frozen' })
         if (freezeResult.success) {
           toast.success('✅ 测试路径创建并冻结成功')
         } else {

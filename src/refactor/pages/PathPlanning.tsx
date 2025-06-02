@@ -25,11 +25,8 @@ import { ConfirmModal, FormModal, Modal } from '../components/ui/Modal/Modal'
 import { Loading } from '../components/ui/Loading/Loading'
 import { ProgressBar } from '../components/ui/ProgressBar/ProgressBar'
 import { Input, Label, FormField } from '../components/ui/Input/Input'
-import { learningApi } from '../../api'
-import { LearningPath, LearningGoal } from '../../modules/coreData/types'
+import { learningApiV2, LearningPath, LearningGoal, PathProgressStats } from '../../api/learningApi_v2'
 import { PathGenerationConfig } from '../../modules/pathPlan/types'
-import { LearningAPI } from '../../api/learningApi'
-import { PathProgressStats } from '../../api/learningApi'
 
 interface PathPlanningPageProps {
   onNavigate: (view: string) => void
@@ -83,15 +80,13 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pathToDelete, setPathToDelete] = useState<LearningPath | null>(null)
 
-  const api = LearningAPI.getInstance()
-
   // 刷新数据
   const refreshData = async () => {
     try {
       setRefreshing(true)
       
       // 获取当前Profile
-      const profileResponse = learningApi.getCurrentProfile()
+      const profileResponse = learningApiV2.getCurrentProfile()
       if (!profileResponse.success || !profileResponse.data) {
         toast.error('无法获取当前Profile')
         return
@@ -99,23 +94,17 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
       setCurrentProfile(profileResponse.data)
       
       // 获取所有路径
-      const pathsResponse = learningApi.getAllPaths()
+      const pathsResponse = await learningApiV2.getAllPaths()
       if (pathsResponse.success) {
         setPaths(pathsResponse.data || [])
         
-        // 获取每个路径的进度
-        const progressData: PathProgressStats[] = []
-        for (const path of pathsResponse.data || []) {
-          const progressResponse = learningApi.getPathProgress(path.id)
-          if (progressResponse.success && progressResponse.data) {
-            progressData.push(progressResponse.data)
-          }
-        }
-        setPathProgress(progressData)
+        // 注意：v2版本暂时没有getPathProgress方法，先跳过进度获取
+        // TODO: 实现路径进度获取功能
+        setPathProgress([])
       }
       
       // 获取所有目标（用于生成路径）
-      const goalsResponse = learningApi.getAllGoals()
+      const goalsResponse = await learningApiV2.getAllGoals()
       if (goalsResponse.success) {
         setGoals(goalsResponse.data || [])
       }
@@ -178,7 +167,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
         includeExercises: generationForm.includeExercises
       }
 
-      const result = await api.generatePathForGoal(generationForm.goalId, config)
+      const result = await learningApiV2.generatePathForGoal(generationForm.goalId, config)
       
       if (result.success && result.data) {
         toast.success('学习路径生成成功')
@@ -209,7 +198,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
     console.log('🔥 激活路径操作开始:', path.id, path.title)
     setLoading(true)
     try {
-      const result = await api.activatePath(path.id)
+      const result = await learningApiV2.updatePath(path.id, { status: 'active' })
       console.log('🔥 激活路径API结果:', result)
       
       if (result.success) {
@@ -232,7 +221,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
     console.log('❄️ 冻结路径操作开始:', path.id, path.title)
     setLoading(true)
     try {
-      const result = await api.freezePath(path.id)
+      const result = await learningApiV2.updatePath(path.id, { status: 'frozen' })
       console.log('❄️ 冻结路径API结果:', result)
       
       if (result.success) {
@@ -254,7 +243,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
   const handleArchivePath = async (path: LearningPath) => {
     setLoading(true)
     try {
-      const result = await api.archivePath(path.id)
+      const result = await learningApiV2.updatePath(path.id, { status: 'archived' })
       if (result.success) {
         toast.success('路径已归档')
         await refreshData()
@@ -274,7 +263,7 @@ export const PathPlanningPage: React.FC<PathPlanningPageProps> = ({ onNavigate }
 
     setLoading(true)
     try {
-      const result = await api.deletePath(pathToDelete.id)
+      const result = await learningApiV2.deletePath(pathToDelete.id)
       if (result.success) {
         toast.success('路径已删除')
         setShowDeleteConfirm(false)

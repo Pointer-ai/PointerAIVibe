@@ -17,24 +17,23 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { LearningAPI } from '../../api/learningApi'
-import { 
-  Card, 
-  CardHeader, 
-  CardTitle, 
-  CardContent,
-  Button,
-  Badge,
-  Alert,
-  ProgressBar
-} from '../components/ui'
-import { getCurrentProfile } from '../../utils/profile'
-// 使用any类型暂时解决类型问题
-type LearningPath = any
-import { StatusBadge } from '../components/ui/Badge/Badge'
+import { Button } from '../components/ui/Button/Button'
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../components/ui/Card/Card'
+import { Badge, StatusBadge } from '../components/ui/Badge/Badge'
+import { Alert, toast } from '../components/ui/Alert/Alert'
 import { ConfirmModal, Modal } from '../components/ui/Modal/Modal'
 import { Loading } from '../components/ui/Loading/Loading'
-import { toast } from '../components/ui/Alert/Alert'
+import { ProgressBar } from '../components/ui/ProgressBar/ProgressBar'
+import { learningApiV2 } from '../../api/learningApi_v2'
+// 使用any类型暂时解决类型问题
+type LearningPath = any
+import { getCurrentProfile } from '../../utils/profile'
+import { LearningAPI } from '../../api/learningApi'
+import { 
+  Button as UiButton,
+  Alert as UiAlert,
+  ProgressBar as UiProgressBar
+} from '../components/ui'
 
 interface DataManagementPageProps {
   onNavigate: (view: string) => void
@@ -75,10 +74,8 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const refreshData = async () => {
     setLoading(true)
     try {
-      const api = LearningAPI.getInstance()
-      
       // 获取当前Profile
-      const profileResponse = api.getCurrentProfile()
+      const profileResponse = learningApiV2.getCurrentProfile()
       if (!profileResponse.success || !profileResponse.data) {
         toast.error('无法获取当前Profile')
         return
@@ -87,35 +84,57 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
       const profile = profileResponse.data
       setCurrentProfile(profile)
       
-      // 获取学习数据
-      const dataResponse = api.getProfileLearningData()
-      if (dataResponse.success) {
-        setLearningData(dataResponse.data)
-        
-        // 获取路径进度信息
-        if (dataResponse.data.paths) {
-          const progressData: Record<string, any> = {}
-          for (const path of dataResponse.data.paths) {
-            const progressResponse = api.getPathProgress(path.id)
-            if (progressResponse.success) {
-              progressData[path.id] = progressResponse.data
-            }
-          }
-          setPathProgress(progressData)
-        }
+      // 获取学习数据 - 使用v2 API分别获取
+      const goalsResponse = await learningApiV2.getAllGoals()
+      const pathsResponse = await learningApiV2.getAllPaths()
+      
+      const learningDataV2 = {
+        goals: goalsResponse.data || [],
+        paths: pathsResponse.data || [],
+        courseUnits: [], // v2暂时没有实现
+        agentActions: [], // v2暂时没有实现
+        currentAssessment: null // v2暂时没有实现
       }
       
-      // 获取数据统计
-      const statsResponse = api.getProfileDataStats()
-      if (statsResponse.success) {
-        setDataStats(statsResponse.data)
+      setLearningData(learningDataV2)
+      
+      // 路径进度信息暂时跳过（v2没有getPathProgress方法）
+      setPathProgress({})
+      
+      // 获取数据统计 - 构建基本统计
+      const dataStatsV2 = {
+        goals: goalsResponse.data?.length || 0,
+        paths: pathsResponse.data?.length || 0,
+        courseUnits: 0,
+        agentActions: 0,
+        hasAssessment: false,
+        goalsByStatus: {},
+        pathsByStatus: {}
       }
       
-      // ⭐新增：获取课程内容统计
-      const courseStatsResponse = api.getCourseContentStats()
-      if (courseStatsResponse.success) {
-        setCourseContentStats(courseStatsResponse.data)
+      // 计算状态分布
+      if (goalsResponse.data) {
+        goalsResponse.data.forEach((goal: any) => {
+          dataStatsV2.goalsByStatus[goal.status] = (dataStatsV2.goalsByStatus[goal.status] || 0) + 1
+        })
       }
+      
+      if (pathsResponse.data) {
+        pathsResponse.data.forEach((path: any) => {
+          dataStatsV2.pathsByStatus[path.status] = (dataStatsV2.pathsByStatus[path.status] || 0) + 1
+        })
+      }
+      
+      setDataStats(dataStatsV2)
+      
+      // 课程内容统计暂时设为空
+      setCourseContentStats({
+        total: 0,
+        byStatus: {},
+        byDifficulty: {},
+        totalEstimatedTime: 0,
+        averageProgress: 0
+      })
       
     } catch (error) {
       console.error('刷新数据失败:', error)
@@ -140,14 +159,21 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   // 导出所有数据
   const handleExport = async () => {
     try {
-      const api = LearningAPI.getInstance()
-      const exportResponse = api.exportLearningData()
-      if (exportResponse.success) {
-        setExportData(exportResponse.data || null)
-        toast.success('数据导出成功')
-      } else {
-        toast.error(exportResponse.error || '导出失败')
+      // v2版本暂时手动构建导出数据
+      const goalsResponse = await learningApiV2.getAllGoals()
+      const pathsResponse = await learningApiV2.getAllPaths()
+      
+      const exportDataV2 = {
+        goals: goalsResponse.data || [],
+        paths: pathsResponse.data || [],
+        courseUnits: [],
+        agentActions: [],
+        exportDate: new Date().toISOString(),
+        version: '2.0'
       }
+      
+      setExportData(JSON.stringify(exportDataV2, null, 2))
+      toast.success('数据导出成功')
     } catch (error) {
       toast.error('导出操作失败')
     }
@@ -167,16 +193,18 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       switch (deleteConfirm.type) {
         case 'goal':
-          result = await LearningAPI.getInstance().deleteLearningGoal(deleteConfirm.id, deleteConfirm.title)
+          result = await learningApiV2.deleteGoal(deleteConfirm.id)
           break
         case 'path':
-          result = await LearningAPI.getInstance().deleteLearningPath(deleteConfirm.id, deleteConfirm.title)
+          result = await learningApiV2.deletePath(deleteConfirm.id)
           break
         case 'unit':
-          result = await LearningAPI.getInstance().deleteCourseUnit(deleteConfirm.id, deleteConfirm.title)
+          // v2暂时不支持，返回失败
+          result = { success: false, error: 'v2版本暂不支持删除课程单元' }
           break
         case 'content':
-          result = await LearningAPI.getInstance().deleteCourseContent(deleteConfirm.id)
+          // v2暂时不支持，返回失败
+          result = { success: false, error: 'v2版本暂不支持删除课程内容' }
           break
       }
 
@@ -230,7 +258,7 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
 
       for (const path of learningData.paths) {
         try {
-          const result = await LearningAPI.getInstance().deleteLearningPath(path.id, path.title)
+          const result = await learningApiV2.deletePath(path.id)
           if (result.success) {
             successCount++
           } else {
@@ -258,9 +286,8 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const handleActivatePath = async (path: LearningPath) => {
     console.log('🔥 [DataManagement] 激活路径操作开始:', path.id, path.title, path.status)
     try {
-      const api = LearningAPI.getInstance()
-      console.log('🔥 [DataManagement] API实例获取成功，调用activatePath')
-      const result = await api.activatePath(path.id)
+      console.log('🔥 [DataManagement] 调用learningApiV2.updatePath')
+      const result = await learningApiV2.updatePath(path.id, { status: 'active' })
       console.log('🔥 [DataManagement] 激活路径API结果:', result)
       
       if (result.success) {
@@ -281,9 +308,8 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const handleFreezePath = async (path: LearningPath) => {
     console.log('❄️ [DataManagement] 冻结路径操作开始:', path.id, path.title, path.status)
     try {
-      const api = LearningAPI.getInstance()
-      console.log('❄️ [DataManagement] API实例获取成功，调用freezePath')
-      const result = await api.freezePath(path.id)
+      console.log('❄️ [DataManagement] 调用learningApiV2.updatePath')
+      const result = await learningApiV2.updatePath(path.id, { status: 'frozen' })
       console.log('❄️ [DataManagement] 冻结路径API结果:', result)
       
       if (result.success) {
@@ -304,9 +330,8 @@ export const DataManagementPage: React.FC<DataManagementPageProps> = ({ onNaviga
   const handleArchivePath = async (path: LearningPath) => {
     console.log('📦 [DataManagement] 归档路径操作开始:', path.id, path.title, path.status)
     try {
-      const api = LearningAPI.getInstance()
-      console.log('📦 [DataManagement] API实例获取成功，调用archivePath')
-      const result = await api.archivePath(path.id)
+      console.log('📦 [DataManagement] 调用learningApiV2.updatePath')
+      const result = await learningApiV2.updatePath(path.id, { status: 'archived' })
       console.log('📦 [DataManagement] 归档路径API结果:', result)
       
       if (result.success) {

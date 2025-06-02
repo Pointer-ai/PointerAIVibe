@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  learningApi,
   simpleApi, 
   isApiSuccess, 
   handleApiError, 
   type LearningGoal,
   type LearningPath 
 } from '../api'
+import { learningApiV2 } from '../api/learningApi_v2'
 
 /**
- * API层功能测试仪表板
+ * API层功能测试仪表板 (v2)
  * 
- * 展示所有修复后的API功能，验证重构成果
+ * 展示所有重构后的API v2功能，验证新架构成果
  */
 export const APITestDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('system')
@@ -28,12 +28,12 @@ export const APITestDashboard: React.FC = () => {
   const testSystemStatus = async () => {
     setLoading(true)
     try {
-      const result = await learningApi.getSystemStatus()
-      if (isApiSuccess(result)) {
+      const result = await learningApiV2.getSystemStatus()
+      if (result.success) {
         setResults(prev => ({ ...prev, systemStatus: result.data }))
-        showMessage('✅ 系统状态获取成功')
+        showMessage('✅ 系统状态获取成功 (v2)')
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${result.error}`, true)
       }
     } catch (error) {
       showMessage('❌ 系统状态测试失败', true)
@@ -47,27 +47,27 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试获取所有目标
-      const goalsResult = learningApi.getAllGoals()
+      const goalsResult = await learningApiV2.getAllGoals()
       
-      // 测试激活状态统计
-      const statsResult = learningApi.getActivationStats()
+      // 测试激活状态检查
+      const canActivateResult = await learningApiV2.canActivateMoreGoals()
       
-      // 测试目标类别
-      const categoriesResult = learningApi.getGoalCategories()
+      // 测试目标统计
+      const statsResult = await learningApiV2.getGoalStats()
 
-      if (isApiSuccess(goalsResult) && isApiSuccess(statsResult) && isApiSuccess(categoriesResult)) {
+      if (goalsResult.success && canActivateResult.success && statsResult.success) {
         setResults(prev => ({
           ...prev,
           goals: goalsResult.data,
-          goalStats: statsResult.data,
-          goalCategories: categoriesResult.data
+          canActivateGoals: canActivateResult.data,
+          goalStats: statsResult.data
         }))
-        showMessage(`✅ 目标API测试完成 - ${goalsResult.data.length}个目标`)
+        showMessage(`✅ 目标API v2测试完成 - ${goalsResult.data?.length || 0}个目标`)
       } else {
-        showMessage('❌ 目标API测试失败', true)
+        showMessage('❌ 目标API v2测试失败', true)
       }
     } catch (error) {
-      showMessage('❌ 目标API测试失败', true)
+      showMessage('❌ 目标API v2测试失败', true)
     } finally {
       setLoading(false)
     }
@@ -78,27 +78,19 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试获取所有路径
-      const pathsResult = learningApi.getAllPaths()
-      
-      // 测试路径进度统计
-      const progressResult = learningApi.getAllPathsProgress()
-      
-      // 测试路径建议
-      const recommendationsResult = learningApi.getPathRecommendations()
+      const pathsResult = await learningApiV2.getAllPaths()
 
-      if (isApiSuccess(pathsResult) && isApiSuccess(progressResult) && isApiSuccess(recommendationsResult)) {
+      if (pathsResult.success) {
         setResults(prev => ({
           ...prev,
-          paths: pathsResult.data,
-          pathProgress: progressResult.data,
-          pathRecommendations: recommendationsResult.data
+          paths: pathsResult.data
         }))
-        showMessage(`✅ 路径API测试完成 - ${pathsResult.data.length}个路径`)
+        showMessage(`✅ 路径API v2测试完成 - ${pathsResult.data?.length || 0}个路径`)
       } else {
-        showMessage('❌ 路径API测试失败', true)
+        showMessage('❌ 路径API v2测试失败', true)
       }
     } catch (error) {
-      showMessage('❌ 路径API测试失败', true)
+      showMessage('❌ 路径API v2测试失败', true)
     } finally {
       setLoading(false)
     }
@@ -109,23 +101,23 @@ export const APITestDashboard: React.FC = () => {
     setLoading(true)
     try {
       // 测试能力概要
-      const summaryResult = learningApi.getAbilitySummary()
+      const summaryResult = await learningApiV2.getAbilitySummary()
       
       // 测试智能推荐
-      const recommendationsResult = await learningApi.getSmartRecommendations()
+      const recommendationsResult = await learningApiV2.getSmartRecommendations()
 
-      if (isApiSuccess(summaryResult) && isApiSuccess(recommendationsResult)) {
+      if (summaryResult.success && recommendationsResult.success) {
         setResults(prev => ({
           ...prev,
           abilitySummary: summaryResult.data,
           smartRecommendations: recommendationsResult.data
         }))
-        showMessage('✅ 评估API测试完成')
+        showMessage('✅ 评估API v2测试完成')
       } else {
-        showMessage('❌ 评估API测试失败', true)
+        showMessage('❌ 评估API v2测试失败', true)
       }
     } catch (error) {
-      showMessage('❌ 评估API测试失败', true)
+      showMessage('❌ 评估API v2测试失败', true)
     } finally {
       setLoading(false)
     }
@@ -162,15 +154,15 @@ export const APITestDashboard: React.FC = () => {
   const testAIChat = async () => {
     setLoading(true)
     try {
-      const result = await learningApi.chatWithAgent('请显示我的学习进度概览')
-      if (isApiSuccess(result)) {
+      const result = await learningApiV2.chatWithAgent('请显示我的学习进度概览')
+      if (result.success) {
         setResults(prev => ({ ...prev, aiChat: result.data }))
-        showMessage('✅ AI对话测试成功')
+        showMessage('✅ AI对话v2测试成功')
       } else {
-        showMessage(`❌ ${handleApiError(result)}`, true)
+        showMessage(`❌ ${result.error}`, true)
       }
     } catch (error) {
-      showMessage('❌ AI对话测试失败', true)
+      showMessage('❌ AI对话v2测试失败', true)
     } finally {
       setLoading(false)
     }
@@ -238,7 +230,7 @@ export const APITestDashboard: React.FC = () => {
         </button>
         
         <div className="text-sm text-gray-500">
-          已完成修复: learningApi, simpleApi
+          已完成修复: learningApiV2, simpleApi
         </div>
       </div>
 

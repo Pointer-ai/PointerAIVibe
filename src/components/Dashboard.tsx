@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { getCurrentProfile } from '../utils/profile'
 import { getCurrentAssessment } from '../modules/abilityAssess'
-import { LearningAPI } from '../api/learningApi'
+import { learningApiV2 } from '../api/learningApi_v2'
 import AppleProfileSwitcher from './AppleProfileSwitcher'
 
 interface DashboardProps {
@@ -20,64 +20,88 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
   useEffect(() => {
     const loadSystemStatus = async () => {
       try {
-        const api = LearningAPI.getInstance()
+        // 使用learningApiV2获取系统状态
+        const statusResult = await learningApiV2.getSystemStatus()
+        console.log('🎯 Dashboard API v2 调试信息:')
+        console.log('- 系统状态:', statusResult)
         
-        // 直接从各个API获取数据
-        const goalsResult = api.getAllGoals()
-        const pathsResult = api.getAllPaths()
-        const activationStatsResult = api.getActivationStats()
-        const dataStatsResult = api.getProfileDataStats()
-        
-        // 添加调试信息
-        console.log('🎯 Dashboard API 调试信息:')
-        console.log('- 目标数据:', goalsResult)
-        console.log('- 路径数据:', pathsResult) 
-        console.log('- 激活统计:', activationStatsResult)
-        console.log('- 数据统计:', dataStatsResult)
-        
-        // 构建系统状态
-        const goals = goalsResult.success ? goalsResult.data : []
-        const paths = pathsResult.success ? pathsResult.data : []
-        const activationStats = activationStatsResult.success ? activationStatsResult.data : null
-        const dataStats = dataStatsResult.success ? dataStatsResult.data : null
-        
-        // 计算总进度
-        const pathsProgressResult = api.getAllPathsProgress()
-        const pathsProgress = pathsProgressResult.success ? pathsProgressResult.data : []
-        const averageProgress = pathsProgress && pathsProgress.length > 0 
-          ? pathsProgress.reduce((sum, p) => sum + p.progressPercentage, 0) / pathsProgress.length 
-          : 0
-        
-        // 详细的状态计算日志
-        const activeGoals = activationStats?.active || 0
-        const activePaths = paths?.filter(p => p.status === 'active').length || 0
-        
-        console.log('📊 计算结果:')
-        console.log(`- 激活目标: ${activeGoals}`)
-        console.log(`- 激活路径: ${activePaths}`)
-        console.log(`- 总目标: ${goals?.length || 0}`)
-        console.log(`- 总路径: ${paths?.length || 0}`)
-        
-        const status = {
-          goals: {
-            total: goals?.length || 0,
-            active: activeGoals,
-            completed: goals?.filter(g => g.status === 'completed').length || 0
-          },
-          paths: {
-            total: paths?.length || 0,
-            active: activePaths
-          },
-          courses: {
-            total: dataStats?.courseUnits || 0
-          },
-          progressOverall: averageProgress || 0
+        if (statusResult.success && statusResult.data) {
+          const status = statusResult.data
+          
+          // 构建Dashboard需要的状态格式
+          const dashboardStatus = {
+            goals: {
+              total: 0, // 需要从API获取
+              active: status.progress.activeGoals,
+              completed: 0 // 需要从API获取
+            },
+            paths: {
+              total: 0, // 需要从API获取
+              active: status.progress.activePaths
+            },
+            courses: {
+              total: 0 // 需要从API获取
+            },
+            progressOverall: status.progress.overallProgress || 0
+          }
+          
+          // 获取详细数据来补充统计信息
+          const goalsResult = await learningApiV2.getAllGoals()
+          const pathsResult = await learningApiV2.getAllPaths()
+          
+          if (goalsResult.success && goalsResult.data) {
+            dashboardStatus.goals.total = goalsResult.data.length
+            dashboardStatus.goals.completed = goalsResult.data.filter((g: any) => g.status === 'completed').length
+          }
+          
+          if (pathsResult.success && pathsResult.data) {
+            dashboardStatus.paths.total = pathsResult.data.length
+          }
+          
+          console.log('🔧 Dashboard状态对象:', dashboardStatus)
+          setSystemStatus(dashboardStatus)
+        } else {
+          console.error('❌ 获取系统状态失败:', statusResult.error)
+          
+          // 降级方案：直接使用API方法
+          const goalsResult = await learningApiV2.getAllGoals()
+          const pathsResult = await learningApiV2.getAllPaths()
+          
+          console.log('🔄 降级方案结果:')
+          console.log('- 目标数据:', goalsResult)
+          console.log('- 路径数据:', pathsResult)
+          
+          const goals = goalsResult.success ? goalsResult.data : []
+          const paths = pathsResult.data
+          
+          const fallbackStatus = {
+            goals: {
+              total: goals?.length || 0,
+              active: goals?.filter((g: any) => g.status === 'active').length || 0,
+              completed: goals?.filter((g: any) => g.status === 'completed').length || 0
+            },
+            paths: {
+              total: paths?.length || 0,
+              active: paths?.filter((p: any) => p.status === 'active').length || 0
+            },
+            courses: {
+              total: 0  // 待实现
+            },
+            progressOverall: 0
+          }
+          
+          console.log('🔧 降级状态对象:', fallbackStatus)
+          setSystemStatus(fallbackStatus)
         }
-        
-        console.log('🔧 最终状态对象:', status)
-        setSystemStatus(status)
       } catch (error) {
         console.error('❌ 加载系统状态失败:', error)
+        // 设置默认状态
+        setSystemStatus({
+          goals: { total: 0, active: 0, completed: 0 },
+          paths: { total: 0, active: 0 },
+          courses: { total: 0 },
+          progressOverall: 0
+        })
       } finally {
         setLoading(false)
       }

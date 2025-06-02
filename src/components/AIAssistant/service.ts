@@ -4,6 +4,121 @@ import { getAPIConfig } from '../../modules/profileSettings/service'
 import { AssistantConfig, ChatSession, LearningProgress, ChatMessage } from './types'
 import { log, error } from '../../utils/logger'
 import { getProfileData, setProfileData } from '../../utils/profile'
+import { addActivityRecord } from '../../modules/profileSettings/service'
+
+/**
+ * 获取用户完整的学习上下文
+ */
+const getUserCompleteContext = async (): Promise<string> => {
+  try {
+    // 获取核心数据模块
+    const { getLearningGoals, getLearningPaths, getCourseUnits, getAbilityProfile } = await import('../../modules/coreData')
+    const { getCurrentProfile } = await import('../../utils/profile')
+    const { getCurrentAssessment } = await import('../../modules/abilityAssess/service')
+    
+    // 获取各种数据
+    const goals = getLearningGoals()
+    const paths = getLearningPaths()
+    const courseUnits = getCourseUnits()
+    const abilityProfile = getAbilityProfile()
+    const currentProfile = getCurrentProfile()
+    const currentAssessment = getCurrentAssessment() // 获取详细评估数据
+    
+    // 从评估数据中提取优势和弱势
+    let strengthsInfo = '未分析'
+    let weaknessesInfo = '未分析'
+    
+    if (currentAssessment?.report) {
+      strengthsInfo = currentAssessment.report.strengths?.join(', ') || '未分析'
+      weaknessesInfo = currentAssessment.report.improvements?.join(', ') || '未分析'
+    }
+    
+    // 组装上下文信息
+    const context = `
+🧑‍💼 用户档案信息:
+- 档案名称: ${currentProfile?.name || '未设置'}
+- 是否完成能力评估: ${abilityProfile ? '是' : '否'}
+${abilityProfile ? `- 总体能力评分: ${abilityProfile.overallScore}/100
+- 优势领域: ${strengthsInfo}
+- 待改进领域: ${weaknessesInfo}` : ''}
+
+📋 学习目标现状:
+- 总目标数: ${goals.length}个
+- 激活目标: ${goals.filter(g => g.status === 'active').length}个
+- 进行中目标: ${goals.filter(g => g.status === 'active').map(g => `"${g.title}" (${g.category}, ${g.targetLevel})`).join(', ') || '无'}
+- 暂停目标: ${goals.filter(g => g.status === 'paused').length}个
+- 已完成目标: ${goals.filter(g => g.status === 'completed').length}个
+
+🛤️ 学习路径现状:
+- 总路径数: ${paths.length}个  
+- 激活路径: ${paths.filter(p => p.status === 'active').length}个
+- 当前学习路径: ${paths.filter(p => p.status === 'active').map(p => `"${p.title}" (${p.nodes?.length || 0}个节点)`).join(', ') || '无'}
+
+📚 课程内容现状:
+- 总课程单元: ${courseUnits.length}个
+- 课程类型分布: ${getContentTypeDistribution(courseUnits)}
+- 最近创建: ${courseUnits.length > 0 ? courseUnits[courseUnits.length - 1].title : '无'}
+
+💡 学习建议:
+${generateContextualSuggestions(goals, paths, courseUnits, abilityProfile)}
+`.trim()
+    
+    return context
+  } catch (error) {
+    log('[Context] Failed to get user context:', error)
+    return '⚠️ 无法获取用户上下文数据'
+  }
+}
+
+/**
+ * 获取课程内容类型分布
+ */
+const getContentTypeDistribution = (courseUnits: any[]): string => {
+  if (courseUnits.length === 0) return '无'
+  
+  const distribution: Record<string, number> = {}
+  courseUnits.forEach(unit => {
+    const type = unit.type || '未分类'
+    distribution[type] = (distribution[type] || 0) + 1
+  })
+  
+  return Object.entries(distribution)
+    .map(([type, count]) => `${type}(${count})`)
+    .join(', ')
+}
+
+/**
+ * 生成基于当前状态的建议
+ */
+const generateContextualSuggestions = (goals: any[], paths: any[], courseUnits: any[], abilityProfile: any): string => {
+  const suggestions: string[] = []
+  
+  // 基于目标状态的建议
+  if (goals.length === 0) {
+    suggestions.push('建议先创建学习目标')
+  } else if (goals.filter(g => g.status === 'active').length === 0) {
+    suggestions.push('建议激活一些学习目标')
+  } else if (goals.filter(g => g.status === 'active').length > 3) {
+    suggestions.push('建议控制激活目标数量在3个以内')
+  }
+  
+  // 基于路径状态的建议
+  if (paths.length === 0 && goals.length > 0) {
+    suggestions.push('建议为目标生成学习路径')
+  }
+  
+  // 基于能力评估的建议
+  if (!abilityProfile) {
+    suggestions.push('建议完成能力评估以获得个性化指导')
+  }
+  
+  // 基于课程内容的建议
+  if (courseUnits.length === 0 && paths.length > 0) {
+    suggestions.push('建议为学习路径创建具体的课程内容')
+  }
+  
+  return suggestions.length > 0 ? suggestions.join('；') : '学习状态良好，继续保持'
+}
 
 /**
  * 获取学习进度数据
@@ -866,6 +981,9 @@ export const getAIResponseWithTools = async (
   
   log('[AIAssistant] Starting function calling API request with tools:', tools?.length || 0)
   
+  // 🆕 获取完整的用户上下文数据
+  const userContext = await getUserCompleteContext()
+  
   try {
     let apiUrl = ''
     let headers: Record<string, string> = {
@@ -875,6 +993,8 @@ export const getAIResponseWithTools = async (
     
     const systemPrompt = `你是一个专业的AI学习助手，拥有多种工具来帮助用户管理和分析学习数据。
 
+🔥 CRITICAL: 你必须根据用户问题使用相应的工具，不能仅凭已有知识回答。即使问题看似简单，也要通过工具调用获取最新的用户数据。
+
 你的核心职责：
 • 🔍 根据用户问题智能选择合适的工具
 • 📊 分析和查询用户的学习数据
@@ -882,17 +1002,28 @@ export const getAIResponseWithTools = async (
 • 🛠️ 执行学习管理相关的操作
 • 📈 帮助用户完善和修正能力档案
 
-工具使用原则：
-1. 当用户询问"我的目标"、"学习目标"时，使用 get_learning_goals
-2. 当用户询问"我的路径"、"学习路径"时，使用 get_learning_paths  
-3. 当用户询问"我的课程"、"学习内容"时，使用 get_course_units
-4. 当用户询问"我的进度"、"学习统计"时，使用 get_learning_summary
-5. 当用户询问"我的状态"、"学习概况"时，使用 get_learning_context
-6. 当用户要求"分析能力"、"评估技能"时，使用 analyze_user_ability
-7. 当用户要求"创建目标"、"设定目标"时，使用 create_learning_goal
-8. 当用户要求"生成路径"、"制定计划"时，使用 create_learning_path 或 generate_path_nodes
-9. 当用户提出学习困难时，使用 handle_learning_difficulty
-10. 当用户需要建议时，使用 suggest_next_action
+🎯 MANDATORY工具使用原则（必须遵循）:
+1. 当用户询问"我的目标"、"学习目标"时，必须使用 get_learning_goals
+2. 当用户询问"我的路径"、"学习路径"时，必须使用 get_learning_paths  
+3. 当用户询问"我的课程"、"学习内容"时，必须使用 get_course_units
+4. 当用户询问"我的进度"、"学习统计"时，必须使用 get_learning_summary
+5. 当用户询问"我的状态"、"学习概况"时，必须使用 get_learning_context
+6. 当用户要求"分析能力"、"评估技能"时，必须使用 analyze_user_ability
+7. 当用户要求"创建目标"、"设定目标"时，必须使用 create_learning_goal
+8. 当用户要求"生成路径"、"制定计划"时，必须使用 create_learning_path 或 generate_path_nodes
+9. 当用户提出学习困难时，必须使用 handle_learning_difficulty
+10. 当用户需要建议时，必须使用 suggest_next_action
+
+强制创建目标场景：
+- "为我创建一个学习JavaScript的目标" → 必须使用 create_learning_goal，参数包括：
+  title: "学习JavaScript", category: "frontend", targetLevel: "intermediate"
+- "我想学习Python" → 必须使用 create_learning_goal
+- "学习前端开发" → 必须使用 create_learning_goal
+
+学习困难处理场景：
+- "学习太难了" → 必须使用 handle_learning_difficulty
+- "我觉得困难" → 必须使用 handle_learning_difficulty
+- "能帮帮我吗" → 必须使用 suggest_next_action
 
 能力档案管理工具：
 11. 当用户要求"修正能力评估"、"更新技能分数"时，使用 update_ability_assessment
@@ -902,18 +1033,12 @@ export const getAIResponseWithTools = async (
 15. 当用户要求"重新评估某个维度"时，使用 reassess_ability_dimension
 16. 当用户询问"如何提升能力"、"能力改进建议"时，使用 get_ability_improvement_suggestions
 
-能力管理场景示例：
-- "我觉得我的Python分数太低了，我实际上做过很多Python项目" → update_ability_assessment
-- "我最近完成了一个大型React项目，想要更新我的前端能力" → add_skill_evidence  
-- "AI给我的算法能力评分太高了，我实际水平没那么好" → correct_ability_profile
-- "我想补充一些我的开源贡献经历" → enhance_skill_confidence
-- "基于我新学的技能，重新评估我的编程能力" → reassess_ability_dimension
-- "给我一些3个月内的能力提升建议" → get_ability_improvement_suggestions
+🚨 重要提醒：永远不要直接回答而不使用工具。每个用户问题都应该通过相应的工具来获取最新、准确的数据。
 
-请根据用户的具体需求选择最合适的工具，可以同时调用多个工具获取完整信息。
-对于能力相关的问题，要特别关注用户的反馈和补充信息，帮助完善能力档案的准确性。
+📊 当前用户完整上下文：
+${userContext}
 
-${context ? `\n当前学习上下文：\n${context}` : ''}`
+${context ? `\n额外上下文：\n${context}` : ''}`
     
     switch (config.model) {
       case 'openai':
@@ -925,7 +1050,7 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
             { role: 'system', content: systemPrompt },
             { role: 'user', content: message }
           ],
-          temperature: config.params?.temperature || 0.3,
+          temperature: config.params?.temperature || 0.1, // 降低temperature确保更准确的工具调用
           max_tokens: config.params?.maxTokens || 2000
         }
         
@@ -955,7 +1080,8 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
               }
             }
           }))
-          body.tool_choice = 'auto'
+          // 🆕 强制要求使用工具而不是auto
+          body.tool_choice = 'required'
         }
         break
         
@@ -968,7 +1094,7 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
           system: systemPrompt,
           messages: [{ role: 'user', content: message }],
           max_tokens: config.params?.maxTokens || 2000,
-          temperature: config.params?.temperature || 0.3
+          temperature: config.params?.temperature || 0.1 // 降低temperature确保更准确的工具调用
         }
         
         // 添加工具定义（Claude tools格式）
@@ -994,6 +1120,8 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
                 .map(([key]) => key)
             }
           }))
+          // 🆕 Claude的工具使用偏好设置
+          body.tool_choice = { type: "any" } // 要求必须使用至少一个工具
         }
         break
         
@@ -1010,7 +1138,7 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
             ]
           },
           parameters: {
-            temperature: config.params?.temperature || 0.3,
+            temperature: config.params?.temperature || 0.1, // 降低temperature确保更准确的工具调用
             max_tokens: config.params?.maxTokens || 2000,
             result_format: 'message'
           }
@@ -1049,10 +1177,12 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
         throw new Error(`不支持的AI模型: ${config.model}`)
     }
     
-    log('[AIAssistant] Function calling request:', {
+    log('[AIAssistant] Enhanced function calling request:', {
       model: config.model,
       toolsCount: tools?.length || 0,
-      messageLength: message.length
+      messageLength: message.length,
+      hasUserContext: !!userContext,
+      contextLength: userContext.length
     })
     
     const response = await fetch(apiUrl, {
@@ -1068,7 +1198,7 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
     }
     
     const data = await response.json()
-    log('[AIAssistant] Function calling response received')
+    log('[AIAssistant] Enhanced function calling response received')
     
     // 处理不同模型的响应格式
     let assistantMessage: any

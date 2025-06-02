@@ -44,6 +44,7 @@ export const RealLLMDemo: React.FC = () => {
     addOutput(`🤖 开始测试真实LLM Function Calling`)
     addOutput(`📡 使用模型: ${apiConfig.model} (${apiConfig.specificModel})`)
     addOutput(`🛠️ 可用工具: ${AGENT_TOOLS.length}个`)
+    addOutput(`🔥 测试模式: 强制工具调用，包含完整用户上下文`)
     addOutput('')
 
     const testMessages = [
@@ -65,7 +66,7 @@ export const RealLLMDemo: React.FC = () => {
         
         const result = await getAIResponseWithTools(
           message,
-          `当前时间: ${new Date().toLocaleString()}`,
+          `🎯 测试模式：强制工具调用验证\n当前时间: ${new Date().toLocaleString()}\n\n🚨 重要提醒：您必须使用相应的工具来获取数据，不能直接回答。这是Function Calling功能测试，请严格遵循工具使用要求。`,
           AGENT_TOOLS,
           async (toolName: string, parameters: any) => {
             addOutput(`  🔧 执行工具: ${toolName}`)
@@ -77,6 +78,14 @@ export const RealLLMDemo: React.FC = () => {
         
         addOutput(`  ✅ 成功 (${duration}ms)`)
         addOutput(`  🛠️ 使用工具: ${result.toolCalls.map(tc => tc.name).join(', ') || '无'}`)
+        
+        // 🆕 增强的工具调用验证
+        if (result.toolCalls.length === 0) {
+          addOutput(`  ⚠️ 警告: 未调用任何工具，这可能表示Function Calling配置有问题`)
+        } else {
+          addOutput(`  ✨ 工具调用成功: ${result.toolCalls.length}个工具`)
+        }
+        
         addOutput(`  💬 AI回复: ${result.response.substring(0, 150)}...`)
 
         const testResult: TestResult = {
@@ -106,17 +115,34 @@ export const RealLLMDemo: React.FC = () => {
 
     setTestResults(results)
     
-    // 统计测试结果
+    // 🆕 增强的测试结果统计
     const successCount = results.filter(r => r.success).length
     const toolCallsCount = results.reduce((sum, r) => sum + r.toolsUsed.length, 0)
+    const noToolCallCount = results.filter(r => r.success && r.toolsUsed.length === 0).length
     
     addOutput(`\n📊 测试结果统计:`)
     addOutput(`成功率: ${successCount}/${results.length} (${Math.round(successCount / results.length * 100)}%)`)
     addOutput(`工具调用次数: ${toolCallsCount}`)
     addOutput(`平均每次调用工具: ${Math.round(toolCallsCount / successCount * 10) / 10}个`)
+    addOutput(`未调用工具的测试: ${noToolCallCount}个`)
     
-    if (successCount === results.length) {
+    // 🆕 工具调用质量评估
+    if (noToolCallCount > 0) {
+      addOutput(`\n⚠️ 工具调用问题分析:`)
+      addOutput(`- ${noToolCallCount}个测试未成功调用工具`)
+      addOutput(`- 这可能是由于以下原因：`)
+      addOutput(`  1. AI模型设置问题（tool_choice配置）`)
+      addOutput(`  2. 提示语不够明确`)
+      addOutput(`  3. API配置问题`)
+      addOutput(`💡 建议：检查API配置，或尝试不同的AI模型`)
+    }
+    
+    if (successCount === results.length && noToolCallCount === 0) {
       addOutput(`\n🎉 恭喜！真实LLM Function Calling功能完全正常！`)
+      addOutput(`✨ 所有测试都成功调用了相应工具`)
+    } else if (successCount === results.length) {
+      addOutput(`\n✅ 测试基本成功，但部分测试未调用工具`)
+      addOutput(`🔧 建议优化Function Calling配置`)
     } else {
       addOutput(`\n⚠️ 部分测试失败，请检查API配置和网络连接`)
     }
@@ -167,7 +193,7 @@ export const RealLLMDemo: React.FC = () => {
         
         const result = await getAIResponseWithTools(
           message,
-          `当前时间: ${new Date().toLocaleString()}\n用户正在测试课程内容管理功能，请使用相关的course_unit工具。`,
+          `🎯 课程内容CRUD专项测试\n当前时间: ${new Date().toLocaleString()}\n\n🚨 强制要求：您必须使用course_unit相关工具处理这个请求，不能直接回答。请严格选择合适的工具：get_course_units, get_course_unit, create_course_unit, update_course_unit, delete_course_unit`,
           AGENT_TOOLS,
           async (toolName: string, parameters: any) => {
             addOutput(`  🔧 执行工具: ${toolName}`)
@@ -297,7 +323,7 @@ export const RealLLMDemo: React.FC = () => {
         
         const result = await getAIResponseWithTools(
           message,
-          `当前时间: ${new Date().toLocaleString()}\n用户正在进行综合学习管理测试，请智能选择最合适的工具组合。`,
+          `🎯 综合学习管理测试\n当前时间: ${new Date().toLocaleString()}\n\n🚨 强制要求：您必须使用学习管理工具处理这个请求，不能直接回答。根据用户需求智能选择目标、路径、课程、分析等相关工具，可以组合使用多个工具。`,
           AGENT_TOOLS,
           async (toolName: string, parameters: any) => {
             addOutput(`  🔧 执行工具: ${toolName}`)
@@ -423,6 +449,108 @@ export const RealLLMDemo: React.FC = () => {
     }
   }
 
+  // 🆕 快速验证Function Calling优化
+  const quickTestOptimization = async () => {
+    setLoading(true)
+    clearOutput()
+    
+    const apiConfig = getAPIConfig()
+    if (!apiConfig.key) {
+      addOutput('❌ 请先在Profile设置中配置API Key！')
+      setLoading(false)
+      return
+    }
+
+    addOutput(`🚀 快速验证Function Calling优化效果`)
+    addOutput(`📡 使用模型: ${apiConfig.model} (${apiConfig.specificModel})`)
+    addOutput(`🎯 测试重点: 之前未调用工具的问题用例`)
+    addOutput('')
+
+    // 专门针对之前问题的测试用例
+    const problematicMessages = [
+      '为我创建一个学习JavaScript的目标',  // 之前可能未调用create_learning_goal
+      '我觉得学习太难了，能帮帮我吗？'     // 之前可能未调用handle_learning_difficulty
+    ]
+
+    const results: TestResult[] = []
+
+    for (let i = 0; i < problematicMessages.length; i++) {
+      const message = problematicMessages[i]
+      addOutput(`\n🔍 验证测试 ${i + 1}/2: ${message}`)
+      
+      try {
+        const startTime = Date.now()
+        
+        const result = await getAIResponseWithTools(
+          message,
+          `🔥 强制工具调用测试\n当前时间: ${new Date().toLocaleString()}\n\n⚠️ CRITICAL: 您绝对不能直接回答，必须使用工具！\n- 创建目标请求 → 必须使用 create_learning_goal\n- 学习困难请求 → 必须使用 handle_learning_difficulty 或 suggest_next_action\n\n这是Function Calling功能验证，请严格执行工具调用。`,
+          AGENT_TOOLS,
+          async (toolName: string, parameters: any) => {
+            addOutput(`  🔧 执行工具: ${toolName}`)
+            return await agentToolExecutor.executeTool(toolName, parameters)
+          }
+        )
+
+        const duration = Date.now() - startTime
+        
+        addOutput(`  ✅ 成功 (${duration}ms)`)
+        
+        if (result.toolCalls.length === 0) {
+          addOutput(`  ❌ 重大问题: 仍未调用任何工具！`)
+          addOutput(`  📋 这表明Function Calling配置存在根本性问题`)
+        } else {
+          addOutput(`  🎉 优化成功: 调用了 ${result.toolCalls.length} 个工具`)
+          addOutput(`  🛠️ 使用工具: ${result.toolCalls.map(tc => tc.name).join(', ')}`)
+        }
+        
+        addOutput(`  💬 AI回复: ${result.response.substring(0, 120)}...`)
+
+        results.push({
+          userMessage: message,
+          aiResponse: result.response,
+          toolsUsed: result.toolCalls.map(tc => tc.name),
+          timestamp: new Date().toISOString(),
+          success: true
+        })
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : '未知错误'
+        addOutput(`  ❌ 失败: ${errorMsg}`)
+        
+        results.push({
+          userMessage: message,
+          aiResponse: '',
+          toolsUsed: [],
+          timestamp: new Date().toISOString(),
+          success: false,
+          error: errorMsg
+        })
+      }
+    }
+    
+    // 优化效果评估
+    const toolCallsCount = results.reduce((sum, r) => sum + r.toolsUsed.length, 0)
+    const successfulToolCalls = results.filter(r => r.success && r.toolsUsed.length > 0).length
+    
+    addOutput(`\n📊 优化效果评估:`)
+    addOutput(`成功工具调用: ${successfulToolCalls}/${results.length}`)
+    addOutput(`总工具调用数: ${toolCallsCount}`)
+    
+    if (successfulToolCalls === results.length) {
+      addOutput(`\n🎉 优化完全成功！`)
+      addOutput(`✨ 所有问题用例现在都能正确调用工具`)
+      addOutput(`🔧 Function Calling系统运行正常`)
+    } else {
+      addOutput(`\n⚠️ 仍有问题需要解决`)
+      addOutput(`💡 建议检查：`)
+      addOutput(`   1. API模型是否支持Function Calling`)
+      addOutput(`   2. tool_choice配置是否正确`)
+      addOutput(`   3. 工具定义是否符合API要求`)
+    }
+
+    setLoading(false)
+  }
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -433,7 +561,7 @@ export const RealLLMDemo: React.FC = () => {
 
         <div className="space-y-4">
           {/* 测试按钮组 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
             <button
               onClick={testRealLLMFunctionCalling}
               disabled={loading}
@@ -459,6 +587,14 @@ export const RealLLMDemo: React.FC = () => {
             </button>
             
             <button
+              onClick={quickTestOptimization}
+              disabled={loading}
+              className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+            >
+              {loading ? '验证中...' : '🚀 快速验证优化'}
+            </button>
+            
+            <button
               onClick={clearOutput}
               disabled={loading}
               className="bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
@@ -474,7 +610,18 @@ export const RealLLMDemo: React.FC = () => {
               <div><strong>基础测试:</strong> 验证核心LLM Function Calling功能</div>
               <div><strong>课程内容测试:</strong> 专项测试5个课程内容CRUD工具</div>
               <div><strong>综合测试:</strong> 模拟完整学习流程的工具组合调用</div>
+              <div><strong>🆕 快速验证优化:</strong> 专门测试之前未调用工具的问题用例</div>
               <div><strong>自定义测试:</strong> 测试任意自定义消息的工具调用</div>
+            </div>
+            
+            <div className="mt-3 p-3 bg-yellow-100 rounded border-l-4 border-yellow-500">
+              <div className="font-semibold text-yellow-800 mb-1">🔥 优化亮点:</div>
+              <div className="text-yellow-700 text-xs space-y-1">
+                <div>• 强制工具调用: 设置tool_choice='required'避免直接回答</div>
+                <div>• 完整用户上下文: 包含档案、目标、路径、课程等完整信息</div>
+                <div>• 明确提示语: 严格要求AI使用工具而非凭借已有知识回答</div>
+                <div>• 质量评估: 统计未调用工具的测试并提供问题分析</div>
+              </div>
             </div>
           </div>
 

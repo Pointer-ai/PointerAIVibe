@@ -110,6 +110,32 @@ export const AbilityAssessView: React.FC = () => {
     }
   }
 
+  // 重新生成智能提升计划
+  const handleRegenerateIntelligentPlan = async () => {
+    if (!assessment) return
+    
+    setPlanGenerating(true)
+    setErrorMsg(null)
+    
+    try {
+      log('[AbilityAssessView] Regenerating intelligent improvement plan')
+      
+      // 清除缓存的提升计划
+      abilityService.clearImprovementPlanCache()
+      
+      // 重新生成计划
+      const plan = await abilityService.generateIntelligentImprovementPlan(assessment)
+      setImprovementPlan(plan)
+      
+      log('[AbilityAssessView] Intelligent improvement plan regenerated successfully')
+    } catch (err) {
+      error('[AbilityAssessView] Failed to regenerate intelligent improvement plan:', err)
+      setErrorMsg('重新生成智能提升计划失败，请重试')
+    } finally {
+      setPlanGenerating(false)
+    }
+  }
+
   // 导出报告
   const handleExport = () => {
     if (!assessment) return
@@ -231,6 +257,7 @@ export const AbilityAssessView: React.FC = () => {
               plan={improvementPlan}
               onStartLearning={handleStartLearning}
               onViewProgress={handleViewProgress}
+              onRegenerate={handleRegenerateIntelligentPlan}
             />
           ) : (
             /* 否则显示评估结果 */

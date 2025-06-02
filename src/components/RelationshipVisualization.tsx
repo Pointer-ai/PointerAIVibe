@@ -17,20 +17,59 @@ interface RelationshipVisualizationProps {
 }
 
 export const RelationshipVisualization: React.FC<RelationshipVisualizationProps> = ({ onMessage }) => {
-  const [goals, setGoals] = useState<LearningGoal[]>([])
-  const [paths, setPaths] = useState<LearningPath[]>([])
-  const [courseUnits, setCourseUnits] = useState<CourseUnit[]>([])
+  const [goals, setGoals] = useState<any[]>([])
+  const [paths, setPaths] = useState<any[]>([])
+  const [courseUnits, setCourseUnits] = useState<any[]>([])
   const [stats, setStats] = useState<any>(null)
   const [hierarchy, setHierarchy] = useState<any>(null)
-  const [selectedItem, setSelectedItem] = useState<{type: 'goal' | 'path' | 'unit', id: string} | null>(null)
+  const [selectedItem, setSelectedItem] = useState<{type: string, id: string} | null>(null)
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
 
+  // 数据验证和清理函数
+  const validateAndCleanData = (data: any[], type: string) => {
+    if (!Array.isArray(data)) {
+      console.warn(`${type} data is not an array:`, data)
+      return []
+    }
+    
+    return data.filter(item => {
+      if (!item || typeof item !== 'object') {
+        console.warn(`Invalid ${type} item:`, item)
+        return false
+      }
+      if (!item.id) {
+        console.warn(`${type} item missing id:`, item)
+        return false
+      }
+      return true
+    }).map(item => ({
+      ...item,
+      title: item.title || `未命名${type}`,
+      status: item.status || 'unknown'
+    }))
+  }
+
   const refreshData = () => {
-    setGoals(getLearningGoals())
-    setPaths(getLearningPaths())
-    setCourseUnits(getCourseUnits())
-    setStats(getRelationshipStats())
-    setHierarchy(getLearningHierarchy())
+    try {
+      const rawGoals = getLearningGoals()
+      const rawPaths = getLearningPaths()
+      const rawCourseUnits = getCourseUnits()
+      
+      setGoals(validateAndCleanData(rawGoals, '目标'))
+      setPaths(validateAndCleanData(rawPaths, '路径'))
+      setCourseUnits(validateAndCleanData(rawCourseUnits, '课程'))
+      
+      setStats(getRelationshipStats())
+      setHierarchy(getLearningHierarchy())
+    } catch (error) {
+      console.error('Error refreshing relationship data:', error)
+      onMessage?.(`❌ 数据刷新失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      // 设置空数据以防止后续错误
+      setGoals([])
+      setPaths([])
+      setCourseUnits([])
+      setStats(null)
+    }
   }
 
   useEffect(() => {
@@ -49,7 +88,7 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
     goals.forEach(goal => {
       nodes.push({
         id: goal.id,
-        label: goal.title,
+        label: goal.title || '未命名目标',
         type: 'goal',
         status: goal.status,
         x: Math.random() * 300 + 50,
@@ -61,7 +100,7 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
     paths.forEach((path, index) => {
       nodes.push({
         id: path.id,
-        label: path.title,
+        label: path.title || '未命名路径',
         type: 'path',
         status: path.status,
         x: Math.random() * 300 + 400,
@@ -94,7 +133,7 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
     courseUnits.forEach((unit, index) => {
       nodes.push({
         id: unit.id,
-        label: unit.title,
+        label: unit.title || '未命名课程',
         type: 'unit',
         x: Math.random() * 300 + 750,
         y: Math.random() * 200 + 50
@@ -116,16 +155,18 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
 
       // 查找关联的节点
       paths.forEach(path => {
-        path.nodes.forEach(node => {
-          if (node.courseUnitIds?.includes(unit.id)) {
-            links.push({
-              source: path.id,
-              target: unit.id,
-              type: 'path-unit',
-              nodeId: node.id
-            })
-          }
-        })
+        if (path.nodes && Array.isArray(path.nodes)) {
+          path.nodes.forEach(node => {
+            if (node.courseUnitIds?.includes(unit.id)) {
+              links.push({
+                source: path.id,
+                target: unit.id,
+                type: 'path-unit',
+                nodeId: node.id
+              })
+            }
+          })
+        }
       })
     })
 
@@ -170,10 +211,12 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
       } else if (linkType === 'path-unit') {
         // 需要选择具体的节点
         const path = paths.find(p => p.id === sourceId)
-        if (path && path.nodes.length > 0) {
+        if (path && path.nodes && Array.isArray(path.nodes) && path.nodes.length > 0) {
           // 默认关联到第一个节点
           await linkCourseUnitToNode(sourceId, path.nodes[0].id, targetId)
           onMessage?.('✅ 成功关联路径节点和课程内容')
+        } else {
+          onMessage?.('❌ 路径没有可用的节点')
         }
       }
       refreshData()
@@ -359,7 +402,10 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
                   textOverflow: 'ellipsis'
                 }}
               >
-                {node.label.length > 10 ? node.label.substring(0, 10) + '...' : node.label}
+                {(node.label && typeof node.label === 'string' && node.label.length > 10) 
+                  ? node.label.substring(0, 10) + '...' 
+                  : (node.label || '未知')
+                }
               </text>
             </g>
           ))}
@@ -451,14 +497,14 @@ export const RelationshipVisualization: React.FC<RelationshipVisualizationProps>
               const relatedGoal = goals.find(g => g.id === path.sourceGoalId || g.pathIds?.includes(path.id))
               const relatedUnits = courseUnits.filter(u => 
                 u.sourcePathId === path.id || 
-                path.nodes.some(n => n.courseUnitIds?.includes(u.id))
+                (path.nodes && Array.isArray(path.nodes) && path.nodes.some(n => n.courseUnitIds?.includes(u.id)))
               )
               
               return (
                 <div>
                   <p><strong>路径:</strong> {path.title}</p>
                   <p><strong>状态:</strong> {path.status}</p>
-                  <p><strong>节点数:</strong> {path.nodes.length} 个</p>
+                  <p><strong>节点数:</strong> {(path.nodes && Array.isArray(path.nodes)) ? path.nodes.length : 0} 个</p>
                   <p><strong>关联目标:</strong> {relatedGoal?.title || '无'}</p>
                   <p><strong>关联课程:</strong> {relatedUnits.length} 个</p>
                 </div>

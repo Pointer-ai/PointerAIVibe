@@ -6,12 +6,14 @@ interface ImprovementPlanViewProps {
   plan: ImprovementPlan
   onStartLearning?: (goalId: string) => void
   onViewProgress?: () => void
+  onRegenerate?: () => void
 }
 
 export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
   plan,
   onStartLearning,
-  onViewProgress
+  onViewProgress,
+  onRegenerate
 }) => {
   // 计算统计数据
   const totalGoals = plan.generatedGoals.shortTerm.length + plan.generatedGoals.mediumTerm.length
@@ -24,20 +26,49 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
 
   const renderGoalCard = (goal: GeneratedGoal, index: number) => {
     const isShortTerm = goal.duration === 'short'
-    const bgColor = isShortTerm ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
-    const iconColor = isShortTerm ? 'text-blue-600' : 'text-green-600'
-    const badgeColor = isShortTerm ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+    const isAdvanced = goal.targetLevel === 'expert' || goal.targetLevel === 'advanced'
+    const isHighPriority = goal.priority >= 4
+    
+    // 根据目标类型和难度调整样式
+    let bgColor, iconColor, badgeColor, borderStyle
+    if (isAdvanced && isHighPriority) {
+      bgColor = isShortTerm ? 'bg-gradient-to-r from-purple-50 to-blue-50 border-purple-300' : 'bg-gradient-to-r from-green-50 to-teal-50 border-green-300'
+      iconColor = isShortTerm ? 'text-purple-600' : 'text-green-600'
+      badgeColor = isShortTerm ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
+      borderStyle = 'border-2'
+    } else {
+      bgColor = isShortTerm ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
+      iconColor = isShortTerm ? 'text-blue-600' : 'text-green-600'
+      badgeColor = isShortTerm ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+      borderStyle = 'border'
+    }
 
     return (
-      <div key={index} className={`${bgColor} border rounded-xl p-6 hover:shadow-md transition-shadow`}>
+      <div key={index} className={`${bgColor} ${borderStyle} rounded-xl p-6 hover:shadow-lg transition-all duration-300 ${isAdvanced ? 'shadow-md' : ''}`}>
+        {/* 高级标识 */}
+        {isAdvanced && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-3 py-1 bg-gradient-to-r from-yellow-400 to-orange-400 text-white text-xs font-bold rounded-full">
+              🚀 高级内容
+            </span>
+            {goal.associatedPath.totalEstimatedHours >= 50 && (
+              <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">
+                🔥 深度项目
+              </span>
+            )}
+          </div>
+        )}
+
         {/* 目标头部 */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${isShortTerm ? 'bg-blue-100' : 'bg-green-100'}`}>
+            <div className={`p-2 rounded-lg ${isAdvanced ? 'bg-gradient-to-r from-purple-100 to-blue-100' : isShortTerm ? 'bg-blue-100' : 'bg-green-100'}`}>
               <Target className={`h-5 w-5 ${iconColor}`} />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">{goal.title}</h3>
+              <h3 className={`font-semibold ${isAdvanced ? 'text-xl text-gray-900' : 'text-lg text-gray-900'}`}>
+                {goal.title}
+              </h3>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${badgeColor}`}>
                   {isShortTerm ? '短期目标 (1个月)' : '中期目标 (3个月)'}
@@ -45,6 +76,11 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                   {goal.category}
                 </span>
+                {isAdvanced && (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800">
+                    ⭐ {goal.targetLevel.toUpperCase()}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -52,17 +88,19 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
             <div className="text-sm text-gray-500">优先级</div>
             <div className="flex items-center gap-1">
               {Array.from({ length: goal.priority }, (_, i) => (
-                <div key={i} className="w-2 h-2 bg-yellow-400 rounded-full" />
+                <div key={i} className={`w-2 h-2 rounded-full ${isHighPriority ? 'bg-red-500' : 'bg-yellow-400'}`} />
               ))}
             </div>
           </div>
         </div>
 
         {/* 目标描述 */}
-        <p className="text-gray-700 mb-4">{goal.description}</p>
+        <p className={`text-gray-700 mb-4 ${isAdvanced ? 'text-base leading-relaxed' : ''}`}>
+          {goal.description}
+        </p>
 
-        {/* 目标信息 */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* 目标信息 - 增强版 */}
+        <div className={`grid ${isAdvanced ? 'grid-cols-3' : 'grid-cols-2'} gap-4 mb-4`}>
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-gray-500" />
             <span className="text-sm text-gray-600">{goal.estimatedTimeWeeks} 周</span>
@@ -71,16 +109,29 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
             <TrendingUp className="h-4 w-4 text-gray-500" />
             <span className="text-sm text-gray-600">{goal.targetLevel}</span>
           </div>
+          {isAdvanced && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-purple-600 font-medium">
+                💼 {goal.associatedPath.totalEstimatedHours}h 深度学习
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* 技能标签 */}
+        {/* 技能标签 - 高级内容突出显示 */}
         <div className="mb-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">需要技能:</div>
+          <div className="text-sm font-medium text-gray-700 mb-2">
+            {isAdvanced ? '🎯 核心技术栈:' : '需要技能:'}
+          </div>
           <div className="flex flex-wrap gap-2">
             {goal.requiredSkills.map((skill, skillIndex) => (
               <span 
                 key={skillIndex}
-                className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs"
+                className={`px-2 py-1 rounded text-xs ${
+                  isAdvanced 
+                    ? 'bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 font-medium border border-purple-200' 
+                    : 'bg-gray-100 text-gray-700'
+                }`}
               >
                 {skill}
               </span>
@@ -88,61 +139,82 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
           </div>
         </div>
 
-        {/* 预期成果 */}
+        {/* 预期成果 - 高级内容增强 */}
         <div className="mb-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">预期成果:</div>
+          <div className="text-sm font-medium text-gray-700 mb-2">
+            {isAdvanced ? '🚀 核心产出与成果:' : '预期成果:'}
+          </div>
           <ul className="list-disc list-inside space-y-1">
             {goal.outcomes.map((outcome, outcomeIndex) => (
-              <li key={outcomeIndex} className="text-sm text-gray-600">{outcome}</li>
+              <li key={outcomeIndex} className={`text-sm ${isAdvanced ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>
+                {isAdvanced && '💼 '}{outcome}
+              </li>
             ))}
           </ul>
         </div>
 
-        {/* 学习路径预览 */}
+        {/* 学习路径预览 - 增强版 */}
         <div className="border-t pt-4">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen className="h-4 w-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">学习路径: {goal.associatedPath.title}</span>
-            <span className="text-xs text-gray-500">({goal.associatedPath.totalEstimatedHours}h)</span>
+            <span className={`text-sm font-medium text-gray-700 ${isAdvanced ? 'text-base' : ''}`}>
+              {isAdvanced ? '🎓 高级学习路径' : '学习路径'}: {goal.associatedPath.title}
+            </span>
+            <span className={`text-xs text-gray-500 ${isAdvanced ? 'font-medium text-purple-600' : ''}`}>
+              ({goal.associatedPath.totalEstimatedHours}h)
+            </span>
           </div>
           
           <div className="space-y-2">
-            {goal.associatedPath.nodes.slice(0, 3).map((node, nodeIndex) => (
-              <div key={nodeIndex} className="flex items-center gap-3 p-2 bg-white rounded border">
+            {goal.associatedPath.nodes.slice(0, isAdvanced ? 5 : 3).map((node, nodeIndex) => (
+              <div key={nodeIndex} className={`flex items-center gap-3 p-3 bg-white rounded border ${isAdvanced ? 'border-purple-100 hover:bg-purple-50' : ''} transition-colors`}>
                 <div className="flex-shrink-0">
-                  <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs font-medium">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                    isAdvanced ? 'bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700' : 'bg-gray-100'
+                  }`}>
                     {nodeIndex + 1}
                   </div>
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-800">{node.title}</div>
-                  <div className="text-xs text-gray-500">
+                  <div className={`text-sm font-medium ${isAdvanced ? 'text-gray-900' : 'text-gray-800'}`}>
+                    {isAdvanced && '⚡ '}{node.title}
+                  </div>
+                  <div className={`text-xs text-gray-500 ${isAdvanced ? 'font-medium' : ''}`}>
                     {node.type} • {node.estimatedHours}h • 难度 {node.difficulty}/5
+                    {isAdvanced && node.difficulty >= 4 && (
+                      <span className="ml-2 text-red-600 font-bold">🔥 高难度</span>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-            {goal.associatedPath.nodes.length > 3 && (
-              <div className="text-xs text-gray-500 text-center py-1">
-                还有 {goal.associatedPath.nodes.length - 3} 个学习节点...
+            {goal.associatedPath.nodes.length > (isAdvanced ? 5 : 3) && (
+              <div className={`text-xs text-center py-2 ${isAdvanced ? 'text-purple-600 font-medium' : 'text-gray-500'}`}>
+                还有 {goal.associatedPath.nodes.length - (isAdvanced ? 5 : 3)} 个{isAdvanced ? '高级' : ''}学习节点...
               </div>
             )}
           </div>
         </div>
 
-        {/* 操作按钮 */}
+        {/* 操作按钮 - 高级内容特殊样式 */}
         <div className="flex gap-2 mt-4">
           <button
             onClick={() => onStartLearning?.(goal.title)}
-            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-              isShortTerm 
-                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                : 'bg-green-600 hover:bg-green-700 text-white'
+            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${
+              isAdvanced
+                ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl'
+                : isShortTerm 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                  : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
           >
-            开始学习
+            {isAdvanced ? '🚀 开始高级学习' : '开始学习'}
           </button>
-          <button className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          <button className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+            isAdvanced 
+              ? 'border-purple-300 text-purple-700 hover:bg-purple-50' 
+              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+          }`}>
             查看详情
           </button>
         </div>
@@ -309,21 +381,36 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-8">
       {/* 头部信息 */}
-      <div className="bg-gradient-to-r from-blue-600 to-green-600 rounded-xl text-white p-8">
+      <div className={`rounded-xl text-white p-8 ${plan.metadata.baseScore >= 80 ? 'bg-gradient-to-r from-purple-600 via-blue-600 to-teal-600' : 'bg-gradient-to-r from-blue-600 to-green-600'}`}>
+        {plan.metadata.baseScore >= 80 && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white text-sm font-bold rounded-full border border-white/30">
+              🚀 高级开发者专属计划
+            </span>
+            <span className="px-3 py-1 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">
+              ⭐ EXPERT LEVEL
+            </span>
+          </div>
+        )}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">🚀 智能提升计划</h1>
-            <p className="text-blue-100 mb-4">
-              基于您的能力评估，AI 为您量身定制的学习路径和目标
+            <h1 className={`font-bold mb-2 ${plan.metadata.baseScore >= 80 ? 'text-4xl' : 'text-3xl'}`}>
+              {plan.metadata.baseScore >= 80 ? '🚀 智能高级提升计划' : '🚀 智能提升计划'}
+            </h1>
+            <p className={`mb-4 ${plan.metadata.baseScore >= 80 ? 'text-blue-100 text-lg' : 'text-blue-100'}`}>
+              {plan.metadata.baseScore >= 80 
+                ? '基于您的高级技能水平，AI 为您量身定制的架构级学习路径和专业目标' 
+                : '基于您的能力评估，AI 为您量身定制的学习路径和目标'
+              }
             </p>
             <div className="flex items-center gap-6 text-sm">
               <div className="flex items-center gap-2">
                 <Target className="h-4 w-4" />
-                <span>{totalGoals} 个目标</span>
+                <span>{totalGoals} 个{plan.metadata.baseScore >= 80 ? '高级' : ''}目标</span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                <span>{totalHours} 小时</span>
+                <span>{totalHours} 小时{plan.metadata.baseScore >= 80 ? '深度学习' : ''}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
@@ -333,12 +420,23 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
                 <TrendingUp className="h-4 w-4" />
                 <span>目标提升 {plan.metadata.targetImprovement} 分</span>
               </div>
+              {plan.metadata.baseScore >= 80 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-yellow-300">💼 架构级项目</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-sm text-blue-100 mb-1">当前基础评分</div>
-            <div className="text-4xl font-bold">{plan.metadata.baseScore}</div>
-            <div className="text-sm text-blue-100">/ 100</div>
+            <div className={`text-sm mb-1 ${plan.metadata.baseScore >= 80 ? 'text-yellow-200' : 'text-blue-100'}`}>
+              {plan.metadata.baseScore >= 80 ? '高级开发者基础评分' : '当前基础评分'}
+            </div>
+            <div className={`font-bold ${plan.metadata.baseScore >= 80 ? 'text-5xl text-yellow-300' : 'text-4xl'}`}>
+              {plan.metadata.baseScore}
+            </div>
+            <div className={`text-sm ${plan.metadata.baseScore >= 80 ? 'text-yellow-200' : 'text-blue-100'}`}>
+              / 100 {plan.metadata.baseScore >= 80 ? '(专家级)' : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -397,19 +495,45 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
       {renderPriorityMatrix()}
 
       {/* 操作按钮 */}
-      <div className="flex justify-center gap-4">
-        <button
-          onClick={onViewProgress}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-        >
-          查看学习进度
-        </button>
-        <button className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          下载学习计划
-        </button>
-        <button className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-          分享计划
-        </button>
+      <div className="bg-gray-50 rounded-xl p-6">
+        <div className="text-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">📋 计划管理</h3>
+          <p className="text-gray-600 text-sm">
+            管理您的学习计划，跟踪进度或重新生成更适合的计划
+          </p>
+        </div>
+        
+        <div className="flex flex-wrap justify-center gap-4">
+          <button
+            onClick={onViewProgress}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+          >
+            📊 查看学习进度
+          </button>
+          
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+            >
+              🔄 重新生成计划
+            </button>
+          )}
+          
+          <button className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg">
+            📥 下载学习计划
+          </button>
+          
+          <button className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-md hover:shadow-lg">
+            📤 分享计划
+          </button>
+        </div>
+        
+        <div className="mt-4 text-center">
+          <p className="text-xs text-gray-500">
+            💡 提示：如果您的能力有所提升或学习偏好发生变化，可以重新生成更适合的学习计划
+          </p>
+        </div>
       </div>
     </div>
   )

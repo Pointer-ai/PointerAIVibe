@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
+import { PathPlanView } from './modules/pathPlan'
 import { GlobalAIAssistant } from './components/AIAssistant'
 import AgentDemo from './demo/AgentDemo'
 import LearningPathView from './components/LearningPathView'
@@ -188,15 +189,22 @@ const App = () => {
             )
           
           case 'path-plan':
-          case 'course-content':
-            const titles = {
-              'path-plan': '路径规划',
-              'course-content': '课程内容'
-            }
-            
             return (
               <Layout 
-                title={titles[currentView]} 
+                title="路径规划" 
+                onBack={handleBackToDashboard} 
+                onHome={handleGoHome}
+                onLogout={handleLogout}
+                onProfileSwitch={handleProfileSwitch}
+              >
+                <PathPlanView />
+              </Layout>
+            )
+          
+          case 'course-content':
+            return (
+              <Layout 
+                title="课程内容" 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -205,7 +213,7 @@ const App = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                   <div className="text-center">
                     <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                      {titles[currentView]}
+                      课程内容
                     </h2>
                     <p className="text-gray-600">该模块正在开发中...</p>
                   </div>

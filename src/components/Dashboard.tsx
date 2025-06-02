@@ -70,15 +70,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       id: 'path',
       view: 'path-plan' as const,
       title: '路径规划',
-      description: 'AI 为你生成个性化的学习路径',
+      description: 'AI 智能生成个性化的学习路径，基于技能差距分析',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
       ),
       color: 'from-green-500 to-teal-500',
-      status: '待开发',
-      available: false
+      status: '可使用',
+      available: true
     },
     {
       id: 'course',

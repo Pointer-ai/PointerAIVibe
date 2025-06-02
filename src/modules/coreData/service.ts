@@ -799,3 +799,827 @@ export const exportLearningData = async (): Promise<string> => {
 
 // 其他需要的导出
 export const coreData = getUserCoreData()
+
+// ========== 数据关联关系管理功能 ==========
+
+/**
+ * 数据关联关系管理功能
+ * 支持 Goal -> Path -> Node -> CourseUnit 的层级依赖
+ */
+
+// 为目标添加路径关联
+export const linkPathToGoal = (goalId: string, pathId: string): boolean => {
+  const coreData = getUserCoreData()
+  
+  const goal = coreData.goals.find(g => g.id === goalId)
+  const path = coreData.paths.find(p => p.id === pathId)
+  
+  if (!goal || !path) return false
+  
+  // 更新目标的路径关联
+  if (!goal.pathIds) goal.pathIds = []
+  if (!goal.pathIds.includes(pathId)) {
+    goal.pathIds.push(pathId)
+  }
+  
+  // 更新路径的来源目标关联
+  path.sourceGoalId = goalId
+  
+  saveUserCoreData(coreData)
+  
+  addCoreEvent({
+    type: 'goal_path_linked',
+    data: { goalId, pathId, goalTitle: goal.title, pathTitle: path.title }
+  })
+  
+  return true
+}
+
+// 为节点添加课程内容关联
+export const linkCourseUnitToNode = (pathId: string, nodeId: string, courseUnitId: string): boolean => {
+  const coreData = getUserCoreData()
+  
+  const path = coreData.paths.find(p => p.id === pathId)
+  const courseUnit = coreData.courseUnits.find(c => c.id === courseUnitId)
+  
+  if (!path || !courseUnit) return false
+  
+  const node = path.nodes.find(n => n.id === nodeId)
+  if (!node) return false
+  
+  // 更新节点的课程内容关联
+  if (!node.courseUnitIds) node.courseUnitIds = []
+  if (!node.courseUnitIds.includes(courseUnitId)) {
+    node.courseUnitIds.push(courseUnitId)
+  }
+  
+  // 更新课程内容的来源关联
+  courseUnit.sourcePathId = pathId
+  courseUnit.sourceNodeId = nodeId
+  
+  saveUserCoreData(coreData)
+  
+  addCoreEvent({
+    type: 'node_courseunit_linked',
+    data: { pathId, nodeId, courseUnitId, nodeTitle: node.title, unitTitle: courseUnit.title }
+  })
+  
+  return true
+}
+
+// 移除路径与目标的关联
+export const unlinkPathFromGoal = (goalId: string, pathId: string): boolean => {
+  const coreData = getUserCoreData()
+  
+  const goal = coreData.goals.find(g => g.id === goalId)
+  const path = coreData.paths.find(p => p.id === pathId)
+  
+  if (!goal || !path) return false
+  
+  // 移除目标的路径关联
+  if (goal.pathIds) {
+    goal.pathIds = goal.pathIds.filter(id => id !== pathId)
+  }
+  
+  // 移除路径的来源目标关联
+  delete path.sourceGoalId
+  
+  saveUserCoreData(coreData)
+  
+  addCoreEvent({
+    type: 'goal_path_unlinked',
+    data: { goalId, pathId, goalTitle: goal.title, pathTitle: path.title }
+  })
+  
+  return true
+}
+
+// 移除课程内容与节点的关联
+export const unlinkCourseUnitFromNode = (pathId: string, nodeId: string, courseUnitId: string): boolean => {
+  const coreData = getUserCoreData()
+  
+  const path = coreData.paths.find(p => p.id === pathId)
+  const courseUnit = coreData.courseUnits.find(c => c.id === courseUnitId)
+  
+  if (!path || !courseUnit) return false
+  
+  const node = path.nodes.find(n => n.id === nodeId)
+  if (!node) return false
+  
+  // 移除节点的课程内容关联
+  if (node.courseUnitIds) {
+    node.courseUnitIds = node.courseUnitIds.filter(id => id !== courseUnitId)
+  }
+  
+  // 移除课程内容的来源关联
+  delete courseUnit.sourcePathId
+  delete courseUnit.sourceNodeId
+  
+  saveUserCoreData(coreData)
+  
+  addCoreEvent({
+    type: 'node_courseunit_unlinked',
+    data: { pathId, nodeId, courseUnitId, nodeTitle: node.title, unitTitle: courseUnit.title }
+  })
+  
+  return true
+}
+
+// 获取目标的所有关联路径
+export const getPathsByGoal = (goalId: string): LearningPath[] => {
+  const coreData = getUserCoreData()
+  
+  // 通过两种方式查找：pathIds和goalId字段
+  const pathsByPathIds = coreData.paths.filter(path => {
+    const goal = coreData.goals.find(g => g.id === goalId)
+    return goal?.pathIds?.includes(path.id)
+  })
+  
+  const pathsByGoalId = coreData.paths.filter(path => path.goalId === goalId)
+  
+  // 合并并去重
+  const allPaths = [...pathsByPathIds, ...pathsByGoalId]
+  const uniquePaths = allPaths.filter((path, index, arr) => 
+    arr.findIndex(p => p.id === path.id) === index
+  )
+  
+  return uniquePaths
+}
+
+// 获取路径的来源目标
+export const getGoalByPath = (pathId: string): LearningGoal | null => {
+  const coreData = getUserCoreData()
+  const path = coreData.paths.find(p => p.id === pathId)
+  
+  if (!path) return null
+  
+  // 优先使用sourceGoalId，回退到goalId
+  const goalId = path.sourceGoalId || path.goalId
+  return coreData.goals.find(g => g.id === goalId) || null
+}
+
+// 获取节点的所有关联课程内容
+export const getCourseUnitsByNodeId = (pathId: string, nodeId: string): CourseUnit[] => {
+  const coreData = getUserCoreData()
+  const path = coreData.paths.find(p => p.id === pathId)
+  
+  if (!path) return []
+  
+  const node = path.nodes.find(n => n.id === nodeId)
+  if (!node) return []
+  
+  // 通过两种方式查找：courseUnitIds和nodeId字段
+  const unitsByIds = node.courseUnitIds ? 
+    coreData.courseUnits.filter(unit => node.courseUnitIds!.includes(unit.id)) : []
+  
+  const unitsByNodeId = coreData.courseUnits.filter(unit => unit.nodeId === nodeId)
+  
+  // 合并并去重
+  const allUnits = [...unitsByIds, ...unitsByNodeId]
+  const uniqueUnits = allUnits.filter((unit, index, arr) => 
+    arr.findIndex(u => u.id === unit.id) === index
+  )
+  
+  return uniqueUnits.map(ensureUnitProgress)
+    .sort((a, b) => (a.metadata.order || 0) - (b.metadata.order || 0))
+}
+
+// 获取课程内容的来源节点和路径
+export const getSourceByUri = (courseUnitId: string): { 
+  path: LearningPath | null, 
+  node: PathNode | null 
+} => {
+  const coreData = getUserCoreData()
+  const courseUnit = coreData.courseUnits.find(c => c.id === courseUnitId)
+  
+  if (!courseUnit) return { path: null, node: null }
+  
+  // 优先使用sourcePathId，回退到nodeId查找
+  let path: LearningPath | null = null
+  let node: PathNode | null = null
+  
+  if (courseUnit.sourcePathId) {
+    path = coreData.paths.find(p => p.id === courseUnit.sourcePathId) || null
+    if (path && courseUnit.sourceNodeId) {
+      node = path.nodes.find(n => n.id === courseUnit.sourceNodeId) || null
+    }
+  } else if (courseUnit.nodeId) {
+    // 回退：通过nodeId在所有路径中查找
+    for (const p of coreData.paths) {
+      const n = p.nodes.find(n => n.id === courseUnit.nodeId)
+      if (n) {
+        path = p
+        node = n
+        break
+      }
+    }
+  }
+  
+  return { path, node }
+}
+
+// 同步关联关系（清理无效关联）
+export const syncDataRelationships = (): {
+  removedLinks: string[]
+  errors: string[]
+} => {
+  const coreData = getUserCoreData()
+  const removedLinks: string[] = []
+  const errors: string[] = []
+  
+  try {
+    // 清理目标中的无效路径关联
+    coreData.goals.forEach(goal => {
+      if (goal.pathIds) {
+        const validPathIds = goal.pathIds.filter(pathId => 
+          coreData.paths.some(p => p.id === pathId)
+        )
+        
+        if (validPathIds.length !== goal.pathIds.length) {
+          const removedPaths = goal.pathIds.filter(id => !validPathIds.includes(id))
+          removedLinks.push(`Goal ${goal.title}: removed invalid path links ${removedPaths.join(', ')}`)
+          goal.pathIds = validPathIds
+        }
+      }
+    })
+    
+    // 清理路径中的无效目标关联
+    coreData.paths.forEach(path => {
+      if (path.sourceGoalId && !coreData.goals.some(g => g.id === path.sourceGoalId)) {
+        removedLinks.push(`Path ${path.title}: removed invalid goal link ${path.sourceGoalId}`)
+        delete path.sourceGoalId
+      }
+    })
+    
+    // 清理节点中的无效课程内容关联
+    coreData.paths.forEach(path => {
+      path.nodes.forEach(node => {
+        if (node.courseUnitIds) {
+          const validUnitIds = node.courseUnitIds.filter(unitId =>
+            coreData.courseUnits.some(u => u.id === unitId)
+          )
+          
+          if (validUnitIds.length !== node.courseUnitIds.length) {
+            const removedUnits = node.courseUnitIds.filter(id => !validUnitIds.includes(id))
+            removedLinks.push(`Node ${node.title}: removed invalid course unit links ${removedUnits.join(', ')}`)
+            node.courseUnitIds = validUnitIds
+          }
+        }
+      })
+    })
+    
+    // 清理课程内容中的无效来源关联
+    coreData.courseUnits.forEach(unit => {
+      if (unit.sourcePathId && !coreData.paths.some(p => p.id === unit.sourcePathId)) {
+        removedLinks.push(`CourseUnit ${unit.title}: removed invalid path link ${unit.sourcePathId}`)
+        delete unit.sourcePathId
+      }
+      
+      if (unit.sourceNodeId && unit.sourcePathId) {
+        const path = coreData.paths.find(p => p.id === unit.sourcePathId)
+        if (path && !path.nodes.some(n => n.id === unit.sourceNodeId)) {
+          removedLinks.push(`CourseUnit ${unit.title}: removed invalid node link ${unit.sourceNodeId}`)
+          delete unit.sourceNodeId
+        }
+      }
+    })
+    
+    if (removedLinks.length > 0) {
+      saveUserCoreData(coreData)
+      
+      addCoreEvent({
+        type: 'data_relationships_synced',
+        data: { removedLinks, errors }
+      })
+    }
+    
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+    errors.push(`Sync error: ${errorMsg}`)
+  }
+  
+  return { removedLinks, errors }
+}
+
+// 获取完整的学习层次结构
+export const getLearningHierarchy = (): {
+  goals: Array<{
+    goal: LearningGoal
+    paths: Array<{
+      path: LearningPath
+      nodes: Array<{
+        node: PathNode
+        courseUnits: CourseUnit[]
+      }>
+    }>
+  }>
+} => {
+  const coreData = getUserCoreData()
+  
+  return {
+    goals: coreData.goals.map(goal => ({
+      goal,
+      paths: getPathsByGoal(goal.id).map(path => ({
+        path,
+        nodes: path.nodes.map(node => ({
+          node,
+          courseUnits: getCourseUnitsByNodeId(path.id, node.id)
+        }))
+      }))
+    }))
+  }
+}
+
+// 获取数据关联统计
+export const getRelationshipStats = (): {
+  totalGoals: number
+  goalsWithPaths: number
+  totalPaths: number
+  pathsWithGoals: number
+  totalNodes: number
+  nodesWithCourseUnits: number
+  totalCourseUnits: number
+  courseUnitsWithSources: number
+  orphanedPaths: number
+  orphanedCourseUnits: number
+} => {
+  const coreData = getUserCoreData()
+  
+  const totalGoals = coreData.goals.length
+  const goalsWithPaths = coreData.goals.filter(g => g.pathIds && g.pathIds.length > 0).length
+  
+  const totalPaths = coreData.paths.length
+  const pathsWithGoals = coreData.paths.filter(p => 
+    p.sourceGoalId || p.goalId || coreData.goals.some(g => g.pathIds?.includes(p.id))
+  ).length
+  
+  const totalNodes = coreData.paths.reduce((sum, path) => sum + path.nodes.length, 0)
+  const nodesWithCourseUnits = coreData.paths.reduce((sum, path) => 
+    sum + path.nodes.filter(n => n.courseUnitIds && n.courseUnitIds.length > 0).length, 0
+  )
+  
+  const totalCourseUnits = coreData.courseUnits.length
+  const courseUnitsWithSources = coreData.courseUnits.filter(u => 
+    u.sourcePathId || u.sourceNodeId || 
+    coreData.paths.some(p => p.nodes.some(n => n.courseUnitIds?.includes(u.id)))
+  ).length
+  
+  const orphanedPaths = totalPaths - pathsWithGoals
+  const orphanedCourseUnits = totalCourseUnits - courseUnitsWithSources
+  
+  return {
+    totalGoals,
+    goalsWithPaths,
+    totalPaths,
+    pathsWithGoals,
+    totalNodes,
+    nodesWithCourseUnits,
+    totalCourseUnits,
+    courseUnitsWithSources,
+    orphanedPaths,
+    orphanedCourseUnits
+  }
+}
+
+// 新增：批量关联管理功能
+export const createLearningPathWithGoalLink = (
+  path: Omit<LearningPath, 'id' | 'createdAt' | 'updatedAt'>,
+  goalId: string
+): LearningPath => {
+  // 确保goalId有效
+  const goal = getLearningGoals().find(g => g.id === goalId)
+  if (!goal) {
+    throw new Error('指定的学习目标不存在')
+  }
+  
+  // 创建路径并自动关联
+  const newPath = createLearningPath({
+    ...path,
+    goalId: goalId,
+    sourceGoalId: goalId
+  })
+  
+  // 更新目标的pathIds
+  linkPathToGoal(goalId, newPath.id)
+  
+  return newPath
+}
+
+export const createCourseUnitWithNodeLink = (
+  unit: Omit<CourseUnit, 'id' | 'createdAt' | 'updatedAt' | 'progress'>,
+  pathId: string,
+  nodeId: string
+): CourseUnit => {
+  // 验证路径和节点存在
+  const path = getLearningPaths().find(p => p.id === pathId)
+  if (!path) {
+    throw new Error('指定的学习路径不存在')
+  }
+  
+  const node = path.nodes.find(n => n.id === nodeId)
+  if (!node) {
+    throw new Error('指定的路径节点不存在')
+  }
+  
+  // 创建课程单元并自动关联
+  const newUnit = createCourseUnit({
+    ...unit,
+    nodeId: nodeId,
+    sourcePathId: pathId,
+    sourceNodeId: nodeId
+  })
+  
+  // 更新节点的courseUnitIds
+  linkCourseUnitToNode(pathId, nodeId, newUnit.id)
+  
+  return newUnit
+}
+
+// 新增：关联关系验证功能
+export const validateDataRelationships = (): {
+  isValid: boolean
+  issues: Array<{
+    type: 'missing_goal' | 'missing_path' | 'missing_node' | 'orphaned_path' | 'orphaned_unit'
+    id: string
+    description: string
+    severity: 'warning' | 'error'
+  }>
+  suggestions: string[]
+} => {
+  const coreData = getUserCoreData()
+  const issues: any[] = []
+  const suggestions: string[] = []
+  
+  // 检查路径的目标关联
+  coreData.paths.forEach(path => {
+    if (path.goalId && !coreData.goals.find(g => g.id === path.goalId)) {
+      issues.push({
+        type: 'missing_goal',
+        id: path.id,
+        description: `路径 "${path.title}" 关联的目标 ${path.goalId} 不存在`,
+        severity: 'error'
+      })
+    }
+    
+    if (!path.goalId && !path.sourceGoalId) {
+      issues.push({
+        type: 'orphaned_path',
+        id: path.id,
+        description: `路径 "${path.title}" 没有关联任何目标`,
+        severity: 'warning'
+      })
+    }
+  })
+  
+  // 检查课程单元的节点关联
+  coreData.courseUnits.forEach(unit => {
+    if (unit.nodeId) {
+      const parentPath = coreData.paths.find(p => 
+        p.nodes.some(n => n.id === unit.nodeId)
+      )
+      
+      if (!parentPath) {
+        issues.push({
+          type: 'missing_node',
+          id: unit.id,
+          description: `课程单元 "${unit.title}" 关联的节点 ${unit.nodeId} 不存在`,
+          severity: 'error'
+        })
+      }
+    } else {
+      issues.push({
+        type: 'orphaned_unit',
+        id: unit.id,
+        description: `课程单元 "${unit.title}" 没有关联任何节点`,
+        severity: 'warning'
+      })
+    }
+  })
+  
+  // 生成修复建议
+  if (issues.some(i => i.type === 'orphaned_path')) {
+    suggestions.push('考虑为孤立的学习路径创建对应的学习目标')
+  }
+  if (issues.some(i => i.type === 'orphaned_unit')) {
+    suggestions.push('为孤立的课程单元分配到合适的学习路径节点')
+  }
+  if (issues.some(i => i.severity === 'error')) {
+    suggestions.push('运行数据同步功能清理无效关联')
+  }
+  
+  return {
+    isValid: issues.filter(i => i.severity === 'error').length === 0,
+    issues,
+    suggestions
+  }
+}
+
+// 新增：智能关联建议功能
+export const getRelationshipSuggestions = (): {
+  pathSuggestions: Array<{
+    goalId: string
+    goalTitle: string
+    reason: string
+    recommendedPaths: Array<{
+      title: string
+      description: string
+      estimatedHours: number
+    }>
+  }>
+  unitSuggestions: Array<{
+    pathId: string
+    pathTitle: string
+    nodeId: string
+    nodeTitle: string
+    reason: string
+    recommendedUnits: Array<{
+      title: string
+      type: CourseUnit['type']
+      description: string
+    }>
+  }>
+  autoFix: Array<{
+    type: 'link_path_to_goal' | 'link_courseunit_to_node'
+    goalId?: string
+    pathId?: string
+    nodeId?: string
+    courseUnitId?: string
+    confidence: number
+  }>
+} => {
+  const coreData = getUserCoreData()
+  const pathSuggestions: any[] = []
+  const unitSuggestions: any[] = []
+  const autoFix: any[] = []
+  
+  // 为没有路径的目标生成路径建议
+  coreData.goals.forEach(goal => {
+    const hasRelatedPaths = coreData.paths.some(p => 
+      p.sourceGoalId === goal.id || 
+      p.goalId === goal.id || 
+      goal.pathIds?.includes(p.id)
+    )
+    
+    if (!hasRelatedPaths && goal.status === 'active') {
+      // 基于目标标题和描述生成路径建议
+      const keywords = goal.title.toLowerCase()
+      let recommendedPaths: any[] = []
+      
+      if (keywords.includes('javascript') || keywords.includes('js')) {
+        recommendedPaths = [
+          {
+            title: 'JavaScript基础语法',
+            description: '掌握JavaScript核心语法和基本概念',
+            estimatedHours: 40
+          },
+          {
+            title: 'DOM操作与事件处理',
+            description: '学习网页交互开发技术',
+            estimatedHours: 30
+          }
+        ]
+      } else if (keywords.includes('react')) {
+        recommendedPaths = [
+          {
+            title: 'React基础入门',
+            description: '学习React组件化开发',
+            estimatedHours: 50
+          },
+          {
+            title: 'React Hooks深入',
+            description: '掌握现代React开发模式',
+            estimatedHours: 35
+          }
+        ]
+      } else if (keywords.includes('python')) {
+        recommendedPaths = [
+          {
+            title: 'Python基础编程',
+            description: '学习Python语法和编程思维',
+            estimatedHours: 60
+          },
+          {
+            title: 'Python数据分析',
+            description: '使用pandas和numpy进行数据分析',
+            estimatedHours: 45
+          }
+        ]
+      } else {
+        recommendedPaths = [
+          {
+            title: `${goal.title} - 基础学习路径`,
+            description: `针对${goal.title}的入门学习计划`,
+            estimatedHours: 40
+          }
+        ]
+      }
+      
+      pathSuggestions.push({
+        goalId: goal.id,
+        goalTitle: goal.title,
+        reason: '该目标尚未有相关的学习路径，建议创建学习计划',
+        recommendedPaths
+      })
+    }
+  })
+  
+  // 为空节点生成课程内容建议
+  coreData.paths.forEach(path => {
+    path.nodes.forEach(node => {
+      const hasRelatedUnits = coreData.courseUnits.some(u => 
+        u.sourceNodeId === node.id || 
+        u.nodeId === node.id ||
+        node.courseUnitIds?.includes(u.id)
+      )
+      
+      if (!hasRelatedUnits) {
+        // 基于节点标题生成课程建议
+        const keywords = node.title.toLowerCase()
+        let recommendedUnits: any[] = []
+        
+        if (keywords.includes('基础') || keywords.includes('入门')) {
+          recommendedUnits = [
+            {
+              title: `${node.title} - 理论学习`,
+              type: 'reading' as CourseUnit['type'],
+              description: '阅读相关理论知识和概念'
+            },
+            {
+              title: `${node.title} - 实践练习`,
+              type: 'practice' as CourseUnit['type'],
+              description: '通过练习巩固所学知识'
+            }
+          ]
+        } else if (keywords.includes('项目') || keywords.includes('实战')) {
+          recommendedUnits = [
+            {
+              title: `${node.title} - 项目规划`,
+              type: 'reading' as CourseUnit['type'],
+              description: '项目需求分析和技术选型'
+            },
+            {
+              title: `${node.title} - 代码实现`,
+              type: 'coding' as CourseUnit['type'],
+              description: '完成项目核心功能开发'
+            }
+          ]
+        } else {
+          recommendedUnits = [
+            {
+              title: `${node.title} - 学习资料`,
+              type: 'reading' as CourseUnit['type'],
+              description: `关于${node.title}的学习内容`
+            }
+          ]
+        }
+        
+        unitSuggestions.push({
+          pathId: path.id,
+          pathTitle: path.title,
+          nodeId: node.id,
+          nodeTitle: node.title,
+          reason: '该节点没有相关的课程内容，建议添加学习材料',
+          recommendedUnits
+        })
+      }
+    })
+  })
+  
+  // 生成自动修复建议
+  // 查找可能的路径-目标匹配
+  coreData.paths.forEach(path => {
+    if (!path.sourceGoalId && !path.goalId) {
+      // 尝试基于标题匹配找到合适的目标
+      const matchingGoal = coreData.goals.find(goal => 
+        goal.title.toLowerCase().includes(path.title.toLowerCase().substring(0, 10)) ||
+        path.title.toLowerCase().includes(goal.title.toLowerCase().substring(0, 10))
+      )
+      
+      if (matchingGoal) {
+        autoFix.push({
+          type: 'link_path_to_goal' as const,
+          goalId: matchingGoal.id,
+          pathId: path.id,
+          confidence: 0.8
+        })
+      }
+    }
+  })
+  
+  // 查找可能的课程-节点匹配
+  coreData.courseUnits.forEach(unit => {
+    if (!unit.sourceNodeId && !unit.nodeId) {
+      // 尝试基于标题匹配找到合适的节点
+      for (const path of coreData.paths) {
+        const matchingNode = path.nodes.find(node =>
+          node.title.toLowerCase().includes(unit.title.toLowerCase().substring(0, 8)) ||
+          unit.title.toLowerCase().includes(node.title.toLowerCase().substring(0, 8))
+        )
+        
+        if (matchingNode) {
+          autoFix.push({
+            type: 'link_courseunit_to_node' as const,
+            pathId: path.id,
+            nodeId: matchingNode.id,
+            courseUnitId: unit.id,
+            confidence: 0.7
+          })
+          break
+        }
+      }
+    }
+  })
+  
+  return {
+    pathSuggestions,
+    unitSuggestions,
+    autoFix: autoFix.filter(fix => fix.confidence >= 0.7) // 只返回高置信度的修复建议
+  }
+}
+
+// 新增：批量数据操作功能
+export const batchCreatePathsForGoal = async (
+  goalId: string,
+  pathConfigs: Array<{
+    title: string
+    description: string
+    nodes: Omit<PathNode, 'id' | 'status' | 'progress' | 'courseUnitIds'>[]
+  }>
+): Promise<LearningPath[]> => {
+  const goal = getLearningGoals().find(g => g.id === goalId)
+  if (!goal) {
+    throw new Error('指定的学习目标不存在')
+  }
+  
+  const createdPaths: LearningPath[] = []
+  
+  for (const config of pathConfigs) {
+    const nodesWithIds = config.nodes.map(node => ({
+      ...node,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      status: 'not_started' as const,
+      progress: 0,
+      courseUnitIds: []
+    }))
+    
+    const path = createLearningPathWithGoalLink({
+      goalId,
+      title: config.title,
+      description: config.description,
+      totalEstimatedHours: nodesWithIds.reduce((sum, node) => sum + node.estimatedHours, 0),
+      nodes: nodesWithIds,
+      dependencies: [],
+      milestones: [],
+      version: '1.0.0',
+      status: 'draft'
+    }, goalId)
+    
+    createdPaths.push(path)
+  }
+  
+  return createdPaths
+}
+
+export const batchCreateUnitsForNode = async (
+  pathId: string,
+  nodeId: string,
+  unitConfigs: Array<{
+    title: string
+    description: string
+    type: CourseUnit['type']
+    content: CourseUnit['content']
+    metadata: CourseUnit['metadata']
+  }>
+): Promise<CourseUnit[]> => {
+  const path = getLearningPaths().find(p => p.id === pathId)
+  if (!path) {
+    throw new Error('指定的学习路径不存在')
+  }
+  
+  const node = path.nodes.find(n => n.id === nodeId)
+  if (!node) {
+    throw new Error('指定的路径节点不存在')
+  }
+  
+  const createdUnits: CourseUnit[] = []
+  
+  for (const config of unitConfigs) {
+    const unit = createCourseUnitWithNodeLink({
+      nodeId,
+      title: config.title,
+      description: config.description,
+      type: config.type,
+      content: config.content,
+      metadata: {
+        ...config.metadata,
+        order: createdUnits.length
+      },
+      sourcePathId: pathId,
+      sourceNodeId: nodeId
+    }, pathId, nodeId)
+    
+    createdUnits.push(unit)
+  }
+  
+  return createdUnits
+}

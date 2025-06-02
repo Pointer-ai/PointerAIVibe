@@ -31,6 +31,7 @@ export interface LearningGoal {
   createdAt: string
   updatedAt: string
   status: 'active' | 'completed' | 'paused' | 'cancelled'
+  pathIds?: string[]
 }
 
 export interface PathNode {
@@ -53,6 +54,7 @@ export interface PathNode {
   progress: number
   startedAt?: string
   completedAt?: string
+  courseUnitIds?: string[]
 }
 
 export interface LearningPath {
@@ -73,6 +75,7 @@ export interface LearningPath {
   updatedAt: string
   version: string
   status: 'draft' | 'active' | 'completed' | 'archived' | 'frozen' | 'paused'
+  sourceGoalId?: string
 }
 
 export interface CourseUnit {
@@ -188,6 +191,8 @@ export interface CourseUnit {
   }
   createdAt: string
   updatedAt: string
+  sourcePathId?: string
+  sourceNodeId?: string
 }
 
 export interface AgentTool {

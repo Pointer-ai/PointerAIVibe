@@ -17,12 +17,25 @@ import {
   markSectionComplete,
   startCourseUnit,
   getCourseStats,
-  createCourseUnit
+  createCourseUnit,
+  // 新增：关联管理功能
+  linkPathToGoal,
+  linkCourseUnitToNode,
+  unlinkPathFromGoal,
+  unlinkCourseUnitFromNode,
+  getPathsByGoal,
+  getGoalByPath,
+  getCourseUnitsByNodeId,
+  getSourceByUri,
+  syncDataRelationships,
+  getLearningHierarchy,
+  getRelationshipStats
 } from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { addActivityRecord } from '../modules/profileSettings/service'
 import { agentToolExecutor } from '../modules/coreData'
 import { LearningGoal, LearningPath, CourseUnit } from '../modules/coreData/types'
+import { EnhancedRelationshipPanel } from './EnhancedRelationshipPanel'
 
 export const DataInspector: React.FC = () => {
   const [profileData, setProfileData] = useState<any>(null)
@@ -47,6 +60,15 @@ export const DataInspector: React.FC = () => {
   const [selectedUnit, setSelectedUnit] = useState<CourseUnit | null>(null)
   const [courseStats, setCourseStats] = useState<any>(null)
   const [showCourseManagement, setShowCourseManagement] = useState(false)
+
+  // 新增：关联管理相关状态
+  const [showRelationshipManagement, setShowRelationshipManagement] = useState(false)
+  const [relationshipStats, setRelationshipStats] = useState<any>(null)
+  const [learningHierarchy, setLearningHierarchy] = useState<any>(null)
+  const [selectedPathForLink, setSelectedPathForLink] = useState<string | null>(null)
+  const [selectedGoalForLink, setSelectedGoalForLink] = useState<string | null>(null)
+  const [selectedNodeForLink, setSelectedNodeForLink] = useState<string | null>(null)
+  const [selectedUnitForLink, setSelectedUnitForLink] = useState<string | null>(null)
 
   const refreshData = () => {
     const profile = getCurrentProfile()
@@ -75,6 +97,10 @@ export const DataInspector: React.FC = () => {
     // 刷新课程内容管理数据
     setCourseUnits(getCourseUnits())
     setCourseStats(getCourseStats())
+    
+    // 刷新关联管理数据
+    setRelationshipStats(getRelationshipStats())
+    setLearningHierarchy(getLearningHierarchy())
   }
 
   useEffect(() => {
@@ -467,6 +493,123 @@ export const DataInspector: React.FC = () => {
   // 获取节点学习统计
   const getNodeStats = (nodeId: string) => {
     return getNodeLearningStats(nodeId)
+  }
+
+  // ========== 关联管理功能 ==========
+  
+  // 关联路径到目标
+  const linkPath = async (goalId: string, pathId: string) => {
+    try {
+      const result = linkPathToGoal(goalId, pathId)
+      if (result) {
+        setMessage(`✅ 成功关联路径到目标`)
+        refreshData()
+      } else {
+        setMessage(`❌ 关联失败`)
+      }
+    } catch (error) {
+      setMessage(`❌ 关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 关联课程内容到节点
+  const linkCourseUnit = async (pathId: string, nodeId: string, courseUnitId: string) => {
+    try {
+      const result = linkCourseUnitToNode(pathId, nodeId, courseUnitId)
+      if (result) {
+        setMessage(`✅ 成功关联课程内容到节点`)
+        refreshData()
+      } else {
+        setMessage(`❌ 关联失败`)
+      }
+    } catch (error) {
+      setMessage(`❌ 关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 移除关联
+  const unlinkPath = async (goalId: string, pathId: string) => {
+    try {
+      const result = unlinkPathFromGoal(goalId, pathId)
+      if (result) {
+        setMessage(`✅ 成功移除路径与目标的关联`)
+        refreshData()
+      } else {
+        setMessage(`❌ 移除关联失败`)
+      }
+    } catch (error) {
+      setMessage(`❌ 移除关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  const unlinkUnit = async (pathId: string, nodeId: string, courseUnitId: string) => {
+    try {
+      const result = unlinkCourseUnitFromNode(pathId, nodeId, courseUnitId)
+      if (result) {
+        setMessage(`✅ 成功移除课程内容与节点的关联`)
+        refreshData()
+      } else {
+        setMessage(`❌ 移除关联失败`)
+      }
+    } catch (error) {
+      setMessage(`❌ 移除关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 同步关联关系
+  const syncRelationships = async () => {
+    try {
+      const result = syncDataRelationships()
+      setMessage(`✅ 同步完成: ${result.removedLinks.length > 0 ? 
+        `清理了 ${result.removedLinks.length} 个无效关联` : 
+        '数据关联关系正常'}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 同步失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 使用Agent工具执行关联操作
+  const linkPathWithAgent = async () => {
+    if (!selectedGoalForLink || !selectedPathForLink) {
+      setMessage('❌ 请选择目标和路径')
+      return
+    }
+
+    try {
+      await agentToolExecutor.executeTool('link_path_to_goal', {
+        goalId: selectedGoalForLink,
+        pathId: selectedPathForLink
+      })
+      setMessage(`✅ 通过Agent成功关联路径到目标`)
+      setSelectedGoalForLink(null)
+      setSelectedPathForLink(null)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ Agent关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  const linkUnitWithAgent = async () => {
+    if (!selectedPathForLink || !selectedNodeForLink || !selectedUnitForLink) {
+      setMessage('❌ 请选择路径、节点和课程内容')
+      return
+    }
+
+    try {
+      await agentToolExecutor.executeTool('link_courseunit_to_node', {
+        pathId: selectedPathForLink,
+        nodeId: selectedNodeForLink,
+        courseUnitId: selectedUnitForLink
+      })
+      setMessage(`✅ 通过Agent成功关联课程内容到节点`)
+      setSelectedPathForLink(null)
+      setSelectedNodeForLink(null)
+      setSelectedUnitForLink(null)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ Agent关联失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
   }
 
   return (
@@ -1310,10 +1453,13 @@ export const DataInspector: React.FC = () => {
             <h3 style={{ margin: 0, color: '#333' }}>📚 课程内容管理</h3>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={() => setShowCourseManagement(!showCourseManagement)}
+                onClick={() => {
+                  setShowCourseManagement(!showCourseManagement)
+                  setShowRelationshipManagement(false)
+                }}
                 style={{
-                  padding: '8px 15px',
-                  backgroundColor: '#007bff',
+                  padding: '10px 20px',
+                  backgroundColor: showCourseManagement ? '#28a745' : '#6c757d',
                   color: 'white',
                   border: 'none',
                   borderRadius: '5px',
@@ -1321,76 +1467,25 @@ export const DataInspector: React.FC = () => {
                   fontSize: '14px'
                 }}
               >
-                {showCourseManagement ? '收起管理' : '展开管理'}
+                {showCourseManagement ? '📚 隐藏课程管理' : '📚 显示课程管理'}
               </button>
             </div>
           </div>
 
-          {/* 课程统计卡片 */}
-          {courseStats && (
-            <div style={{
-              padding: '15px',
-              backgroundColor: '#f8f9fa',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              border: '1px solid #dee2e6'
-            }}>
-              <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>📊 课程学习统计</h4>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', 
-                gap: '15px' 
-              }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#28a745' }}>
-                    {courseStats.completedUnits}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>已完成</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#ffc107' }}>
-                    {courseStats.inProgressUnits}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>进行中</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#6c757d' }}>
-                    {courseStats.notStartedUnits}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>未开始</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#17a2b8' }}>
-                    {Math.round(courseStats.totalTimeSpent / 60)}h
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>学习时长</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc3545' }}>
-                    {courseStats.averageScore}%
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>平均分数</div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {showCourseManagement && (
-            <>
+            <div>
               {/* 节点选择器 */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  🎯 选择路径节点：
-                </label>
+                <h4 style={{ marginBottom: '10px', color: '#495057' }}>🎯 选择学习节点</h4>
                 <select
                   value={selectedNode || ''}
-                  onChange={(e) => setSelectedNode(e.target.value)}
+                  onChange={(e) => setSelectedNode(e.target.value || null)}
                   style={{
                     padding: '8px 12px',
+                    border: '1px solid #ced4da',
                     borderRadius: '4px',
-                    border: '1px solid #ddd',
                     fontSize: '14px',
-                    minWidth: '300px'
+                    width: '300px'
                   }}
                 >
                   <option value="">-- 选择节点 --</option>
@@ -1402,14 +1497,13 @@ export const DataInspector: React.FC = () => {
                     ))
                   )}
                 </select>
-                
                 {selectedNode && (
                   <button
                     onClick={() => createNewCourseUnit(selectedNode)}
                     style={{
                       marginLeft: '10px',
-                      padding: '8px 15px',
-                      backgroundColor: '#28a745',
+                      padding: '8px 16px',
+                      backgroundColor: '#007bff',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
@@ -1690,7 +1784,7 @@ export const DataInspector: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* 简化视图 */}
@@ -1797,6 +1891,70 @@ export const DataInspector: React.FC = () => {
             </details>
           </div>
         )}
+
+        {/* 关联管理 */}
+        <div style={{
+          padding: '20px',
+          backgroundColor: '#ffffff',
+          borderRadius: '8px',
+          border: '1px solid #ddd'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, color: '#333' }}>🔗 关联管理</h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setShowRelationshipManagement(!showRelationshipManagement)
+                  setShowCourseManagement(false)
+                }}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: showRelationshipManagement ? '#28a745' : '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                {showRelationshipManagement ? '🔗 隐藏关联管理' : '🔗 显示关联管理'}
+              </button>
+            </div>
+          </div>
+
+          {showRelationshipManagement ? (
+            <EnhancedRelationshipPanel />
+          ) : (
+            relationshipStats && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                <p>关联统计: <strong>{relationshipStats.goalsWithPaths}</strong> 个目标-路径关联, 
+                   <strong>{relationshipStats.courseUnitsWithSources}</strong> 个节点-课程关联</p>
+                {(relationshipStats.orphanedPaths > 0 || relationshipStats.orphanedCourseUnits > 0) && (
+                  <p style={{ color: '#dc3545' }}>
+                    ⚠️ 发现 <strong>{relationshipStats.orphanedPaths}</strong> 个孤立路径, 
+                    <strong>{relationshipStats.orphanedCourseUnits}</strong> 个孤立课程
+                  </p>
+                )}
+                <div style={{ marginTop: '10px' }}>
+                  <button
+                    onClick={() => setShowRelationshipManagement(true)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    🚀 打开智能关联管理
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       {/* 流程说明 */}

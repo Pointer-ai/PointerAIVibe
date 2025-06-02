@@ -14,7 +14,14 @@ import {
   deleteCourseUnit,
   recordAgentAction,
   getAbilityProfile,
-  addCoreEvent
+  addCoreEvent,
+  // 新增关联管理导入
+  createLearningPathWithGoalLink,
+  createCourseUnitWithNodeLink,
+  validateDataRelationships,
+  getRelationshipSuggestions,
+  batchCreatePathsForGoal,
+  batchCreateUnitsForNode
 } from './service'
 import { LearningGoal, LearningPath, PathNode, CourseUnit, AgentTool } from './types'
 import { log } from '../../utils/logger'
@@ -202,6 +209,86 @@ export const AGENT_TOOLS: AgentTool[] = [
     parameters: {
       unitId: { type: 'string', description: '课程单元ID' }
     }
+  },
+
+  // ========== 数据关联关系管理 ==========
+  {
+    name: 'link_path_to_goal',
+    description: '将学习路径关联到目标，建立Goal->Path的依赖关系',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      pathId: { type: 'string', description: '路径ID' }
+    }
+  },
+  {
+    name: 'link_courseunit_to_node',
+    description: '将课程内容关联到路径节点，建立Node->CourseUnit的依赖关系',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' },
+      nodeId: { type: 'string', description: '节点ID' },
+      courseUnitId: { type: 'string', description: '课程内容ID' }
+    }
+  },
+  {
+    name: 'unlink_path_from_goal',
+    description: '移除路径与目标的关联关系',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      pathId: { type: 'string', description: '路径ID' }
+    }
+  },
+  {
+    name: 'unlink_courseunit_from_node',
+    description: '移除课程内容与节点的关联关系',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' },
+      nodeId: { type: 'string', description: '节点ID' },
+      courseUnitId: { type: 'string', description: '课程内容ID' }
+    }
+  },
+  {
+    name: 'get_paths_by_goal',
+    description: '获取目标关联的所有学习路径',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' }
+    }
+  },
+  {
+    name: 'get_goal_by_path',
+    description: '获取学习路径的来源目标',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' }
+    }
+  },
+  {
+    name: 'get_courseunits_by_node',
+    description: '获取节点关联的所有课程内容',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' },
+      nodeId: { type: 'string', description: '节点ID' }
+    }
+  },
+  {
+    name: 'get_source_by_courseunit',
+    description: '获取课程内容的来源路径和节点',
+    parameters: {
+      courseUnitId: { type: 'string', description: '课程内容ID' }
+    }
+  },
+  {
+    name: 'sync_data_relationships',
+    description: '同步和清理数据关联关系，移除无效的关联',
+    parameters: {}
+  },
+  {
+    name: 'get_learning_hierarchy',
+    description: '获取完整的学习层次结构(Goal->Path->Node->CourseUnit)',
+    parameters: {}
+  },
+  {
+    name: 'get_relationship_stats',
+    description: '获取数据关联关系的统计信息，包括孤立数据统计',
+    parameters: {}
   },
 
   // ========== 分析和智能功能 ==========
@@ -487,7 +574,75 @@ export const AGENT_TOOLS: AgentTool[] = [
       syncRelatedPaths: { type: 'boolean', description: '是否同步相关路径', optional: true },
       allowPriorityOverride: { type: 'boolean', description: '是否允许优先级覆盖', optional: true }
     }
-  }
+  },
+  // ========== 新增：数据关联管理工具 ==========
+  {
+    name: 'validate_data_relationships',
+    description: '验证数据关联关系的完整性，检查孤立数据和无效关联',
+    parameters: {}
+  },
+  {
+    name: 'get_relationship_suggestions',
+    description: '获取智能关联建议，为目标推荐路径，为节点推荐课程内容',
+    parameters: {}
+  },
+  {
+    name: 'create_path_with_goal_link',
+    description: '创建学习路径并自动关联到指定目标',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      title: { type: 'string', description: '路径标题' },
+      description: { type: 'string', description: '路径描述' },
+      nodes: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '学习节点列表' 
+      }
+    }
+  },
+  {
+    name: 'create_course_unit_with_node_link',
+    description: '创建课程内容并自动关联到指定节点',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' },
+      nodeId: { type: 'string', description: '节点ID' },
+      title: { type: 'string', description: '课程单元标题' },
+      description: { type: 'string', description: '课程描述' },
+      type: { 
+        type: 'string', 
+        enum: ['theory', 'example', 'exercise', 'project', 'quiz'],
+        description: '课程类型' 
+      },
+      content: { type: 'object', description: '课程内容对象' }
+    }
+  },
+  {
+    name: 'batch_create_paths_for_goal',
+    description: '为指定目标批量创建多个学习路径',
+    parameters: {
+      goalId: { type: 'string', description: '目标ID' },
+      pathConfigs: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '路径配置列表，包含标题、描述和节点' 
+      }
+    }
+  },
+  {
+    name: 'batch_create_units_for_node',
+    description: '为指定节点批量创建多个课程内容',
+    parameters: {
+      pathId: { type: 'string', description: '路径ID' },
+      nodeId: { type: 'string', description: '节点ID' },
+      unitConfigs: { 
+        type: 'array', 
+        items: { type: 'object' },
+        description: '课程单元配置列表' 
+      }
+    }
+  },
+
+  // ========== 智能分析工具 ==========
 ]
 
 /**
@@ -566,6 +721,41 @@ export class AgentToolExecutor {
           
         case 'delete_course_unit':
           result = await this.deleteCourseUnitTool(parameters)
+          break
+
+        // ========== 数据关联关系管理 ==========
+        case 'link_path_to_goal':
+          result = await this.linkPathToGoalTool(parameters)
+          break
+        case 'link_courseunit_to_node':
+          result = await this.linkCourseUnitToNodeTool(parameters)
+          break
+        case 'unlink_path_from_goal':
+          result = await this.unlinkPathFromGoalTool(parameters)
+          break
+        case 'unlink_courseunit_from_node':
+          result = await this.unlinkCourseUnitFromNodeTool(parameters)
+          break
+        case 'get_paths_by_goal':
+          result = await this.getPathsByGoalTool(parameters)
+          break
+        case 'get_goal_by_path':
+          result = await this.getGoalByPathTool(parameters)
+          break
+        case 'get_courseunits_by_node':
+          result = await this.getCourseUnitsByNodeTool(parameters)
+          break
+        case 'get_source_by_courseunit':
+          result = await this.getSourceByCourseUnitTool(parameters)
+          break
+        case 'sync_data_relationships':
+          result = await this.syncDataRelationshipsTool(parameters)
+          break
+        case 'get_learning_hierarchy':
+          result = await this.getLearningHierarchyTool(parameters)
+          break
+        case 'get_relationship_stats':
+          result = await this.getRelationshipStatsTool(parameters)
           break
 
         // ========== 分析和智能功能 ==========
@@ -654,6 +844,24 @@ export class AgentToolExecutor {
           break
         case 'configure_goal_activation':
           result = await this.configureGoalActivationTool(parameters)
+          break
+        case 'validate_data_relationships':
+          result = await this.validateDataRelationshipsTool(parameters)
+          break
+        case 'get_relationship_suggestions':
+          result = await this.getRelationshipSuggestionsTool(parameters)
+          break
+        case 'create_path_with_goal_link':
+          result = await this.createPathWithGoalLinkTool(parameters)
+          break
+        case 'create_course_unit_with_node_link':
+          result = await this.createCourseUnitWithNodeLinkTool(parameters)
+          break
+        case 'batch_create_paths_for_goal':
+          result = await this.batchCreatePathsForGoalTool(parameters)
+          break
+        case 'batch_create_units_for_node':
+          result = await this.batchCreateUnitsForNodeTool(parameters)
           break
           
         default:
@@ -2801,6 +3009,402 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
       }
     } catch (error) {
       throw new Error(`配置更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // ========== 数据关联关系管理工具实现 ==========
+
+  private async linkPathToGoalTool(params: any): Promise<any> {
+    const { goalId, pathId } = params
+    
+    if (!goalId || !pathId) {
+      throw new Error('目标ID和路径ID不能为空')
+    }
+
+    try {
+      const { linkPathToGoal } = await import('./service')
+      const result = linkPathToGoal(goalId, pathId)
+      
+      return {
+        success: result,
+        message: result ? '成功关联路径到目标' : '关联失败',
+        goalId,
+        pathId
+      }
+    } catch (error) {
+      throw new Error(`关联路径失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async linkCourseUnitToNodeTool(params: any): Promise<any> {
+    const { pathId, nodeId, courseUnitId } = params
+    
+    if (!pathId || !nodeId || !courseUnitId) {
+      throw new Error('路径ID、节点ID和课程内容ID不能为空')
+    }
+
+    try {
+      const { linkCourseUnitToNode } = await import('./service')
+      const result = linkCourseUnitToNode(pathId, nodeId, courseUnitId)
+      
+      return {
+        success: result,
+        message: result ? '成功关联课程内容到节点' : '关联失败',
+        pathId,
+        nodeId,
+        courseUnitId
+      }
+    } catch (error) {
+      throw new Error(`关联课程内容失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async unlinkPathFromGoalTool(params: any): Promise<any> {
+    const { goalId, pathId } = params
+    
+    if (!goalId || !pathId) {
+      throw new Error('目标ID和路径ID不能为空')
+    }
+
+    try {
+      const { unlinkPathFromGoal } = await import('./service')
+      const result = unlinkPathFromGoal(goalId, pathId)
+      
+      return {
+        success: result,
+        message: result ? '成功移除路径与目标的关联' : '移除失败',
+        goalId,
+        pathId
+      }
+    } catch (error) {
+      throw new Error(`移除路径与目标的关联关系失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async unlinkCourseUnitFromNodeTool(params: any): Promise<any> {
+    const { pathId, nodeId, courseUnitId } = params
+    
+    if (!pathId || !nodeId || !courseUnitId) {
+      throw new Error('路径ID、节点ID和课程内容ID不能为空')
+    }
+
+    try {
+      const { unlinkCourseUnitFromNode } = await import('./service')
+      const result = unlinkCourseUnitFromNode(pathId, nodeId, courseUnitId)
+      
+      return {
+        success: result,
+        message: result ? '成功移除课程内容与节点的关联' : '移除失败',
+        pathId,
+        nodeId,
+        courseUnitId
+      }
+    } catch (error) {
+      throw new Error(`移除课程内容与节点的关联关系失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getPathsByGoalTool(params: any): Promise<any> {
+    const { goalId } = params
+    
+    if (!goalId) {
+      throw new Error('目标ID不能为空')
+    }
+
+    try {
+      const { getPathsByGoal } = await import('./service')
+      const paths = getPathsByGoal(goalId)
+      
+      return {
+        goalId,
+        paths,
+        count: paths.length
+      }
+    } catch (error) {
+      throw new Error(`获取目标关联的所有学习路径失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getGoalByPathTool(params: any): Promise<any> {
+    const { pathId } = params
+    
+    if (!pathId) {
+      throw new Error('路径ID不能为空')
+    }
+
+    try {
+      const { getGoalByPath } = await import('./service')
+      const goal = getGoalByPath(pathId)
+      
+      return {
+        pathId,
+        goal,
+        hasGoal: !!goal
+      }
+    } catch (error) {
+      throw new Error(`获取学习路径的来源目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getCourseUnitsByNodeTool(params: any): Promise<any> {
+    const { pathId, nodeId } = params
+    
+    if (!pathId || !nodeId) {
+      throw new Error('路径ID和节点ID不能为空')
+    }
+
+    try {
+      const { getCourseUnitsByNodeId } = await import('./service')
+      const courseUnits = getCourseUnitsByNodeId(pathId, nodeId)
+      
+      return {
+        pathId,
+        nodeId,
+        courseUnits,
+        count: courseUnits.length
+      }
+    } catch (error) {
+      throw new Error(`获取节点关联的所有课程内容失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getSourceByCourseUnitTool(params: any): Promise<any> {
+    const { courseUnitId } = params
+    
+    if (!courseUnitId) {
+      throw new Error('课程内容ID不能为空')
+    }
+
+    try {
+      const { getSourceByUri } = await import('./service')
+      const result = getSourceByUri(courseUnitId)
+      
+      return {
+        courseUnitId,
+        path: result.path,
+        node: result.node,
+        hasSource: !!(result.path && result.node)
+      }
+    } catch (error) {
+      throw new Error(`获取课程内容的来源路径和节点失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async syncDataRelationshipsTool(params: any): Promise<any> {
+    try {
+      const { syncDataRelationships } = await import('./service')
+      const result = syncDataRelationships()
+      
+      return {
+        ...result,
+        message: result.removedLinks.length > 0 ? 
+          `清理了 ${result.removedLinks.length} 个无效关联` : 
+          '数据关联关系正常，无需清理'
+      }
+    } catch (error) {
+      throw new Error(`同步和清理数据关联关系失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getLearningHierarchyTool(params: any): Promise<any> {
+    try {
+      const { getLearningHierarchy } = await import('./service')
+      const hierarchy = getLearningHierarchy()
+      
+      return {
+        ...hierarchy,
+        summary: {
+          totalGoals: hierarchy.goals.length,
+          totalPaths: hierarchy.goals.reduce((sum, g) => sum + g.paths.length, 0),
+          totalNodes: hierarchy.goals.reduce((sum, g) => 
+            sum + g.paths.reduce((pathSum, p) => pathSum + p.nodes.length, 0), 0),
+          totalCourseUnits: hierarchy.goals.reduce((sum, g) => 
+            sum + g.paths.reduce((pathSum, p) => 
+              pathSum + p.nodes.reduce((nodeSum, n) => nodeSum + n.courseUnits.length, 0), 0), 0)
+        }
+      }
+    } catch (error) {
+      throw new Error(`获取完整的学习层次结构失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getRelationshipStatsTool(params: any): Promise<any> {
+    try {
+      const { getRelationshipStats } = await import('./service')
+      const stats = getRelationshipStats()
+      
+      return {
+        ...stats,
+        healthScore: Math.round(
+          ((stats.goalsWithPaths / Math.max(1, stats.totalGoals)) * 0.3 +
+           (stats.pathsWithGoals / Math.max(1, stats.totalPaths)) * 0.3 +
+           (stats.nodesWithCourseUnits / Math.max(1, stats.totalNodes)) * 0.2 +
+           (stats.courseUnitsWithSources / Math.max(1, stats.totalCourseUnits)) * 0.2) * 100
+        ),
+        recommendations: [
+          ...(stats.orphanedPaths > 0 ? [`发现 ${stats.orphanedPaths} 个孤立路径，建议关联到目标`] : []),
+          ...(stats.orphanedCourseUnits > 0 ? [`发现 ${stats.orphanedCourseUnits} 个孤立课程内容，建议关联到节点`] : []),
+          ...(stats.totalNodes - stats.nodesWithCourseUnits > 0 ? 
+            [`发现 ${stats.totalNodes - stats.nodesWithCourseUnits} 个空节点，建议添加课程内容`] : [])
+        ]
+      }
+    } catch (error) {
+      throw new Error(`获取数据关联关系的统计信息失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async validateDataRelationshipsTool(params: any): Promise<any> {
+    try {
+      const result = validateDataRelationships()
+      
+      return {
+        ...result,
+        message: result.isValid ? '数据关联关系完整' : '存在无效关联'
+      }
+    } catch (error) {
+      throw new Error(`验证数据关联关系失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async getRelationshipSuggestionsTool(params: any): Promise<any> {
+    try {
+      const suggestions = getRelationshipSuggestions()
+      
+      return {
+        suggestions,
+        message: '智能关联建议已生成'
+      }
+    } catch (error) {
+      throw new Error(`获取智能关联建议失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async createPathWithGoalLinkTool(params: any): Promise<any> {
+    const { goalId, title, description, nodes } = params
+    
+    if (!goalId || !title || !nodes || !Array.isArray(nodes)) {
+      throw new Error('目标ID、标题和节点列表不能为空')
+    }
+
+    try {
+      const nodesWithIds = nodes.map(node => ({
+        ...node,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        status: 'not_started' as const,
+        progress: 0,
+        courseUnitIds: []
+      }))
+      
+      const pathData = {
+        goalId,
+        title,
+        description: description || '',
+        totalEstimatedHours: nodesWithIds.reduce((sum, node) => sum + (node.estimatedHours || 0), 0),
+        nodes: nodesWithIds,
+        dependencies: [],
+        milestones: [],
+        version: '1.0.0',
+        status: 'draft' as const
+      }
+      
+      const result = createLearningPathWithGoalLink(pathData, goalId)
+      
+      return {
+        success: true,
+        path: result,
+        message: '成功创建学习路径并关联到目标',
+        goalId,
+        title,
+        description
+      }
+    } catch (error) {
+      throw new Error(`创建学习路径并关联到目标失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async createCourseUnitWithNodeLinkTool(params: any): Promise<any> {
+    const { pathId, nodeId, title, description, type, content } = params
+    
+    if (!pathId || !nodeId || !title || !type) {
+      throw new Error('路径ID、节点ID、标题和类型不能为空')
+    }
+
+    try {
+      const unitData = {
+        nodeId,
+        title,
+        description: description || '',
+        type,
+        content: content || {},
+        metadata: {
+          difficulty: 3,
+          estimatedTime: 60,
+          keywords: [],
+          learningObjectives: [],
+          prerequisites: [],
+          order: 0
+        },
+        sourcePathId: pathId,
+        sourceNodeId: nodeId
+      }
+      
+      const result = createCourseUnitWithNodeLink(unitData, pathId, nodeId)
+      
+      return {
+        success: true,
+        unit: result,
+        message: '成功创建课程内容并关联到节点',
+        pathId,
+        nodeId,
+        title
+      }
+    } catch (error) {
+      throw new Error(`创建课程内容并关联到节点失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async batchCreatePathsForGoalTool(params: any): Promise<any> {
+    const { goalId, pathConfigs } = params
+    
+    if (!goalId || !pathConfigs || !Array.isArray(pathConfigs)) {
+      throw new Error('目标ID和路径配置列表不能为空')
+    }
+
+    try {
+      const results = await batchCreatePathsForGoal(goalId, pathConfigs)
+      
+      return {
+        success: true,
+        paths: results,
+        count: results.length,
+        message: `成功为目标批量创建了 ${results.length} 个学习路径`,
+        goalId
+      }
+    } catch (error) {
+      throw new Error(`为指定目标批量创建多个学习路径失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  private async batchCreateUnitsForNodeTool(params: any): Promise<any> {
+    const { pathId, nodeId, unitConfigs } = params
+    
+    if (!pathId || !nodeId || !unitConfigs || !Array.isArray(unitConfigs)) {
+      throw new Error('路径ID、节点ID和课程单元配置列表不能为空')
+    }
+
+    try {
+      const results = await batchCreateUnitsForNode(pathId, nodeId, unitConfigs)
+      
+      return {
+        success: true,
+        units: results,
+        count: results.length,
+        message: `成功为节点批量创建了 ${results.length} 个课程内容`,
+        pathId,
+        nodeId
+      }
+    } catch (error) {
+      throw new Error(`为指定节点批量创建多个课程内容失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 }

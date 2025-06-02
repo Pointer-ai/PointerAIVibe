@@ -195,7 +195,7 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
       </div>
 
       {/* 评估报告 */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-sm border p-6">
         <h3 className="font-bold text-lg mb-4">评估报告</h3>
         
         <div className="space-y-4">
@@ -206,52 +206,43 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
           
           <div>
             <h4 className="font-medium text-gray-700 mb-2">✨ 优势领域</h4>
-            <ul className="list-disc list-inside space-y-1">
-              {report.strengths.map((strength, index) => (
-                <li key={index} className="text-gray-600">{strength}</li>
-              ))}
-            </ul>
+            {report.strengths.length > 0 ? (
+              <ul className="list-disc list-inside space-y-1">
+                {report.strengths.map((strength, index) => (
+                  <li key={index} className="text-gray-600">{strength}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400 italic">暂无优势领域信息</p>
+            )}
           </div>
           
           <div>
             <h4 className="font-medium text-gray-700 mb-2">📈 待改进项</h4>
-            <ul className="list-disc list-inside space-y-1">
-              {report.improvements.map((improvement, index) => (
-                <li key={index} className="text-gray-600">{improvement}</li>
-              ))}
-            </ul>
+            {report.improvements.length > 0 ? (
+              <ul className="list-disc list-inside space-y-1">
+                {report.improvements.map((improvement, index) => (
+                  <li key={index} className="text-gray-600">{improvement}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400 italic">暂无改进建议信息</p>
+            )}
           </div>
           
           <div>
             <h4 className="font-medium text-gray-700 mb-2">💡 发展建议</h4>
-            <ul className="list-disc list-inside space-y-1">
-              {report.recommendations.map((recommendation, index) => (
-                <li key={index} className="text-gray-600">{recommendation}</li>
-              ))}
-            </ul>
+            {report.recommendations.length > 0 ? (
+              <ul className="list-disc list-inside space-y-1">
+                {report.recommendations.map((recommendation, index) => (
+                  <li key={index} className="text-gray-600">{recommendation}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400 italic">暂无发展建议信息</p>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* 操作按钮 */}
-      <div className="flex gap-4">
-        {onGenerateImprovement && (
-          <button
-            onClick={onGenerateImprovement}
-            className="flex-1 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            生成提升计划
-          </button>
-        )}
-        
-        {onExport && (
-          <button
-            onClick={onExport}
-            className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            导出报告
-          </button>
-        )}
       </div>
     </div>
   )

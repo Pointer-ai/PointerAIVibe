@@ -31,7 +31,7 @@ import {
   createCourseUnit
 } from './coreData'
 import { getCurrentAssessment } from './abilityAssess/service'
-import { log } from '../utils/logger'
+import { log, error } from '../utils/logger'
 import { getAPIConfig } from './profileSettings/service'
 import { addActivityRecord } from './profileSettings/service'
 import { AbilityAssessmentService } from './abilityAssess/service'
@@ -1489,10 +1489,31 @@ export class LearningSystemService {
   }
 
   /**
-   * 生成能力提升计划
+   * 生成能力提升计划 - 使用新的智能提升计划
    */
-  async generateAbilityImprovementPlan(): Promise<string> {
-    return await this.abilityService.generateImprovementPlan()
+  async generateAbilityImprovementPlan(): Promise<any> {
+    log('[LearningSystem] Generating ability improvement plan via intelligent system')
+    
+    try {
+      const plan = await this.abilityService.generateIntelligentImprovementPlan()
+      
+      // 记录生成事件
+      addCoreEvent({
+        type: 'improvement_plan_generated',
+        details: {
+          planId: plan.id,
+          goalsCreated: plan.generatedGoals.shortTerm.length + plan.generatedGoals.mediumTerm.length,
+          estimatedTimeMonths: plan.metadata.estimatedTimeMonths,
+          targetImprovement: plan.metadata.targetImprovement,
+          timestamp: new Date().toISOString()
+        }
+      })
+
+      return plan
+    } catch (err) {
+      error('[LearningSystem] Failed to generate intelligent improvement plan:', err)
+      throw err
+    }
   }
 
   // ========== 数据同步验证和修复工具 ==========

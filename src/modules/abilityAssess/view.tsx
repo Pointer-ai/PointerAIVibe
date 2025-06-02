@@ -1,44 +1,49 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AssessmentForm } from './components/AssessmentForm'
 import { AssessmentResult } from './components/AssessmentResult'
-import { 
-  learningSystemService,
-  LearningSystemStatus
-} from '../learningSystem'
+import { ImprovementPlanView } from './components/ImprovementPlanView'
+import { AbilityAssessment, AssessmentInput, ImprovementPlan } from './types'
 import { AbilityAssessmentService } from './service'
-import { AssessmentInput, AbilityAssessment } from './types'
-import { log, error } from '../../utils/logger'
+import { learningSystemService } from '../learningSystem'
 import { addActivityRecord } from '../profileSettings/service'
+import { log, error } from '../../utils/logger'
 
 export const AbilityAssessView: React.FC = () => {
+  const [assessment, setAssessment] = useState<AbilityAssessment | null>(null)
+  const [improvementPlan, setImprovementPlan] = useState<ImprovementPlan | null>(null)
   const [loading, setLoading] = useState(false)
-  const [abilityService] = useState(() => new AbilityAssessmentService())
-  const [assessment, setAssessment] = useState<AbilityAssessment | null>(
-    abilityService.getCurrentAssessment()
-  )
-  const [systemStatus, setSystemStatus] = useState<LearningSystemStatus | null>(null)
-  const [improvementPlan, setImprovementPlan] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [systemStatus, setSystemStatus] = useState<any>(null)
+  const [planGenerating, setPlanGenerating] = useState(false)
 
-  // 获取系统状态
+  const abilityService = new AbilityAssessmentService()
+
+  // 刷新系统状态
   const refreshSystemStatus = async () => {
     try {
       const status = await learningSystemService.getSystemStatus()
       setSystemStatus(status)
     } catch (err) {
-      log('[AbilityAssessView] Failed to get system status:', err)
+      error('[AbilityAssessView] Failed to refresh system status:', err)
     }
   }
 
-  // 刷新评估数据和系统状态
+  // 刷新数据
   const refreshData = async () => {
-    setAssessment(abilityService.getCurrentAssessment())
-    await refreshSystemStatus()
+    try {
+      const currentAssessment = abilityService.getCurrentAssessment()
+      setAssessment(currentAssessment)
+      
+      if (currentAssessment) {
+        await refreshSystemStatus()
+      }
+    } catch (err) {
+      error('[AbilityAssessView] Failed to refresh data:', err)
+    }
   }
 
-  // 初始化时获取系统状态
-  React.useEffect(() => {
-    refreshSystemStatus()
+  useEffect(() => {
+    refreshData()
   }, [])
 
   // 处理评估提交
@@ -79,22 +84,29 @@ export const AbilityAssessView: React.FC = () => {
     setAssessment(null)
     setImprovementPlan(null)
     setErrorMsg(null)
+    // 清除缓存的提升计划
+    abilityService.clearImprovementPlanCache()
     refreshSystemStatus()
   }
 
-  // 生成改进计划
-  const handleGenerateImprovement = async () => {
+  // 生成智能提升计划
+  const handleGenerateIntelligentPlan = async () => {
     if (!assessment) return
     
-    setLoading(true)
+    setPlanGenerating(true)
+    setErrorMsg(null)
+    
     try {
-      const plan = await learningSystemService.generateAbilityImprovementPlan()
+      log('[AbilityAssessView] Starting intelligent improvement plan generation')
+      const plan = await abilityService.generateIntelligentImprovementPlan(assessment)
       setImprovementPlan(plan)
+      
+      log('[AbilityAssessView] Intelligent improvement plan generated successfully')
     } catch (err) {
-      error('[AbilityAssessView] Failed to generate improvement plan:', err)
-      setErrorMsg('生成改进计划失败')
+      error('[AbilityAssessView] Failed to generate intelligent improvement plan:', err)
+      setErrorMsg('生成智能提升计划失败，请重试')
     } finally {
-      setLoading(false)
+      setPlanGenerating(false)
     }
   }
 
@@ -121,12 +133,24 @@ export const AbilityAssessView: React.FC = () => {
     }
   }
 
+  // 开始学习
+  const handleStartLearning = (goalTitle: string) => {
+    // 导航到学习路径管理页面
+    window.location.href = '#learning-path'
+  }
+
+  // 查看学习进度
+  const handleViewProgress = () => {
+    // 导航到数据检查器页面
+    window.location.href = '#data-inspector'
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">🧠 智能能力评估</h1>
         <p className="text-gray-600 mt-2">
-          通过AI分析您的简历或完成技能问卷，获得个性化的能力评估报告
+          通过AI分析您的简历或完成技能问卷，获得个性化的能力评估报告和智能提升计划
         </p>
       </div>
 
@@ -201,14 +225,24 @@ export const AbilityAssessView: React.FC = () => {
         </>
       ) : (
         <>
-          <AssessmentResult 
-            assessment={assessment}
-            onGenerateImprovement={handleGenerateImprovement}
-            onExport={handleExport}
-          />
+          {/* 如果有提升计划，显示提升计划视图 */}
+          {improvementPlan ? (
+            <ImprovementPlanView 
+              plan={improvementPlan}
+              onStartLearning={handleStartLearning}
+              onViewProgress={handleViewProgress}
+            />
+          ) : (
+            /* 否则显示评估结果 */
+            <AssessmentResult 
+              assessment={assessment}
+              onGenerateImprovement={handleGenerateIntelligentPlan}
+              onExport={handleExport}
+            />
+          )}
           
           {/* 统一系统操作提示 */}
-          {systemStatus && !systemStatus.setupComplete && (
+          {systemStatus && !systemStatus.setupComplete && !improvementPlan && (
             <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-6">
               <div className="flex items-start gap-4">
                 <div className="text-green-500 text-2xl flex-shrink-0">🎯</div>
@@ -244,45 +278,59 @@ export const AbilityAssessView: React.FC = () => {
             </div>
           )}
 
-          {/* 改进计划 */}
-          {improvementPlan && (
-            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-yellow-900 mb-4">📈 能力提升计划</h3>
-              <div className="text-yellow-800 whitespace-pre-wrap">
-                {improvementPlan}
-              </div>
-            </div>
-          )}
-
           {/* 操作按钮 */}
           <div className="mt-8 flex flex-wrap gap-4">
-            <button
-              onClick={handleReassess}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              重新评估
-            </button>
-            {!improvementPlan && (
-              <button
-                onClick={handleGenerateImprovement}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                {loading ? '生成中...' : '生成提升计划'}
-              </button>
+            {improvementPlan ? (
+              <>
+                <button
+                  onClick={handleReassess}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  重新评估
+                </button>
+                <button
+                  onClick={() => setImprovementPlan(null)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  查看评估详情
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  导出完整报告
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleReassess}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  重新评估
+                </button>
+                <button
+                  onClick={handleGenerateIntelligentPlan}
+                  disabled={planGenerating}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {planGenerating ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      生成智能提升计划...
+                    </span>
+                  ) : (
+                    '🚀 生成智能提升计划'
+                  )}
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  导出报告
+                </button>
+              </>
             )}
-            <button
-              onClick={handleExport}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              导出报告
-            </button>
-            <button
-              onClick={refreshData}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-medium transition-colors"
-            >
-              刷新状态
-            </button>
           </div>
         </>
       )}

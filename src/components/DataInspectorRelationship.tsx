@@ -2,22 +2,17 @@ import React, { useState, useEffect } from 'react'
 import { 
   getLearningGoals, 
   getLearningPaths, 
-  getCourseUnits, 
+  getCourseUnits,
   linkPathToGoal,
   linkCourseUnitToNode,
-  unlinkPathFromGoal,
-  unlinkCourseUnitFromNode,
-  getPathsByGoal,
-  getGoalByPath,
-  getCourseUnitsByNodeId,
-  getSourceByUri,
   syncDataRelationships,
-  getLearningHierarchy,
-  getRelationshipStats,
-  agentToolExecutor,
   validateDataRelationships,
-  getRelationshipSuggestions
-} from '../modules/coreData'
+  getRelationshipStats,
+  getLearningHierarchy,
+  getRelationshipSuggestions,
+  repairDataInconsistencies
+} from '../modules/coreData/service'
+import { agentToolExecutor } from '../modules/coreData/agentTools'
 import { LearningGoal, LearningPath, CourseUnit } from '../modules/coreData/types'
 
 export const DataInspectorRelationship: React.FC = () => {
@@ -172,6 +167,24 @@ export const DataInspectorRelationship: React.FC = () => {
     }
   }
 
+  // 修复数据不一致性
+  const repairDataIssues = async () => {
+    setLoading(true)
+    try {
+      const result = repairDataInconsistencies()
+      if (result.repaired) {
+        setMessage(`✅ 数据修复完成！移除了 ${result.summary.removedPaths} 个无效路径，${result.summary.removedCourseUnits} 个无效课程单元，清理了 ${result.summary.cleanedReferences} 个引用`)
+      } else {
+        setMessage(`✅ 数据关联关系正常，无需修复`)
+      }
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 数据修复失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div style={{
       fontFamily: 'Arial, sans-serif',
@@ -246,7 +259,7 @@ export const DataInspectorRelationship: React.FC = () => {
             opacity: loading ? 0.6 : 1
           }}
         >
-          💡 智能建议
+          🧠 智能建议
         </button>
         
         <button
@@ -254,15 +267,31 @@ export const DataInspectorRelationship: React.FC = () => {
           disabled={loading}
           style={{
             padding: '10px 20px',
-            backgroundColor: '#ffc107',
-            color: '#212529',
+            backgroundColor: '#fd7e14',
+            color: 'white',
             border: 'none',
             borderRadius: '5px',
             cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.6 : 1
           }}
         >
-          🧹 同步关联
+          🔄 同步关联
+        </button>
+        
+        <button
+          onClick={repairDataIssues}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.6 : 1
+          }}
+        >
+          🔧 修复数据
         </button>
       </div>
 

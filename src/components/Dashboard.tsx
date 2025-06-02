@@ -75,8 +75,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
     {
       id: 'path',
       view: 'path-plan' as const,
-      title: '学习路径管理',
-      description: 'AI生成个性化学习路径，可视化管理',
+      title: '路径规划',
+      description: 'AI智能路径规划与可视化管理',
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />

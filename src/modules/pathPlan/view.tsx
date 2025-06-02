@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { log } from '../../utils/logger'
 import { PathPlanService } from './service'
 import { PathPlanState, SkillGapAnalysis, PathGenerationConfig } from './types'
-import { getLearningGoals, getLearningPaths, updateLearningGoal } from '../coreData'
+import { getLearningGoals, getLearningPaths, updateLearningGoal, getPathsByGoal, agentToolExecutor } from '../coreData'
 import { getCurrentAssessment } from '../abilityAssess/service'
 import { LearningGoal, LearningPath } from '../coreData/types'
 
@@ -21,6 +21,7 @@ export const PathPlanView = () => {
   
   const [goals, setGoals] = useState<LearningGoal[]>([])
   const [paths, setPaths] = useState<LearningPath[]>([])
+  const [selectedGoalPaths, setSelectedGoalPaths] = useState<LearningPath[]>([])
   const [config, setConfig] = useState<PathGenerationConfig>({
     learningStyle: 'balanced',
     timePreference: 'moderate',
@@ -32,8 +33,16 @@ export const PathPlanView = () => {
 
   // 刷新数据
   const refreshData = () => {
-    setGoals(getLearningGoals())
-    setPaths(getLearningPaths())
+    const allGoals = getLearningGoals()
+    const allPaths = getLearningPaths()
+    setGoals(allGoals)
+    setPaths(allPaths)
+    
+    // 更新选中目标的关联路径
+    if (state.selectedGoalId) {
+      const goalPaths = getPathsByGoal(state.selectedGoalId)
+      setSelectedGoalPaths(goalPaths)
+    }
   }
 
   useEffect(() => {
@@ -49,7 +58,37 @@ export const PathPlanView = () => {
       skillGapAnalysis: null,
       generatedPath: null
     }))
+    
+    // 获取该目标的关联路径
+    const goalPaths = getPathsByGoal(goalId)
+    setSelectedGoalPaths(goalPaths)
   }
+
+  // 路径状态管理函数
+  const updatePathStatus = async (pathId: string, status: string) => {
+    try {
+      await agentToolExecutor.executeTool('update_learning_path', {
+        pathId: pathId,
+        updates: { status }
+      })
+      setMessage(`✅ 路径状态已更新为: ${status}`)
+      refreshData()
+    } catch (error) {
+      setMessage(`❌ 更新失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
+
+  // 激活路径
+  const activatePath = (pathId: string) => updatePathStatus(pathId, 'active')
+  
+  // 暂停路径
+  const pausePath = (pathId: string) => updatePathStatus(pathId, 'paused')
+  
+  // 完成路径
+  const completePath = (pathId: string) => updatePathStatus(pathId, 'completed')
+  
+  // 归档路径
+  const archivePath = (pathId: string) => updatePathStatus(pathId, 'archived')
 
   // 执行技能差距分析
   const analyzeSkillGap = async () => {
@@ -140,7 +179,7 @@ export const PathPlanView = () => {
           🎯 智能路径规划
         </h1>
         <p style={{ color: '#666', fontSize: '16px' }}>
-          基于能力评估的个性化学习路径生成
+          基于能力评估的个性化学习路径生成与可视化管理
         </p>
       </div>
 
@@ -308,6 +347,262 @@ export const PathPlanView = () => {
               </div>
             )}
           </div>
+
+          {/* 已关联路径显示和管理 */}
+          {state.selectedGoalId && selectedGoalPaths.length > 0 && (
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '20px',
+              border: '1px solid #e5e7eb',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>
+                🛤️ 已关联的学习路径 ({selectedGoalPaths.length})
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {selectedGoalPaths.map(path => {
+                  const completedNodes = path.nodes.filter(n => n.status === 'completed')
+                  const progress = path.nodes.length > 0 ? 
+                    (completedNodes.length / path.nodes.length) * 100 : 0
+                  
+                  return (
+                    <div
+                      key={path.id}
+                      style={{
+                        padding: '16px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        backgroundColor: '#f8fafc'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
+                            {path.title}
+                          </h4>
+                          <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>
+                            {path.description}
+                          </p>
+                          
+                          {/* 路径统计信息 */}
+                          <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#888', marginBottom: '8px' }}>
+                            <span>📚 {path.nodes.length} 个节点</span>
+                            <span>⏱️ {path.totalEstimatedHours}小时</span>
+                            <span>✅ {completedNodes.length} 个已完成</span>
+                          </div>
+                          
+                          {/* 进度条 */}
+                          <div style={{ marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '12px', color: '#666' }}>学习进度</span>
+                              <span style={{ fontSize: '12px', color: '#666' }}>{Math.round(progress)}%</span>
+                            </div>
+                            <div style={{
+                              width: '100%',
+                              height: '6px',
+                              backgroundColor: '#e5e7eb',
+                              borderRadius: '3px',
+                              overflow: 'hidden'
+                            }}>
+                              <div style={{
+                                width: `${progress}%`,
+                                height: '100%',
+                                backgroundColor: progress >= 100 ? '#10b981' : progress >= 50 ? '#3b82f6' : '#f59e0b',
+                                transition: 'width 0.3s ease'
+                              }} />
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* 状态标签 */}
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          backgroundColor: 
+                            path.status === 'active' ? '#dcfce7' : 
+                            path.status === 'completed' ? '#dbeafe' : 
+                            path.status === 'paused' ? '#fef3c7' : 
+                            path.status === 'frozen' ? '#f3f4f6' : '#fecaca',
+                          color: 
+                            path.status === 'active' ? '#166534' : 
+                            path.status === 'completed' ? '#1e40af' : 
+                            path.status === 'paused' ? '#92400e' : 
+                            path.status === 'frozen' ? '#374151' : '#dc2626'
+                        }}>
+                          {path.status === 'active' ? '进行中' : 
+                           path.status === 'completed' ? '已完成' : 
+                           path.status === 'paused' ? '已暂停' : 
+                           path.status === 'frozen' ? '已冻结' : 
+                           path.status === 'archived' ? '已归档' : '草稿'}
+                        </div>
+                      </div>
+                      
+                      {/* 操作按钮 */}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {path.status === 'draft' && (
+                          <button
+                            onClick={() => activatePath(path.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ▶️ 激活
+                          </button>
+                        )}
+                        
+                        {path.status === 'active' && (
+                          <>
+                            <button
+                              onClick={() => pausePath(path.id)}
+                              style={{
+                                padding: '4px 8px',
+                                backgroundColor: '#f59e0b',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ⏸️ 暂停
+                            </button>
+                            <button
+                              onClick={() => completePath(path.id)}
+                              style={{
+                                padding: '4px 8px',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ✅ 完成
+                            </button>
+                          </>
+                        )}
+                        
+                        {(path.status === 'paused' || path.status === 'frozen') && (
+                          <button
+                            onClick={() => activatePath(path.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ▶️ 重新激活
+                          </button>
+                        )}
+                        
+                        {path.status === 'completed' && (
+                          <button
+                            onClick={() => activatePath(path.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#6b7280',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🔄 重新开始
+                          </button>
+                        )}
+                        
+                        {path.status !== 'archived' && (
+                          <button
+                            onClick={() => archivePath(path.id)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#dc2626',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            📦 归档
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* 节点预览 */}
+                      {path.nodes.length > 0 && (
+                        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
+                          <h5 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                            节点预览 (前3个):
+                          </h5>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {path.nodes.slice(0, 3).map((node, index) => (
+                              <div key={node.id} style={{
+                                padding: '6px 8px',
+                                backgroundColor: 'white',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}>
+                                <span>{index + 1}. {node.title}</span>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '8px',
+                                  fontSize: '10px',
+                                  backgroundColor: node.status === 'completed' ? '#dcfce7' : 
+                                                  node.status === 'in_progress' ? '#dbeafe' : '#f3f4f6',
+                                  color: node.status === 'completed' ? '#166534' : 
+                                         node.status === 'in_progress' ? '#1e40af' : '#374151'
+                                }}>
+                                  {node.status === 'completed' ? '已完成' : 
+                                   node.status === 'in_progress' ? '进行中' : '未开始'}
+                                </span>
+                              </div>
+                            ))}
+                            {path.nodes.length > 3 && (
+                              <div style={{ textAlign: 'center', color: '#888', fontSize: '12px', padding: '4px' }}>
+                                ... 还有 {path.nodes.length - 3} 个节点
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              
+              {/* 快速操作提示 */}
+              <div style={{
+                marginTop: '16px',
+                padding: '12px',
+                backgroundColor: '#eff6ff',
+                borderRadius: '6px',
+                fontSize: '13px',
+                color: '#1e40af'
+              }}>
+                <strong>💡 提示:</strong> 您可以继续生成新的学习路径，现有路径会自动保留并可以独立管理。
+                支持多路径并行学习或根据需要激活不同的路径。
+              </div>
+            </div>
+          )}
 
           {/* 路径生成配置 */}
           {state.selectedGoalId && (
@@ -699,15 +994,26 @@ export const PathPlanView = () => {
           💡 使用指南
         </h3>
         <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#666' }}>
-          <p><strong>智能路径规划流程：</strong></p>
+          <p><strong>智能路径规划与管理流程：</strong></p>
           <ol style={{ paddingLeft: '20px', margin: '8px 0' }}>
             <li>选择一个学习目标</li>
+            <li>查看已关联的路径状态和进度</li>
             <li>配置您的学习偏好</li>
             <li>分析当前技能与目标的差距</li>
             <li>生成个性化的学习路径</li>
             <li>审查并确认路径内容</li>
           </ol>
-          <p><strong>💡 提示：</strong> 基于您的能力评估结果，系统会生成更精准的个性化路径。置信度越高，路径越适合您的实际水平。</p>
+          
+          <p><strong>🛤️ 路径管理功能：</strong></p>
+          <ul style={{ paddingLeft: '20px', margin: '8px 0' }}>
+            <li><strong>可视化显示：</strong> 查看所有关联路径的进度、状态和节点详情</li>
+            <li><strong>灵活操作：</strong> 激活、暂停、完成、归档不同状态的路径</li>
+            <li><strong>多路径支持：</strong> 支持为同一目标创建多条路径，并行或替代学习</li>
+            <li><strong>状态管理：</strong> 智能状态转换，保持学习路径的有序管理</li>
+          </ul>
+          
+          <p><strong>💡 提示：</strong> 基于您的能力评估结果，系统会生成更精准的个性化路径。
+          您可以为同一目标创建多条路径进行A/B测试，或在不同时期激活不同的学习策略。</p>
         </div>
       </div>
     </div>

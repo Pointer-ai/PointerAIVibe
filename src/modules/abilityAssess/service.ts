@@ -701,26 +701,47 @@ export class AbilityAssessmentService {
 
 基于以下能力评估和技能差距分析，为一个 ${currentLevel} 级别（${scoreLevel}分）的${developerLevelDescription}生成专业的学习提升策略：
 
-## 当前能力评估
-- **总分：${assessment.overallScore}/100 （${currentLevel} 级别）**
-- 评估置信度：${(assessment.metadata.confidence * 100).toFixed(0)}%
-- 策略重点：${strategyFocus}
-- **⚠️ 重要提醒**：用户当前评分为 ${scoreLevel} 分，属于 ${currentLevel} 水平，请确保生成的学习计划与此水平匹配
+## 📊 5维能力深度画像分析
+**总体评分**: ${assessment.overallScore}/100 （${currentLevel} 级别）
+**评估置信度**: ${(assessment.metadata.confidence * 100).toFixed(0)}%
+**策略重点**: ${strategyFocus}
 
-## 各维度评分
-${Object.entries(assessment.dimensions).map(([dim, data]) => 
-  `- ${dim}: ${data.score}/100 (权重: ${data.weight})`
+### 各维度详细分析:
+${Object.entries(assessment.dimensions).map(([dimName, dimData]) => {
+  const dimensionInfo = this.getDimensionDisplayName(dimName)
+  const levelDesc = this.getScoreLevelDescription(dimData.score)
+  
+  // 找出该维度的强项和薄弱技能
+  const skillAnalysis = Object.entries(dimData.skills).map(([skillName, skillData]) => {
+    const score = typeof skillData === 'number' ? skillData : skillData.score
+    const confidence = typeof skillData === 'object' ? skillData.confidence : 1.0
+    const status = score > dimData.score + 10 ? '优势' : score < dimData.score - 10 ? '薄弱' : '均衡'
+    return `${skillName}(${score}分,${status})`
+  }).join(', ')
+  
+  return `**${dimensionInfo}** - ${dimData.score}/100 (${levelDesc}) [权重${(dimData.weight * 100).toFixed(0)}%]
+   • 技能详情: ${skillAnalysis}
+   • 维度建议: ${this.getDimensionSpecificAdvice(dimName, dimData.score, scoreLevel)}`
+}).join('\n')}
+
+### 📈 能力平衡度分析:
+${this.generateBalanceAnalysis(assessment)}
+
+### 🎯 基于5维评估的策略重点:
+${this.generateStrategicPriorities(assessment, skillGapAnalysis)}
+
+## 🔍 技能差距详细分析
+**优先提升技能**: ${skillGapAnalysis.topPriorities.slice(0, 8).map((skill: string, index: number) => 
+  `${index + 1}. ${skill} (${this.getSkillGapDetails(skill, skillGapAnalysis.skillGaps)})`
 ).join('\n')}
 
-## 技能差距分析
-优先提升技能：
-${skillGapAnalysis.topPriorities.slice(0, 5).map((skill: string, index: number) => 
-  `${index + 1}. ${skill}`
-).join('\n')}
+**技能差距分布**:
+${this.categorizeSkillGapsByDimension(skillGapAnalysis.skillGaps)}
 
-## 优势和薄弱项
-优势：${assessment.report.strengths.join(', ')}
-待改进：${assessment.report.improvements.join(', ')}
+## 💡 个性化学习建议
+**优势维度发挥**: ${assessment.report.strengths.join('、')}
+**薄弱环节补强**: ${assessment.report.improvements.join('、')}
+**整体策略**: ${skillGapAnalysis.overallStrategy}
 
 ${scoreLevel >= 80 ? `
 ## 🚨 高级开发者专项要求 - 严格执行！
@@ -799,11 +820,14 @@ ${advancedTopics.map(topic => `- ${topic}`).join('\n')}
 - 重点建立编程基础
 `}
 
-**🎯 核心要求总结**：
+## 📋 生成要求
+
+**🎯 基于5维评估的核心策略**：
 1. **节点数量要求**：每个学习路径应包含 ${Math.ceil(expectedNodeCount/2)} 个学习节点（平均每周1个节点）
 2. **难度适配**：节点难度必须在 ${difficultyLevel}-${difficultyLevel+1} 之间，严格匹配${currentLevel}水平
-3. **时间规划**：每个节点${scoreLevel >= 80 ? '12-20' : '8-12'}小时学习时间，符合周度学习节奏
-4. **学习方法**：${learningApproach}
+3. **维度权衡**：重点补强最薄弱的2-3个维度，适度发挥优势维度
+4. **时间规划**：每个节点${scoreLevel >= 80 ? '12-20' : scoreLevel >= 60 ? '8-12' : scoreLevel >= 40 ? '6-10' : '4-8'}小时学习时间
+5. **学习方法**：${learningApproach}
 
 ${scoreLevel >= 80 ? `
 🚨 **对于${scoreLevel}分的高级开发者，再次强调**：
@@ -814,155 +838,239 @@ ${scoreLevel >= 80 ? `
 - **绝对不能出现"学习基础语法"、"掌握数据结构"等初级内容**
 ` : ''}
 
-请生成一个结构化的学习策略，包括：
+## 🔄 请生成结构化的学习策略
 
-1. **短期目标 (1个月)**: ${scoreLevel >= 80 ? '1个高挑战性架构级目标' : '1-2个具体目标'}，每个目标包含${scoreLevel >= 80 ? '6-8' : '4-5'}个学习节点
-2. **中期目标 (3个月)**: ${scoreLevel >= 80 ? '1个企业级复合目标' : '1-2个具体目标'}，每个目标包含${scoreLevel >= 80 ? '10-15' : '8-12'}个学习节点  
-3. **学习策略**: 推荐的学习方法和时间分配
-4. **关键里程碑**: 3-4个重要的检查点
-5. **优先级矩阵**: 各技能的影响度、难度、紧急度评分
-
-请用JSON格式返回，严格按照以下结构：
+基于上述深度分析，请生成包含以下内容的学习策略（JSON格式）：
 
 \`\`\`json
 {
-  "targetImprovement": ${Math.min(20, 95 - scoreLevel)},
+  "targetImprovement": ${Math.min(20, 85 - scoreLevel)},
   "estimatedTimeMonths": ${Math.ceil(expectedNodeCount/4)},
-  "planType": "${scoreLevel >= 80 ? 'advanced_specialization' : scoreLevel >= 60 ? 'intermediate_enhancement' : scoreLevel >= 40 ? 'foundation_strengthening' : 'basic_building'}",
+  "planType": "${scoreLevel >= 60 ? 'comprehensive' : 'focused'}",
   "strategy": {
-    "focusAreas": [${scoreLevel >= 80 ? '"架构设计与系统优化", "技术领导力与团队协作", "前沿技术研究与应用"' : '"针对' + currentLevel + '级别的具体领域1", "针对' + currentLevel + '级别的具体领域2", "针对' + currentLevel + '级别的具体领域3"'}],
+    "focusAreas": ["基于最薄弱维度的重点领域"],
     "learningApproach": "${learningApproach}",
-    "timeAllocation": "每周${scoreLevel >= 80 ? '10-15' : '8-12'}小时的时间分配建议",
+    "timeAllocation": "基于5维评估的时间分配策略",
     "milestones": [
       {
         "id": "milestone_1",
-        "title": "里程碑标题",
-        "description": "详细描述",
-        "targetDate": "2024-02-01",
-        "associatedSkills": ["技能1", "技能2"],
-        "successCriteria": ["成功标准1", "成功标准2"]
+        "title": "阶段性目标",
+        "targetDate": "时间节点",
+        "associatedSkills": ["相关技能"],
+        "successCriteria": ["成功标准"],
+        "dimensionTargets": {
+          "programming": "目标提升分数",
+          "algorithm": "目标提升分数",
+          "project": "目标提升分数", 
+          "systemDesign": "目标提升分数",
+          "communication": "目标提升分数"
+        }
       }
     ]
   },
   "shortTermGoals": [
     {
-      "title": "${scoreLevel >= 80 ? '分布式架构深度优化专项' : scoreLevel >= 60 ? '中级技能深化提升' : scoreLevel >= 40 ? '基础技能强化训练' : '编程入门基础建设'}",
-      "description": "${scoreLevel >= 80 ? '深入研究微服务治理、服务网格架构，设计高可用分布式系统，完成生产级性能优化' : scoreLevel >= 60 ? '在现有技能基础上进行深化学习和实践' : scoreLevel >= 40 ? '巩固编程基础，提升核心技能水平' : '从编程语法开始，建立扎实的基础'}",
-      "category": "${scoreLevel >= 80 ? 'distributed_architecture' : scoreLevel >= 60 ? 'advanced_development' : scoreLevel >= 40 ? 'skill_building' : 'foundation'}",
-      "priority": 5,
-      "targetLevel": "${currentLevel === 'expert' ? 'expert' : currentLevel === 'advanced' ? 'advanced' : currentLevel === 'intermediate' ? 'intermediate' : 'beginner'}",
+      "title": "1个月内的具体目标",
+      "description": "基于用户${currentLevel}水平设计的目标描述",
+      "category": "目标类别",
+      "targetDimensions": ["主要提升的维度"],
       "estimatedTimeWeeks": 4,
-      "requiredSkills": [${scoreLevel >= 80 ? '"微服务架构", "服务网格", "性能调优", "分布式事务", "容器编排"' : scoreLevel >= 60 ? '"设计模式", "代码重构", "项目管理"' : scoreLevel >= 40 ? '"编程基础", "数据结构", "算法思维"' : '"编程语法", "基本概念", "简单练习"'}],
-      "outcomes": [${scoreLevel >= 80 ? '"完成企业级分布式架构设计", "实现服务网格技术栈", "产出性能优化技术方案", "建立监控告警体系"' : scoreLevel >= 60 ? '"完成中等复杂度项目", "掌握设计模式应用", "提升代码质量"' : scoreLevel >= 40 ? '"掌握核心编程概念", "完成基础项目实践", "建立编程思维"' : '"熟悉编程语法", "完成简单练习", "建立学习习惯"'}],
-      "pathStructure": {
-        "title": "${scoreLevel >= 80 ? '分布式系统架构专家路径' : scoreLevel >= 60 ? '中级技能提升路径' : scoreLevel >= 40 ? '基础技能强化路径' : '编程入门学习路径'}",
-        "description": "${scoreLevel >= 80 ? '从分布式理论到生产级实现的系统性架构能力培养' : scoreLevel >= 60 ? '在现有基础上深化技能理解和应用' : scoreLevel >= 40 ? '巩固编程基础，建立扎实的技能根基' : '从零开始的编程学习之旅'}",
-        "nodes": [
-          {
-            "title": "${scoreLevel >= 80 ? '服务网格架构设计与实现' : scoreLevel >= 60 ? '设计模式深入理解' : scoreLevel >= 40 ? '数据结构基础' : '编程语言基础语法'}",
-            "description": "${scoreLevel >= 80 ? '深入研究Istio、Linkerd等服务网格技术，设计企业级服务治理方案，实现灰度发布、流量管理、安全策略' : scoreLevel >= 60 ? '学习常用设计模式的原理和应用场景' : scoreLevel >= 40 ? '掌握数组、链表、栈、队列等基础数据结构' : '学习变量、函数、控制结构等基本语法'}",
-            "type": "${scoreLevel >= 80 ? 'architecture' : scoreLevel >= 60 ? 'concept' : scoreLevel >= 40 ? 'practice' : 'tutorial'}",
-            "difficulty": ${scoreLevel >= 80 ? 5 : difficultyLevel},
-            "estimatedHours": ${scoreLevel >= 80 ? 20 : scoreLevel >= 60 ? 10 : scoreLevel >= 40 ? 8 : 6},
-            "skills": [${scoreLevel >= 80 ? '"服务网格", "Istio", "微服务治理", "云原生架构"' : scoreLevel >= 60 ? '"设计模式", "代码设计"' : scoreLevel >= 40 ? '"数据结构", "算法基础"' : '"编程语法", "基础概念"'}],
-            "prerequisites": [${scoreLevel >= 80 ? '"Kubernetes熟练使用", "Docker容器技术", "云原生基础"' : ''}],
-            "order": 1
-          },
-          ${scoreLevel >= 80 ? `{
-            "title": "分布式事务与数据一致性",
-            "description": "深入理解CAP定理、BASE理论，掌握Saga、TCC等分布式事务模式，实现最终一致性方案",
-            "type": "theory_practice",
-            "difficulty": 5,
-            "estimatedHours": 18,
-            "skills": ["分布式事务", "数据一致性", "Saga模式", "TCC模式"],
-            "prerequisites": ["分布式系统基础"],
-            "order": 2
-          },
-          {
-            "title": "高并发系统性能优化",
-            "description": "JVM调优、缓存架构设计、数据库优化、CDN配置，解决实际生产环境性能瓶颈",
-            "type": "performance_optimization",
-            "difficulty": 5,
-            "estimatedHours": 22,
-            "skills": ["JVM调优", "Redis集群", "数据库优化", "性能监控"],
-            "prerequisites": ["分布式架构基础"],
-            "order": 3
-          },
-          {
-            "title": "云原生DevOps实践",
-            "description": "构建企业级CI/CD流水线，实现自动化部署、监控告警、故障自愈，掌握GitOps工作流",
-            "type": "devops_practice",
-            "difficulty": 4,
-            "estimatedHours": 16,
-            "skills": ["Kubernetes", "GitOps", "Prometheus", "Grafana"],
-            "prerequisites": ["容器技术"],
-            "order": 4
-          }` : `{
-            "title": "placeholder_node_2",
-            "description": "placeholder_description",
-            "type": "concept",
-            "difficulty": ${difficultyLevel},
-            "estimatedHours": 8,
-            "skills": ["placeholder_skill"],
-            "prerequisites": [],
-            "order": 2
-          }`}
-          // ... ${scoreLevel >= 80 ? '继续添加更多高级节点' : '根据用户水平添加适当节点'}
-        ]
-      }
+      "skills": ["具体技能列表"],
+      "outcomes": ["可衡量的成果"],
+      "difficulty": ${difficultyLevel},
+      "nodes": [
+        {
+          "title": "学习节点标题",
+          "description": "基于5维评估定制的节点内容",
+          "type": "concept|practice|project|assessment",
+          "estimatedHours": 节点学习时长,
+          "targetDimension": "主要提升维度",
+          "skills": ["涉及技能"],
+          "resources": ["学习资源"],
+          "personalizedHints": ["基于用户薄弱点的个性化提示"]
+        }
+      ]
     }
   ],
   "mediumTermGoals": [
     {
-      "title": "${scoreLevel >= 80 ? '企业级技术架构设计与落地实施' : scoreLevel >= 60 ? '完整项目开发实践' : scoreLevel >= 40 ? '综合项目能力提升' : '基础项目实践'}",
-      "description": "${scoreLevel >= 80 ? '设计并实现完整的企业级技术架构，包含高可用、高并发、高扩展性设计，负责技术选型、架构演进、团队技术培养' : scoreLevel >= 60 ? '独立完成一个具有一定复杂度的完整项目' : scoreLevel >= 40 ? '通过项目实践巩固所学技能，提升综合能力' : '通过简单项目练习，巩固基础知识'}",
-      "category": "${scoreLevel >= 80 ? 'enterprise_architecture' : scoreLevel >= 60 ? 'project_development' : scoreLevel >= 40 ? 'skill_application' : 'basic_practice'}", 
-      "priority": 4,
-      "targetLevel": "${currentLevel === 'expert' ? 'expert' : currentLevel === 'advanced' ? 'advanced' : currentLevel === 'intermediate' ? 'intermediate' : 'beginner'}",
+      "title": "3个月内的综合目标",
+      "description": "基于5维评估的中期发展目标",
+      "category": "目标类别",
+      "targetDimensions": ["跨维度综合提升"],
       "estimatedTimeWeeks": 12,
-      "requiredSkills": [${scoreLevel >= 80 ? '"企业架构设计", "技术团队管理", "架构治理", "技术决策", "开源贡献"' : scoreLevel >= 60 ? '"项目管理", "系统设计", "测试开发", "部署运维"' : scoreLevel >= 40 ? '"项目规划", "代码组织", "基础测试", "简单部署"' : '"基础编程", "简单逻辑", "代码调试"'}],
-      "outcomes": [${scoreLevel >= 80 ? '"完成企业级架构系统实现", "建立技术团队最佳实践", "产出架构设计规范文档", "实现技术债务治理", "贡献开源技术项目"' : scoreLevel >= 60 ? '"完整项目交付", "技术文档编写", "代码质量提升", "团队协作经验"' : scoreLevel >= 40 ? '"项目功能实现", "代码规范改善", "问题解决能力提升"' : '"基础项目完成", "编程信心建立", "学习方法掌握"'}],
-      "pathStructure": {
-        "title": "${scoreLevel >= 80 ? '企业级架构师成长路径' : scoreLevel >= 60 ? '完整项目开发路径' : scoreLevel >= 40 ? '项目实践提升路径' : '基础项目练习路径'}",
-        "description": "${scoreLevel >= 80 ? '从技术专家到架构师的全方位能力提升，涵盖技术、管理、决策等多个维度' : scoreLevel >= 60 ? '从需求分析到项目上线的完整开发流程' : scoreLevel >= 40 ? '通过项目实践提升编程和解决问题的能力' : '通过简单项目巩固基础编程技能'}", 
-        "nodes": [
-          {
-            "title": "${scoreLevel >= 80 ? '企业级架构设计方法论' : scoreLevel >= 60 ? '项目需求分析与设计' : scoreLevel >= 40 ? '项目规划与设计' : '项目需求理解'}",
-            "description": "${scoreLevel >= 80 ? '掌握TOGAF、Zachman等企业架构框架，建立架构设计方法论，进行技术选型和架构决策' : scoreLevel >= 60 ? '需求分析、系统设计、技术选型' : scoreLevel >= 40 ? '理解项目需求，设计基本架构' : '理解项目要求，制定简单计划'}",
-            "type": "${scoreLevel >= 80 ? 'enterprise_architecture' : 'project'}",
-            "difficulty": ${scoreLevel >= 80 ? 5 : difficultyLevel + 1},
-            "estimatedHours": ${scoreLevel >= 80 ? 25 : scoreLevel >= 60 ? 12 : scoreLevel >= 40 ? 10 : 8},
-            "skills": [${scoreLevel >= 80 ? '"TOGAF框架", "架构设计", "技术选型", "架构治理"' : scoreLevel >= 60 ? '"需求分析", "系统设计"' : scoreLevel >= 40 ? '"项目规划", "基础设计"' : '"需求理解", "简单规划"'}],
-            "prerequisites": [${scoreLevel >= 80 ? '"分布式系统架构", "微服务实践经验"' : scoreLevel >= 60 ? '"设计模式基础"' : scoreLevel >= 40 ? '"编程基础"' : '"语法基础"'}],
-            "order": 1
-          }
-          // ... ${scoreLevel >= 80 ? '必须包含10-15个企业级节点' : scoreLevel >= 60 ? '必须包含8-12个节点' : scoreLevel >= 40 ? '必须包含6-10个节点' : '必须包含4-8个节点'}
-        ]
-      }
+      "skills": ["高级技能列表"],
+      "outcomes": ["项目成果或能力证明"],
+      "difficulty": ${Math.min(5, difficultyLevel + 1)},
+      "nodes": [
+        {
+          "title": "综合项目节点",
+          "description": "能同时提升多个维度的项目实践",
+          "type": "project",
+          "estimatedHours": 项目节点学习时长,
+          "targetDimensions": ["涉及的多个维度"],
+          "skills": ["综合技能要求"],
+          "resources": ["项目资源"],
+          "personalizedHints": ["基于用户强项和弱项的项目建议"]
+        }
+      ]
     }
   ],
   "timeline": [
     {
-      "date": "2024-01-15",
-      "milestone": "里程碑名称",
-      "description": "详细描述",
-      "type": "goal"
+      "date": "时间点",
+      "milestone": "里程碑名称", 
+      "description": "具体描述",
+      "type": "goal|path|milestone",
+      "dimensionFocus": "重点提升的维度"
     }
   ],
   "priorityMatrix": [
     {
       "skill": "技能名称",
-      "impact": 4,
-      "difficulty": 3,
-      "urgency": 5,
-      "priority": 4
+      "impact": "对整体能力的影响程度 (1-5)",
+      "difficulty": "学习难度 (1-5)", 
+      "urgency": "紧急程度 (1-5)",
+      "priority": "综合优先级 (1-5)",
+      "dimension": "所属维度",
+      "currentScore": "当前分数",
+      "targetScore": "目标分数"
     }
   ]
 }
-\`\`\``
+\`\`\`
 
+**⚠️ 质量检查要求**：
+1. 生成的目标和路径必须严格匹配用户的${currentLevel}水平（${scoreLevel}分）
+2. 每个学习节点都要明确说明针对哪个维度的哪些具体薄弱点
+3. 时间安排要考虑用户的学习效率和当前基础
+4. 里程碑要设定明确的5维度能力提升预期
+5. 优先级矩阵要基于实际的技能差距分析
+
+${scoreLevel >= 80 ? `🚨 **高级开发者最后提醒**: 生成的所有内容都必须是高级水平，绝不能包含基础入门内容！` : ''}`
+
+    // 辅助方法调用
     const aiResponse = await callAI(prompt)
     return this.parseAIStrategyResponse(aiResponse)
+  }
+
+  // 新增辅助方法
+  private getDimensionDisplayName(dimensionName: string): string {
+    const nameMap: Record<string, string> = {
+      programming: '编程基本功',
+      algorithm: '算法能力', 
+      project: '项目能力',
+      systemDesign: '系统设计',
+      communication: '沟通协作'
+    }
+    return nameMap[dimensionName] || dimensionName
+  }
+
+  private getScoreLevelDescription(score: number): string {
+    if (score >= 80) return '优秀'
+    if (score >= 60) return '良好'
+    if (score >= 40) return '及格'
+    if (score >= 20) return '较弱'
+    return '很弱'
+  }
+
+  private getDimensionSpecificAdvice(dimensionName: string, score: number, overallScore: number): string {
+    const isStrong = score > overallScore + 10
+    const isWeak = score < overallScore - 10
+    
+    const adviceMap: Record<string, Record<string, string>> = {
+      programming: {
+        strong: '继续深化编程思维，探索高级语言特性',
+        weak: '重点练习基础语法和数据结构，提升代码质量',
+        balanced: '在现有基础上提升编程效率和最佳实践'
+      },
+      algorithm: {
+        strong: '挑战复杂算法问题，研究算法优化技巧',
+        weak: '从基础算法开始系统学习，多做练习',
+        balanced: '加强算法思维训练，提升问题解决能力'
+      },
+      project: {
+        strong: '承担更复杂的项目架构设计工作',
+        weak: '从小项目开始，逐步积累项目经验',
+        balanced: '参与团队项目，提升协作和管理能力'
+      },
+      systemDesign: {
+        strong: '深入研究分布式系统和高可用架构',
+        weak: '学习基本系统设计概念和模式',
+        balanced: '关注系统性能优化和可扩展性设计'
+      },
+      communication: {
+        strong: '发展技术领导力，指导他人成长',
+        weak: '加强技术表达和文档写作能力',
+        balanced: '提升团队协作和跨部门沟通技能'
+      }
+    }
+    
+    const status = isStrong ? 'strong' : isWeak ? 'weak' : 'balanced'
+    return adviceMap[dimensionName]?.[status] || '持续学习和实践'
+  }
+
+  private generateBalanceAnalysis(assessment: AbilityAssessment): string {
+    const scores = Object.values(assessment.dimensions).map(d => d.score)
+    const maxScore = Math.max(...scores)
+    const minScore = Math.min(...scores)
+    const gap = maxScore - minScore
+    
+    let analysis = `最高分维度: ${maxScore}分，最低分维度: ${minScore}分，差距: ${gap}分\n`
+    
+    if (gap < 15) {
+      analysis += '• 能力发展很均衡，可以选择综合性学习目标\n'
+    } else if (gap < 30) {
+      analysis += '• 能力发展较均衡，适度补强薄弱维度\n'
+    } else if (gap < 45) {
+      analysis += '• 能力发展不太均衡，建议重点提升薄弱维度\n'
+    } else {
+      analysis += '• 能力发展严重不均衡，必须优先补强最薄弱的维度\n'
+    }
+    
+    return analysis
+  }
+
+  private generateStrategicPriorities(assessment: AbilityAssessment, skillGapAnalysis: any): string {
+    const sortedDimensions = Object.entries(assessment.dimensions)
+      .sort(([,a], [,b]) => a.score - b.score)
+    
+    const weakest = sortedDimensions.slice(0, 2).map(([name, data]) => 
+      `${this.getDimensionDisplayName(name)}(${data.score}分)`
+    )
+    const strongest = sortedDimensions.slice(-2).map(([name, data]) => 
+      `${this.getDimensionDisplayName(name)}(${data.score}分)`
+    )
+    
+    return `1. **重点突破**: ${weakest.join('、')} - 这些是当前最大的提升空间
+2. **巩固优势**: ${strongest.join('、')} - 在现有基础上进一步深化
+3. **平衡发展**: 通过项目实践综合提升各维度能力
+4. **个性化重点**: ${skillGapAnalysis.topPriorities.slice(0, 3).join('、')}`
+  }
+
+  private getSkillGapDetails(skill: string, skillGaps: any[]): string {
+    const gap = skillGaps.find(g => g.skillName === skill)
+    if (!gap) return '详情待分析'
+    return `缺口${gap.gap}分,${gap.priority}优先级`
+  }
+
+  private categorizeSkillGapsByDimension(skillGaps: any[]): string {
+    const dimensionGroups: Record<string, any[]> = {}
+    
+    skillGaps.forEach(gap => {
+      const dimension = gap.skillName.split('.')[0]
+      if (!dimensionGroups[dimension]) {
+        dimensionGroups[dimension] = []
+      }
+      dimensionGroups[dimension].push(gap)
+    })
+
+    return Object.entries(dimensionGroups)
+      .map(([dimension, gaps]) => {
+        const avgGap = gaps.reduce((sum, g) => sum + g.gap, 0) / gaps.length
+        const dimensionName = this.getDimensionDisplayName(dimension)
+        return `• **${dimensionName}**: ${gaps.length}个技能缺口，平均差距${Math.round(avgGap)}分`
+      }).join('\n')
   }
 
   /**
@@ -1244,7 +1352,18 @@ ${scoreLevel >= 80 ? `
       improvements: assessment.report.improvements.join(',')
     }
     
-    return btoa(JSON.stringify(hashContent)).slice(0, 16)
+    // Use TextEncoder and btoa for Unicode-safe base64 encoding
+    const jsonString = JSON.stringify(hashContent)
+    const encoder = new TextEncoder()
+    const bytes = encoder.encode(jsonString)
+    
+    // Convert bytes to base64 string
+    let binaryString = ''
+    bytes.forEach(byte => {
+      binaryString += String.fromCharCode(byte)
+    })
+    
+    return btoa(binaryString).slice(0, 16)
   }
 
   /**

@@ -232,35 +232,199 @@ export class GoalSettingService {
     ability: any,
     existingGoals: any[]
   ): string {
-    return `作为编程学习顾问，请根据以下信息为用户推荐3个最合适的学习目标：
+    let abilityAnalysis = ''
+    
+    if (ability) {
+      // 构建详细的5维度能力分析
+      const dimensionAnalysis = Object.entries(ability.dimensions).map(([dimensionName, data]: [string, any]) => {
+        const dimensionInfo = this.getDimensionDisplayInfo(dimensionName)
+        const levelDescription = this.getScoreLevelDescription(data.score)
+        
+        // 找出该维度下的薄弱技能
+        const weakSkills = Object.entries(data.skills || {})
+          .filter(([_, skillData]: [string, any]) => {
+            const score = typeof skillData === 'number' ? skillData : skillData.score
+            return score < data.score - 10 // 低于维度平均分10分以上的技能
+          })
+          .map(([skillName]) => skillName)
+          .slice(0, 3)
+        
+        // 找出该维度下的强项技能
+        const strongSkills = Object.entries(data.skills || {})
+          .filter(([_, skillData]: [string, any]) => {
+            const score = typeof skillData === 'number' ? skillData : skillData.score
+            return score > data.score + 10 // 高于维度平均分10分以上的技能
+          })
+          .map(([skillName]) => skillName)
+          .slice(0, 3)
 
-用户选择的感兴趣领域：${categories.join('、')}
+        return `**${dimensionInfo.name}**: ${data.score}/100 (${levelDescription}) [权重: ${(data.weight * 100).toFixed(0)}%]
+   - 强项: ${strongSkills.length > 0 ? strongSkills.join('、') : '暂无明显强项'}
+   - 薄弱: ${weakSkills.length > 0 ? weakSkills.join('、') : '整体均衡'}
+   - 建议重点: ${this.getDimensionRecommendation(dimensionName, data.score, weakSkills)}`
+      }).join('\n')
 
-问卷回答：
-- 编程经验：${answers.experience_level || '未填写'}
-- 学习时间：${answers.learning_time || '未填写'}
-- 学习目标：${Array.isArray(answers.learning_goal) ? answers.learning_goal.join('、') : answers.learning_goal || '未填写'}
-- 学习偏好：${Array.isArray(answers.project_preference) ? answers.project_preference.join('、') : answers.project_preference || '未填写'}
-- 职业方向：${answers.career_direction || '未填写'}
+      // 计算维度平衡度
+      const scores = Object.values(ability.dimensions).map((d: any) => d.score)
+      const maxScore = Math.max(...scores)
+      const minScore = Math.min(...scores)
+      const balanceLevel = maxScore - minScore < 20 ? '均衡' : maxScore - minScore < 40 ? '不太均衡' : '严重不均衡'
+      
+      abilityAnalysis = `
+## 📊 用户5维能力画像分析
+**总体评分**: ${ability.overallScore}/100 (${this.getScoreLevelDescription(ability.overallScore)})
+**能力平衡度**: ${balanceLevel} (最高${maxScore}分，最低${minScore}分，差距${maxScore - minScore}分)
 
-${ability ? `用户能力评估：
-- 总体分数：${ability.overallScore}/10
-- 主要维度：${Object.entries(ability.dimensions).map(([dim, data]: [string, any]) => `${dim}: ${data.score}/10`).join('、')}
-` : '用户尚未完成能力评估'}
+### 各维度详细分析:
+${dimensionAnalysis}
 
-${existingGoals.length > 0 ? `已有目标：${existingGoals.map((g: any) => g.title).join('、')}` : '暂无现有目标'}
+### 🎯 基于能力分析的推荐策略:
+${this.generateStrategicRecommendations(ability)}
+`
+    }
 
-请以JSON格式返回推荐结果，每个推荐包含：
-- category: 类别ID
-- title: 目标标题（不超过20字）
-- description: 详细描述（100-200字）
-- priority: 优先级（1-5）
-- reasoning: 推荐理由（50-100字）
-- estimatedTimeWeeks: 预计学习周数
-- requiredSkills: 需要掌握的技能列表
-- outcomes: 学习成果列表
+    return `作为专业编程学习顾问，请基于用户的5维能力评估和学习偏好，为用户推荐3个最合适的学习目标：
 
-请确保推荐符合用户当前水平，循序渐进，实用性强。`
+## 📋 用户基础信息
+**感兴趣领域**: ${categories.join('、')}
+**编程经验**: ${answers.experience_level || '未填写'}
+**学习时间投入**: ${answers.learning_time || '未填写'}
+**学习目标**: ${Array.isArray(answers.learning_goal) ? answers.learning_goal.join('、') : answers.learning_goal || '未填写'}
+**学习偏好**: ${Array.isArray(answers.project_preference) ? answers.project_preference.join('、') : answers.project_preference || '未填写'}
+**职业方向**: ${answers.career_direction || '未填写'}
+
+${abilityAnalysis || '⚠️ 用户尚未完成能力评估，建议推荐先完成能力评估以获得更精准的学习建议'}
+
+${existingGoals.length > 0 ? `## 📚 已有学习目标
+${existingGoals.map((g: any) => `- ${g.title} (${g.status})`).join('\n')}
+**注意**: 避免重复推荐相似目标` : '## 📚 暂无现有目标'}
+
+---
+
+## 🎯 推荐要求
+
+### 核心原则
+1. **个性化匹配**: 必须基于用户的5维能力评估结果进行精准推荐
+2. **补强导向**: 优先推荐能补强用户薄弱维度的学习目标
+3. **发挥优势**: 在用户强项基础上进一步提升和扩展
+4. **循序渐进**: 确保推荐的目标符合用户当前水平，难度适中
+5. **实用价值**: 推荐的目标应对用户的职业发展有实际帮助
+
+### 推荐策略
+${ability ? `
+**基于用户能力评估的具体策略**:
+- 重点补强: ${this.getWeakestDimensions(ability).join('、')}
+- 巩固优势: ${this.getStrongestDimensions(ability).join('、')}
+- 平衡发展: ${this.getBalanceDevelopmentStrategy(ability)}
+` : `
+**通用推荐策略** (建议用户先完成能力评估):
+- 基础扎实: 确保编程基础牢固
+- 实践导向: 通过项目实践提升技能
+- 全面发展: 兼顾技术能力和软技能
+`}
+
+### 输出格式
+请以JSON格式返回推荐结果，每个推荐必须包含：
+
+\`\`\`json
+[
+  {
+    "category": "类别ID (与用户选择的感兴趣领域对应)",
+    "title": "目标标题 (不超过20字，具体明确)",
+    "description": "详细描述 (150-250字，必须说明为什么适合用户当前水平)",
+    "priority": "优先级 (1-5，基于用户能力缺口和学习目标匹配度)",
+    "reasoning": "推荐理由 (80-120字，必须明确说明基于用户哪些维度的评估结果)",
+    "estimatedTimeWeeks": "预计学习周数 (基于用户当前水平调整)",
+    "requiredSkills": ["需要掌握的具体技能列表"],
+    "outcomes": ["学习成果列表，必须可衡量"],
+    "targetDimensions": ["主要提升的能力维度"],
+    "difficultyLevel": "难度等级 (beginner/intermediate/advanced，必须匹配用户水平)"
+  }
+]
+\`\`\`
+
+**🔥 特别要求**: 推荐结果必须充分体现对用户5维能力评估的深度分析和个性化考虑，不能是通用化的建议！`
+  }
+
+  // 新增辅助方法
+  private getDimensionDisplayInfo(dimensionName: string): { name: string; description: string } {
+    const infoMap: Record<string, { name: string; description: string }> = {
+      programming: { name: '编程基本功', description: '编程语法、数据结构、代码质量等基础能力' },
+      algorithm: { name: '算法能力', description: '算法思维、数据结构应用、问题解决能力' },
+      project: { name: '项目能力', description: '项目规划、架构设计、实现和测试能力' },
+      systemDesign: { name: '系统设计', description: '系统架构、可扩展性、性能优化能力' },
+      communication: { name: '沟通协作', description: '团队协作、代码评审、技术表达能力' }
+    }
+    return infoMap[dimensionName] || { name: dimensionName, description: '未知维度' }
+  }
+
+  private getScoreLevelDescription(score: number): string {
+    if (score >= 80) return '优秀'
+    if (score >= 60) return '良好'
+    if (score >= 40) return '及格'
+    if (score >= 20) return '较弱'
+    return '很弱'
+  }
+
+  private getDimensionRecommendation(dimensionName: string, score: number, weakSkills: string[]): string {
+    const recommendations: Record<string, string[]> = {
+      programming: ['加强基础语法练习', '提升代码质量意识', '学习开发工具使用'],
+      algorithm: ['多做算法题', '学习常用数据结构', '培养算法思维'],
+      project: ['参与实际项目', '学习项目管理', '提升架构设计能力'],
+      systemDesign: ['学习系统架构', '关注性能优化', '了解分布式系统'],
+      communication: ['参与代码评审', '提升技术写作', '加强团队协作']
+    }
+    
+    const baseRecommendations = recommendations[dimensionName] || ['持续学习提升']
+    
+    if (score >= 80) {
+      return '继续保持优势，可以尝试更高难度挑战'
+    } else if (score >= 60) {
+      return baseRecommendations[0] + '，进一步深化理解'
+    } else {
+      return baseRecommendations.slice(0, 2).join('，') + '，重点补强基础'
+    }
+  }
+
+  private generateStrategicRecommendations(ability: any): string {
+    const dimensions = Object.entries(ability.dimensions)
+    const sortedByScore = dimensions.sort(([,a]: any, [,b]: any) => b.score - a.score)
+    const strongest = sortedByScore.slice(0, 2).map(([name]) => this.getDimensionDisplayInfo(name).name)
+    const weakest = sortedByScore.slice(-2).map(([name]) => this.getDimensionDisplayInfo(name).name)
+    
+    return `• **发挥优势**: 基于您在${strongest.join('和')}方面的优势，推荐选择能进一步发挥这些能力的学习目标
+• **补强短板**: 重点关注${weakest.join('和')}的提升，建议选择相关的基础强化目标
+• **平衡发展**: 在保持优势的同时，适度补强薄弱环节，实现全面提升
+• **实践导向**: 选择包含项目实践的目标，在实战中综合提升各维度能力`
+  }
+
+  private getWeakestDimensions(ability: any): string[] {
+    return Object.entries(ability.dimensions)
+      .sort(([,a]: any, [,b]: any) => a.score - b.score)
+      .slice(0, 2)
+      .map(([name]) => this.getDimensionDisplayInfo(name).name)
+  }
+
+  private getStrongestDimensions(ability: any): string[] {
+    return Object.entries(ability.dimensions)
+      .sort(([,a]: any, [,b]: any) => b.score - a.score)
+      .slice(0, 2)
+      .map(([name]) => this.getDimensionDisplayInfo(name).name)
+  }
+
+  private getBalanceDevelopmentStrategy(ability: any): string {
+    const scores = Object.values(ability.dimensions).map((d: any) => d.score)
+    const maxScore = Math.max(...scores)
+    const minScore = Math.min(...scores)
+    const gap = maxScore - minScore
+    
+    if (gap < 20) {
+      return '能力较为均衡，可以选择综合性较强的学习目标'
+    } else if (gap < 40) {
+      return '存在一定能力差距，建议优先补强薄弱维度'
+    } else {
+      return '能力差距较大，强烈建议先专注补强最薄弱的维度'
+    }
   }
 
   private parseRecommendations(response: string): GoalRecommendation[] {

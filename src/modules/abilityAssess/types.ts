@@ -141,6 +141,15 @@ export interface QuestionnaireResponse {
     learningStyle: string
     timeCommitment: number
   }
+  
+  // 扩展字段，用于支持表单数据结构
+  experience?: {
+    yearsOfCoding: number
+    languages: string[]
+    frameworks: string[]
+    projects?: string[]
+  }
+  skills?: Record<string, number>
 }
 
 // 项目信息

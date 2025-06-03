@@ -1,11 +1,15 @@
 import React, { useState } from 'react'
 import { learningSystemService } from '../modules/learningSystem'
-import { agentToolExecutor, getLearningGoals, getAbilityProfile } from '../modules/coreData'
+import { 
+  getLearningGoals, 
+  getLearningPaths, 
+  getCourseUnits, 
+  getAbilityProfile,
+  LearningGoal,
+  agentToolExecutor
+} from '../modules/coreData'
 import { getCurrentAssessment } from '../modules/abilityAssess/service'
 import { getAPIConfig } from '../modules/profileSettings/service'
-import { LearningGoal } from '../modules/coreData/types'
-import { RealLLMDemo } from '../components/AIAgent/RealLLMDemo'
-import { GoalStateManagerTest } from '../modules/coreData/goalStateManager.test'
 import { log } from '../utils/logger'
 
 interface ChatMessage {
@@ -88,11 +92,23 @@ export const AgentDemo: React.FC = () => {
       context += '，还没有设定学习目标'
     }
 
-    return `🤖 你好！我是你的AI学习助手。我已经分析了你的当前状态：
+    return `🤖 欢迎使用 AI Agent 模式 (Preview版本)！
 
+我已经分析了你的当前状态：
 ${context}
 
+⚠️ **Preview版本说明**：
+• 功能持续优化中，体验可能不够完善
+• 基于你的完整学习数据提供智能建议
+• 暂时专注于分析和建议功能
+
 我可以帮助你：
+• 🧠 分析你的技能水平和学习进度
+• 🎯 基于现有数据提供个性化学习建议
+• 📈 制定学习计划和调整策略
+• 💡 回答学习相关问题和困惑
+• 🚀 优化你的学习路径
+
 • 🧠 分析技能水平和能力差距
 • 🎯 设定个性化学习目标
 • 🛤️ 生成定制学习路径
@@ -118,9 +134,9 @@ ${context}
     setChatLoading(true)
 
     try {
-      // 使用真实的AI学习系统
+      // 使用AI Agent模式 (Preview版本)
       const response = await learningSystemService.chatWithAgent(chatInput, {
-        useRealLLM: true, // 强制使用真实LLM
+        useRealLLM: true, // Preview版本，基于用户上下文
         chatHistory: chatMessages
       })
 
@@ -129,7 +145,7 @@ ${context}
         type: 'agent',
         content: response.response,
         timestamp: new Date().toISOString(),
-        toolsUsed: response.toolsUsed,
+        // toolsUsed removed in Preview mode
         suggestions: response.suggestions
       }
 
@@ -1584,90 +1600,17 @@ ${context}
     }
   }
 
-  // 演示目标状态管理
+  // 演示目标状态管理器测试
   const demoGoalStateManager = async () => {
     setLoading(true)
-    addOutput('=== 目标状态管理演示 ===')
+    addOutput('=== 🎯 目标状态管理器测试 ===')
     
     try {
-      // 1. 获取当前状态统计
-      addOutput('📊 步骤1: 获取目标状态统计')
-      const stats = await agentToolExecutor.executeTool('get_goal_status_stats', {})
-      addOutput(`   总目标数: ${stats.total}`)
-      addOutput(`   激活: ${stats.active}/3`)
-      addOutput(`   已完成: ${stats.completed}`)
-      addOutput(`   已暂停: ${stats.paused}`)
-      addOutput(`   已取消: ${stats.cancelled}`)
-      addOutput(`   可激活更多: ${stats.canActivateMore ? '是' : '否'}`)
-      
-      // 2. 测试创建目标（考虑限制）
-      addOutput('\n🎯 步骤2: 测试创建新目标')
-      try {
-        const newGoal = await agentToolExecutor.executeTool('create_learning_goal', {
-          title: '状态管理测试目标',
-          description: '测试目标状态管理功能',
-          category: 'frontend',
-          priority: 3,
-          targetLevel: 'beginner',
-          estimatedTimeWeeks: 4,
-          requiredSkills: ['HTML', 'CSS'],
-          outcomes: ['掌握基础前端技能'],
-          status: 'active'
-        })
-        
-        if (newGoal._systemMessage) {
-          addOutput(`   ⚠️ ${newGoal._systemMessage}`)
-        } else {
-          addOutput(`   ✅ 成功创建激活目标: ${newGoal.title}`)
-        }
-        
-        // 保存目标ID用于后续测试
-        setDemoGoalId(newGoal.id)
-        
-      } catch (error) {
-        addOutput(`   ❌ 创建失败: ${error instanceof Error ? error.message : '未知错误'}`)
-        
-        // 如果创建失败，尝试获取现有目标进行测试
-        const goals = await agentToolExecutor.executeTool('get_learning_goals', { status: 'all' })
-        if (goals.goals.length > 0) {
-          const testGoal = goals.goals[0]
-          setDemoGoalId(testGoal.id)
-          addOutput(`   🔄 使用现有目标进行测试: ${testGoal.title}`)
-        }
-      }
-      
-      // 3. 测试状态转换
-      if (demoGoalId) {
-        addOutput('\n🔄 步骤3: 测试目标状态转换')
-        
-        // 暂停目标
-        const pausedGoal = await agentToolExecutor.executeTool('pause_goal', {
-          goalId: demoGoalId
-        })
-        addOutput(`   ⏸️ 暂停目标: ${pausedGoal.title} (状态: ${pausedGoal.status})`)
-        
-        // 重新激活目标
-        const activatedGoal = await agentToolExecutor.executeTool('activate_goal', {
-          goalId: demoGoalId
-        })
-        addOutput(`   ▶️ 重新激活: ${activatedGoal.title} (状态: ${activatedGoal.status})`)
-      }
-      
-      // 4. 显示最终状态
-      addOutput('\n📈 步骤4: 显示最终状态统计')
-      const finalStats = await agentToolExecutor.executeTool('get_goal_status_stats', {})
-      addOutput(`   激活目标: ${finalStats.active}/3`)
-      addOutput(`   可激活更多: ${finalStats.canActivateMore ? '是' : '否'}`)
-      
-      addOutput('\n✅ 目标状态管理演示完成！')
-      addOutput('🎯 演示功能包括:')
-      addOutput('   - 📊 状态统计查询')
-      addOutput('   - 🔒 3个目标激活限制')
-      addOutput('   - 🔄 状态转换 (激活/暂停)')
-      addOutput('   - ⚠️ 智能错误处理')
+      addOutput('⚠️ 目标状态管理器测试功能已移除')
+      addOutput('💡 请使用其他演示功能体验系统能力')
       
     } catch (error) {
-      addOutput(`❌ 目标状态管理演示失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      addOutput(`❌ 测试失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }

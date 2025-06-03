@@ -301,47 +301,34 @@ export const getAIResponse = async (message: string, context?: string): Promise<
     }
     let body: any = {}
     
-    const systemPrompt = `你是一个专业的AI学习助手，拥有多种工具来帮助用户管理和分析学习数据。
+    const systemPrompt = `你是一个专业的AI学习助手 - Agent 模式 (Preview版本)
+
+🌟 PREVIEW版本说明：
+• 这是AI Agent模式的预览版本，功能持续优化中
+• 用户的完整学习数据已经作为上下文提供，无需使用工具获取数据
+• 专注于基于现有数据提供智能分析和建议
 
 你的核心职责：
-• 🔍 根据用户问题智能选择合适的工具
-• 📊 分析和查询用户的学习数据
-• 🎯 提供个性化的学习建议和指导
-• 🛠️ 执行学习管理相关的操作
-• 📈 帮助用户完善和修正能力档案
+• 🧠 基于用户上下文提供智能学习建议
+• 🎯 分析用户当前学习状态并给出个性化指导
+• 📈 根据能力评估和学习进度提供优化建议
+• 💡 回答学习相关问题并提供解决方案
+• 🚀 帮助用户制定学习计划和调整学习策略
 
-工具使用原则：
-1. 当用户询问"我的目标"、"学习目标"时，使用 get_learning_goals
-2. 当用户询问"我的路径"、"学习路径"时，使用 get_learning_paths  
-3. 当用户询问"我的课程"、"学习内容"时，使用 get_course_units
-4. 当用户询问"我的进度"、"学习统计"时，使用 get_learning_summary
-5. 当用户询问"我的状态"、"学习概况"时，使用 get_learning_context
-6. 当用户要求"分析能力"、"评估技能"时，使用 analyze_user_ability
-7. 当用户要求"创建目标"、"设定目标"时，使用 create_learning_goal
-8. 当用户要求"生成路径"、"制定计划"时，使用 create_learning_path 或 generate_path_nodes
-9. 当用户提出学习困难时，使用 handle_learning_difficulty
-10. 当用户需要建议时，使用 suggest_next_action
+⚠️ PREVIEW版本限制：
+• 暂不支持数据修改操作（创建、更新、删除）
+• 专注于分析、建议和指导功能
+• 所有数据查询已通过上下文提供，无需额外获取
 
-能力档案管理工具：
-11. 当用户要求"修正能力评估"、"更新技能分数"时，使用 update_ability_assessment
-12. 当用户要求"添加项目经历"、"增加技能证据"时，使用 add_skill_evidence
-13. 当用户指出"AI评估不准确"、"纠正评分"时，使用 correct_ability_profile
-14. 当用户提供"补充技能信息"、"增强置信度"时，使用 enhance_skill_confidence
-15. 当用户要求"重新评估某个维度"时，使用 reassess_ability_dimension
-16. 当用户询问"如何提升能力"、"能力改进建议"时，使用 get_ability_improvement_suggestions
+💬 交互原则：
+1. 直接基于提供的用户上下文回答问题
+2. 提供具体、可行的学习建议
+3. 分析用户的优势和改进空间
+4. 给出个性化的学习路径建议
+5. 在适当时候提醒这是Preview版本
 
-能力管理场景示例：
-- "我觉得我的Python分数太低了，我实际上做过很多Python项目" → update_ability_assessment
-- "我最近完成了一个大型React项目，想要更新我的前端能力" → add_skill_evidence  
-- "AI给我的算法能力评分太高了，我实际水平没那么好" → correct_ability_profile
-- "我想补充一些我的开源贡献经历" → enhance_skill_confidence
-- "基于我新学的技能，重新评估我的编程能力" → reassess_ability_dimension
-- "给我一些3个月内的能力提升建议" → get_ability_improvement_suggestions
-
-请根据用户的具体需求选择最合适的工具，可以同时调用多个工具获取完整信息。
-对于能力相关的问题，要特别关注用户的反馈和补充信息，帮助完善能力档案的准确性。
-
-${context ? `\n当前学习上下文：\n${context}` : ''}`
+📊 当前用户完整上下文：
+${context ? context : '无'}`
     
     switch (config.model) {
       case 'openai':
@@ -377,25 +364,14 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
         headers['x-api-key'] = config.apiKey
         headers['anthropic-version'] = '2023-06-01'
         body = {
-          model: config.specificModel || 'claude-3-sonnet-20240229',
+          model: config.specificModel || 'claude-3-5-sonnet-20241022',
           system: systemPrompt,
           messages: [{ role: 'user', content: message }],
-          max_tokens: config.params?.maxTokens || 1000
+          max_tokens: config.params?.maxTokens || 2000,
+          temperature: config.params?.temperature || 0.3
         }
         
-        // 添加其他参数
-        if (config.params?.temperature !== undefined) {
-          body.temperature = config.params.temperature
-        }
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.top_p = config.params.topP
-        }
-        if (config.params?.topK !== undefined && config.params.topK > 0) {
-          body.top_k = config.params.topK
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.stop_sequences = config.params.stopSequences
-        }
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       case 'qwen':
@@ -416,6 +392,8 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
             result_format: 'message'
           }
         }
+        
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       default:
@@ -508,47 +486,34 @@ export const getAIResponseStream = async (
     }
     let body: any = {}
     
-    const systemPrompt = `你是一个专业的AI学习助手，拥有多种工具来帮助用户管理和分析学习数据。
+    const systemPrompt = `你是一个专业的AI学习助手 - Agent 模式 (Preview版本)
+
+🌟 PREVIEW版本说明：
+• 这是AI Agent模式的预览版本，功能持续优化中
+• 用户的完整学习数据已经作为上下文提供，无需使用工具获取数据
+• 专注于基于现有数据提供智能分析和建议
 
 你的核心职责：
-• 🔍 根据用户问题智能选择合适的工具
-• 📊 分析和查询用户的学习数据
-• 🎯 提供个性化的学习建议和指导
-• 🛠️ 执行学习管理相关的操作
-• 📈 帮助用户完善和修正能力档案
+• 🧠 基于用户上下文提供智能学习建议
+• 🎯 分析用户当前学习状态并给出个性化指导
+• 📈 根据能力评估和学习进度提供优化建议
+• 💡 回答学习相关问题并提供解决方案
+• 🚀 帮助用户制定学习计划和调整学习策略
 
-工具使用原则：
-1. 当用户询问"我的目标"、"学习目标"时，使用 get_learning_goals
-2. 当用户询问"我的路径"、"学习路径"时，使用 get_learning_paths  
-3. 当用户询问"我的课程"、"学习内容"时，使用 get_course_units
-4. 当用户询问"我的进度"、"学习统计"时，使用 get_learning_summary
-5. 当用户询问"我的状态"、"学习概况"时，使用 get_learning_context
-6. 当用户要求"分析能力"、"评估技能"时，使用 analyze_user_ability
-7. 当用户要求"创建目标"、"设定目标"时，使用 create_learning_goal
-8. 当用户要求"生成路径"、"制定计划"时，使用 create_learning_path 或 generate_path_nodes
-9. 当用户提出学习困难时，使用 handle_learning_difficulty
-10. 当用户需要建议时，使用 suggest_next_action
+⚠️ PREVIEW版本限制：
+• 暂不支持数据修改操作（创建、更新、删除）
+• 专注于分析、建议和指导功能
+• 所有数据查询已通过上下文提供，无需额外获取
 
-能力档案管理工具：
-11. 当用户要求"修正能力评估"、"更新技能分数"时，使用 update_ability_assessment
-12. 当用户要求"添加项目经历"、"增加技能证据"时，使用 add_skill_evidence
-13. 当用户指出"AI评估不准确"、"纠正评分"时，使用 correct_ability_profile
-14. 当用户提供"补充技能信息"、"增强置信度"时，使用 enhance_skill_confidence
-15. 当用户要求"重新评估某个维度"时，使用 reassess_ability_dimension
-16. 当用户询问"如何提升能力"、"能力改进建议"时，使用 get_ability_improvement_suggestions
+💬 交互原则：
+1. 直接基于提供的用户上下文回答问题
+2. 提供具体、可行的学习建议
+3. 分析用户的优势和改进空间
+4. 给出个性化的学习路径建议
+5. 在适当时候提醒这是Preview版本
 
-能力管理场景示例：
-- "我觉得我的Python分数太低了，我实际上做过很多Python项目" → update_ability_assessment
-- "我最近完成了一个大型React项目，想要更新我的前端能力" → add_skill_evidence  
-- "AI给我的算法能力评分太高了，我实际水平没那么好" → correct_ability_profile
-- "我想补充一些我的开源贡献经历" → enhance_skill_confidence
-- "基于我新学的技能，重新评估我的编程能力" → reassess_ability_dimension
-- "给我一些3个月内的能力提升建议" → get_ability_improvement_suggestions
-
-请根据用户的具体需求选择最合适的工具，可以同时调用多个工具获取完整信息。
-对于能力相关的问题，要特别关注用户的反馈和补充信息，帮助完善能力档案的准确性。
-
-${context ? `\n当前学习上下文：\n${context}` : ''}`
+📊 当前用户完整上下文：
+${context ? context : '无'}`
     
     switch (config.model) {
       case 'openai':
@@ -585,33 +550,21 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
         headers['x-api-key'] = config.apiKey
         headers['anthropic-version'] = '2023-06-01'
         body = {
-          model: config.specificModel || 'claude-3-sonnet-20240229',
+          model: config.specificModel || 'claude-3-5-sonnet-20241022',
           system: systemPrompt,
           messages: [{ role: 'user', content: message }],
-          max_tokens: config.params?.maxTokens || 1000,
-          stream: true // 启用流式输出
+          max_tokens: config.params?.maxTokens || 2000,
+          temperature: config.params?.temperature || 0.3
         }
         
-        // 添加其他参数
-        if (config.params?.temperature !== undefined) {
-          body.temperature = config.params.temperature
-        }
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.top_p = config.params.topP
-        }
-        if (config.params?.topK !== undefined && config.params.topK > 0) {
-          body.top_k = config.params.topK
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.stop_sequences = config.params.stopSequences
-        }
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       case 'qwen':
         apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
         headers['Authorization'] = `Bearer ${config.apiKey}`
         body = {
-          model: config.specificModel || 'qwen-max',
+          model: config.specificModel || 'qwen-turbo',
           input: {
             messages: [
               { role: 'system', content: systemPrompt },
@@ -619,25 +572,13 @@ ${context ? `\n当前学习上下文：\n${context}` : ''}`
             ]
           },
           parameters: {
-            temperature: config.params?.temperature || 0.7,
-            max_tokens: config.params?.maxTokens || 1000,
-            incremental_output: true // 启用增量输出
+            temperature: config.params?.temperature || 0.3,
+            max_tokens: config.params?.maxTokens || 2000,
+            result_format: 'message'
           }
         }
         
-        // 添加其他参数
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.parameters.top_p = config.params.topP
-        }
-        if (config.params?.topK !== undefined && config.params.topK > 0) {
-          body.parameters.top_k = config.params.topK
-        }
-        if (config.params?.presencePenalty !== undefined) {
-          body.parameters.presence_penalty = config.params.presencePenalty
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.parameters.stop = config.params.stopSequences
-        }
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       default:
@@ -991,49 +932,31 @@ export const getAIResponseWithTools = async (
     }
     let body: any = {}
     
-    const systemPrompt = `你是一个专业的AI学习助手，拥有多种工具来帮助用户管理和分析学习数据。
+    const systemPrompt = `你是一个专业的AI学习助手 - Agent 模式 (Preview版本)
 
-🔥 CRITICAL: 你必须根据用户问题使用相应的工具，不能仅凭已有知识回答。即使问题看似简单，也要通过工具调用获取最新的用户数据。
+🌟 PREVIEW版本说明：
+• 这是AI Agent模式的预览版本，功能持续优化中
+• 用户的完整学习数据已经作为上下文提供，无需使用工具获取数据
+• 专注于基于现有数据提供智能分析和建议
 
 你的核心职责：
-• 🔍 根据用户问题智能选择合适的工具
-• 📊 分析和查询用户的学习数据
-• 🎯 提供个性化的学习建议和指导
-• 🛠️ 执行学习管理相关的操作
-• 📈 帮助用户完善和修正能力档案
+• 🧠 基于用户上下文提供智能学习建议
+• 🎯 分析用户当前学习状态并给出个性化指导
+• 📈 根据能力评估和学习进度提供优化建议
+• 💡 回答学习相关问题并提供解决方案
+• 🚀 帮助用户制定学习计划和调整学习策略
 
-🎯 MANDATORY工具使用原则（必须遵循）:
-1. 当用户询问"我的目标"、"学习目标"时，必须使用 get_learning_goals
-2. 当用户询问"我的路径"、"学习路径"时，必须使用 get_learning_paths  
-3. 当用户询问"我的课程"、"学习内容"时，必须使用 get_course_units
-4. 当用户询问"我的进度"、"学习统计"时，必须使用 get_learning_summary
-5. 当用户询问"我的状态"、"学习概况"时，必须使用 get_learning_context
-6. 当用户要求"分析能力"、"评估技能"时，必须使用 analyze_user_ability
-7. 当用户要求"创建目标"、"设定目标"时，必须使用 create_learning_goal
-8. 当用户要求"生成路径"、"制定计划"时，必须使用 create_learning_path 或 generate_path_nodes
-9. 当用户提出学习困难时，必须使用 handle_learning_difficulty
-10. 当用户需要建议时，必须使用 suggest_next_action
+⚠️ PREVIEW版本限制：
+• 暂不支持数据修改操作（创建、更新、删除）
+• 专注于分析、建议和指导功能
+• 所有数据查询已通过上下文提供，无需额外获取
 
-强制创建目标场景：
-- "为我创建一个学习JavaScript的目标" → 必须使用 create_learning_goal，参数包括：
-  title: "学习JavaScript", category: "frontend", targetLevel: "intermediate"
-- "我想学习Python" → 必须使用 create_learning_goal
-- "学习前端开发" → 必须使用 create_learning_goal
-
-学习困难处理场景：
-- "学习太难了" → 必须使用 handle_learning_difficulty
-- "我觉得困难" → 必须使用 handle_learning_difficulty
-- "能帮帮我吗" → 必须使用 suggest_next_action
-
-能力档案管理工具：
-11. 当用户要求"修正能力评估"、"更新技能分数"时，使用 update_ability_assessment
-12. 当用户要求"添加项目经历"、"增加技能证据"时，使用 add_skill_evidence
-13. 当用户指出"AI评估不准确"、"纠正评分"时，使用 correct_ability_profile
-14. 当用户提供"补充技能信息"、"增强置信度"时，使用 enhance_skill_confidence
-15. 当用户要求"重新评估某个维度"时，使用 reassess_ability_dimension
-16. 当用户询问"如何提升能力"、"能力改进建议"时，使用 get_ability_improvement_suggestions
-
-🚨 重要提醒：永远不要直接回答而不使用工具。每个用户问题都应该通过相应的工具来获取最新、准确的数据。
+💬 交互原则：
+1. 直接基于提供的用户上下文回答问题
+2. 提供具体、可行的学习建议
+3. 分析用户的优势和改进空间
+4. 给出个性化的学习路径建议
+5. 在适当时候提醒这是Preview版本
 
 📊 当前用户完整上下文：
 ${userContext}
@@ -1094,35 +1017,10 @@ ${context ? `\n额外上下文：\n${context}` : ''}`
           system: systemPrompt,
           messages: [{ role: 'user', content: message }],
           max_tokens: config.params?.maxTokens || 2000,
-          temperature: config.params?.temperature || 0.1 // 降低temperature确保更准确的工具调用
+          temperature: config.params?.temperature || 0.3
         }
         
-        // 添加工具定义（Claude tools格式）
-        if (tools && tools.length > 0) {
-          body.tools = tools.map(tool => ({
-            name: tool.name,
-            description: tool.description,
-            input_schema: {
-              type: 'object',
-              properties: Object.entries(tool.parameters).reduce((props: any, [key, param]: [string, any]) => {
-                props[key] = {
-                  type: param.type,
-                  description: param.description,
-                  ...(param.enum && { enum: param.enum }),
-                  ...(param.min && { minimum: param.min }),
-                  ...(param.max && { maximum: param.max }),
-                  ...(param.items && { items: param.items })
-                }
-                return props
-              }, {}),
-              required: Object.entries(tool.parameters)
-                .filter(([_, param]: [string, any]) => !param.optional)
-                .map(([key]) => key)
-            }
-          }))
-          // 🆕 Claude的工具使用偏好设置
-          body.tool_choice = { type: "any" } // 要求必须使用至少一个工具
-        }
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       case 'qwen':
@@ -1138,39 +1036,13 @@ ${context ? `\n额外上下文：\n${context}` : ''}`
             ]
           },
           parameters: {
-            temperature: config.params?.temperature || 0.1, // 降低temperature确保更准确的工具调用
+            temperature: config.params?.temperature || 0.3,
             max_tokens: config.params?.maxTokens || 2000,
             result_format: 'message'
           }
         }
         
-        // 添加工具定义（通义千问 function calling格式）
-        if (tools && tools.length > 0) {
-          body.input.tools = tools.map(tool => ({
-            type: 'function',
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: {
-                type: 'object',
-                properties: Object.entries(tool.parameters).reduce((props: any, [key, param]: [string, any]) => {
-                  props[key] = {
-                    type: param.type,
-                    description: param.description,
-                    ...(param.enum && { enum: param.enum }),
-                    ...(param.min && { minimum: param.min }),
-                    ...(param.max && { maximum: param.max }),
-                    ...(param.items && { items: param.items })
-                  }
-                  return props
-                }, {}),
-                required: Object.entries(tool.parameters)
-                  .filter(([_, param]: [string, any]) => !param.optional)
-                  .map(([key]) => key)
-              }
-            }
-          }))
-        }
+        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       default:
@@ -1179,7 +1051,6 @@ ${context ? `\n额外上下文：\n${context}` : ''}`
     
     log('[AIAssistant] Enhanced function calling request:', {
       model: config.model,
-      toolsCount: tools?.length || 0,
       messageLength: message.length,
       hasUserContext: !!userContext,
       contextLength: userContext.length
@@ -1198,208 +1069,35 @@ ${context ? `\n额外上下文：\n${context}` : ''}`
     }
     
     const data = await response.json()
-    log('[AIAssistant] Enhanced function calling response received')
+    log('[AIAssistant] Agent mode response received')
     
-    // 处理不同模型的响应格式
-    let assistantMessage: any
-    let toolCalls: any[] = []
+    // 处理不同模型的响应格式 (简化为纯文本响应)
+    let finalResponse = ''
     
     switch (config.model) {
       case 'openai':
-        assistantMessage = data.choices[0].message
-        if (assistantMessage.tool_calls) {
-          toolCalls = assistantMessage.tool_calls.map((call: any) => ({
-            id: call.id,
-            name: call.function.name,
-            parameters: JSON.parse(call.function.arguments)
-          }))
-          log('[AIAssistant] OpenAI tool calls detected:', toolCalls.length)
-        }
+        finalResponse = data.choices[0].message.content
         break
         
       case 'claude':
-        // Claude 可能返回多个 content 块
         if (Array.isArray(data.content)) {
-          assistantMessage = data.content.find((c: any) => c.type === 'text') || data.content[0]
-          
-          // 查找工具调用
-          const toolUseBlocks = data.content.filter((content: any) => content.type === 'tool_use')
-          if (toolUseBlocks.length > 0) {
-            toolCalls = toolUseBlocks.map((content: any) => ({
-              id: content.id,
-              name: content.name,
-              parameters: content.input || {}
-            }))
-            log('[AIAssistant] Claude tool calls detected:', toolCalls.length)
-          }
+          const textContent = data.content.find((c: any) => c.type === 'text')
+          finalResponse = textContent ? textContent.text : data.content[0]?.text || '无法生成回复'
         } else {
-          assistantMessage = data.content
+          finalResponse = data.content?.text || '无法生成回复'
         }
         break
         
       case 'qwen':
-        assistantMessage = data.output.choices[0].message
-        if (assistantMessage.tool_calls) {
-          toolCalls = assistantMessage.tool_calls.map((call: any) => ({
-            id: call.id,
-            name: call.function.name,
-            parameters: JSON.parse(call.function.arguments)
-          }))
-          log('[AIAssistant] Qwen tool calls detected:', toolCalls.length)
-        }
+        finalResponse = data.output.choices[0].message.content
         break
     }
     
-    // 执行工具调用
-    const executedToolCalls: Array<{
-      name: string
-      parameters: any
-      result: any
-    }> = []
-    
-    if (toolCalls.length > 0 && toolsExecutor) {
-      log('[AIAssistant] Executing tool calls:', toolCalls.map(tc => tc.name))
-      
-      for (const toolCall of toolCalls) {
-        try {
-          log(`[AIAssistant] Executing tool: ${toolCall.name}`, toolCall.parameters)
-          const result = await toolsExecutor(toolCall.name, toolCall.parameters)
-          executedToolCalls.push({
-            name: toolCall.name,
-            parameters: toolCall.parameters,
-            result
-          })
-          log(`[AIAssistant] Tool executed successfully: ${toolCall.name}`)
-        } catch (toolError) {
-          log(`[AIAssistant] Tool execution failed: ${toolCall.name}`, toolError)
-          executedToolCalls.push({
-            name: toolCall.name,
-            parameters: toolCall.parameters,
-            result: { error: toolError instanceof Error ? toolError.message : 'Unknown error' }
-          })
-        }
-      }
-      
-      // 如果有工具调用，需要第二次API调用获取最终回复
-      if (executedToolCalls.length > 0) {
-        const toolResults = executedToolCalls.map(call => 
-          `工具 ${call.name} 执行结果：\n${JSON.stringify(call.result, null, 2)}`
-        ).join('\n\n')
-        
-        // 构建第二次请求
-        const secondBody = { ...body }
-        switch (config.model) {
-          case 'openai':
-            secondBody.messages = [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message },
-              { 
-                role: 'assistant', 
-                content: assistantMessage.content || null,
-                tool_calls: assistantMessage.tool_calls || []
-              },
-              ...executedToolCalls.map(call => ({
-                role: 'tool',
-                tool_call_id: toolCalls.find(tc => tc.name === call.name)?.id,
-                content: JSON.stringify(call.result)
-              }))
-            ]
-            delete secondBody.tools
-            delete secondBody.tool_choice
-            break
-            
-          case 'claude':
-            secondBody.messages = [
-              { role: 'user', content: message },
-              { 
-                role: 'assistant', 
-                content: [
-                  ...(Array.isArray(data.content) ? data.content : [data.content]),
-                  ...executedToolCalls.map(call => ({
-                    type: 'tool_result',
-                    tool_use_id: toolCalls.find(tc => tc.name === call.name)?.id,
-                    content: JSON.stringify(call.result)
-                  }))
-                ]
-              },
-              { role: 'user', content: '请基于工具执行结果回答我的问题。' }
-            ]
-            delete secondBody.tools
-            break
-            
-          case 'qwen':
-            secondBody.input.messages = [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message },
-              { role: 'assistant', content: assistantMessage.content, tool_calls: assistantMessage.tool_calls },
-              ...executedToolCalls.map(call => ({
-                role: 'tool',
-                name: call.name,
-                content: JSON.stringify(call.result)
-              }))
-            ]
-            delete secondBody.input.tools
-            break
-        }
-        
-        log('[AIAssistant] Sending follow-up request for final response')
-        
-        const secondResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(secondBody)
-        })
-        
-        if (secondResponse.ok) {
-          const secondData = await secondResponse.json()
-          let finalResponse = ''
-          
-          switch (config.model) {
-            case 'openai':
-              finalResponse = secondData.choices[0].message.content
-              break
-            case 'claude':
-              if (Array.isArray(secondData.content)) {
-                const textContent = secondData.content.find((c: any) => c.type === 'text')
-                finalResponse = textContent ? textContent.text : secondData.content[0]?.text || '无法生成回复'
-              } else {
-                finalResponse = secondData.content?.text || '无法生成回复'
-              }
-              break
-            case 'qwen':
-              finalResponse = secondData.output.choices[0].message.content
-              break
-          }
-          
-          log('[AIAssistant] Function calling completed successfully')
-          
-          return {
-            response: finalResponse,
-            toolCalls: executedToolCalls
-          }
-        } else {
-          log('[AIAssistant] Follow-up request failed, using tool results directly')
-        }
-      }
-    }
-    
-    // 没有工具调用或工具调用失败时的回复
-    let responseText = ''
-    switch (config.model) {
-      case 'openai':
-        responseText = assistantMessage.content || '抱歉，我无法生成回复。'
-        break
-      case 'claude':
-        responseText = assistantMessage.text || assistantMessage.content || '抱歉，我无法生成回复。'
-        break
-      case 'qwen':
-        responseText = assistantMessage.content || '抱歉，我无法生成回复。'
-        break
-    }
+    log('[AIAssistant] Agent mode conversation completed successfully')
     
     return {
-      response: responseText,
-      toolCalls: executedToolCalls
+      response: finalResponse,
+      toolCalls: [] // Preview版本不使用工具调用
     }
     
   } catch (err) {

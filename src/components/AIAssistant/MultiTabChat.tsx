@@ -299,27 +299,42 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
     const startY = e.clientY
     const startWidth = chatSize.width
     const startHeight = chatSize.height
+    const startPosition = { ...position }
     
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault()
       
       let newWidth = startWidth
       let newHeight = startHeight
+      let newPosition = { ...startPosition }
+      
+      const deltaX = e.clientX - startX
+      const deltaY = e.clientY - startY
       
       if (direction.includes('right')) {
-        newWidth = Math.max(400, Math.min(1000, startWidth + (e.clientX - startX)))
+        newWidth = Math.max(400, Math.min(1000, startWidth + deltaX))
       }
       if (direction.includes('left')) {
-        newWidth = Math.max(400, Math.min(1000, startWidth - (e.clientX - startX)))
+        const newWidthCandidate = Math.max(400, Math.min(1000, startWidth - deltaX))
+        const widthDelta = startWidth - newWidthCandidate
+        newWidth = newWidthCandidate
+        newPosition.x = startPosition.x + widthDelta
       }
       if (direction.includes('bottom')) {
-        newHeight = Math.max(300, Math.min(800, startHeight + (e.clientY - startY)))
+        newHeight = Math.max(300, Math.min(800, startHeight + deltaY))
       }
       if (direction.includes('top')) {
-        newHeight = Math.max(300, Math.min(800, startHeight - (e.clientY - startY)))
+        const newHeightCandidate = Math.max(300, Math.min(800, startHeight - deltaY))
+        const heightDelta = startHeight - newHeightCandidate
+        newHeight = newHeightCandidate
+        newPosition.y = startPosition.y + heightDelta
       }
       
       setChatSize({ width: newWidth, height: newHeight })
+      if (newPosition.x !== startPosition.x || newPosition.y !== startPosition.y) {
+        setPosition(newPosition)
+        onPositionChange?.(newPosition)
+      }
     }
     
     const handleMouseUp = () => {
@@ -578,10 +593,22 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
       onMouseDown={handleMouseDown}
     >
       {/* 调整大小的手柄 */}
+      {/* 左边缘 */}
+      <div
+        className="absolute top-0 left-0 w-1 h-full cursor-ew-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
+      />
+      
       {/* 右边缘 */}
       <div
         className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-blue-300 transition-colors"
         onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
+      />
+      
+      {/* 顶边缘 */}
+      <div
+        className="absolute top-0 left-0 w-full h-1 cursor-ns-resize hover:bg-blue-300 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'top')}
       />
       
       {/* 底边缘 */}
@@ -590,21 +617,26 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
         onMouseDown={(e) => handleResizeMouseDown(e, 'bottom')}
       />
       
-      {/* 右下角 */}
+      {/* 四个角落 */}
       <div
-        className="absolute bottom-0 right-0 w-3 h-3 cursor-nw-resize hover:bg-blue-400 transition-colors"
-        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
+        className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'top-left')}
       />
       
-      {/* 右下角调整大小图标 */}
-      <div className="absolute bottom-1 right-1 pointer-events-none">
-        <svg className="w-3 h-3 text-gray-400" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M9.5 13a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H10v1.5a.5.5 0 0 1-.5.5z"/>
-          <path d="M13 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0v-2z"/>
-          <path d="M2.5 13a.5.5 0 0 1 0-1h2v-1.5a.5.5 0 0 1 1 0v2a.5.5 0 0 1-.5.5h-2z"/>
-          <path d="M2 2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1H3v1.5a.5.5 0 0 1-1 0v-2z"/>
-        </svg>
-      </div>
+      <div
+        className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'top-right')}
+      />
+      
+      <div
+        className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-left')}
+      />
+      
+      <div
+        className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize hover:bg-blue-400 transition-colors"
+        onMouseDown={(e) => handleResizeMouseDown(e, 'bottom-right')}
+      />
 
       {/* 左侧对话列表 */}
       <div className="bg-gray-50 border-r border-gray-200 rounded-tl-xl flex flex-col" style={{ width: Math.max(180, Math.min(250, chatSize.width * 0.3)) }}>
@@ -666,7 +698,7 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             <span className="font-medium">
-              悟语 AI助手 - {chatMode === 'agent' ? '学习模式' : '问答模式'}
+              悟语 AI助手 - {chatMode === 'agent' ? 'Agent模式' : '问答模式'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -696,9 +728,9 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
                     ? 'bg-white text-blue-600' 
                     : 'text-white/80 hover:text-white'
                 }`}
-                title="学习模式"
+                title="Agent模式"
               >
-                🤖 学习
+                🤖 Agent
               </button>
             </div>
             
@@ -766,35 +798,7 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
           </div>
         </div>
 
-        {/* Agent 模式系统状态栏 */}
-        {chatMode === 'agent' && systemStatus && (
-          <div className="bg-gray-50 border-b border-gray-200 p-3">
-            <div className="grid grid-cols-3 gap-4 text-xs">
-              <div className="text-center">
-                <div className="text-gray-500">当前阶段</div>
-                <div className="font-medium text-gray-700">
-                  {systemStatus.currentPhase === 'assessment' && '能力评估'}
-                  {systemStatus.currentPhase === 'goal_setting' && '目标设定'}
-                  {systemStatus.currentPhase === 'path_planning' && '路径规划'}
-                  {systemStatus.currentPhase === 'learning' && '学习中'}
-                  {systemStatus.currentPhase === 'review' && '复习阶段'}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-gray-500">学习进度</div>
-                <div className="font-medium text-gray-700">
-                  {Math.round(systemStatus.progress.overallProgress)}%
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-gray-500">设置完成</div>
-                <div className={`font-medium ${systemStatus.setupComplete ? 'text-green-600' : 'text-yellow-600'}`}>
-                  {systemStatus.setupComplete ? '完成' : '进行中'}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Agent 模式系统状态栏 - 移除 */}
 
         {/* Agent 模式快速操作栏 */}
         {chatMode === 'agent' && (
@@ -845,8 +849,9 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
             <div className="text-center text-sm text-gray-600">
               {chatMode === 'agent' ? (
                 <>
-                  <p>🤖 学习模式已激活</p>
+                  <p>🤖 Agent模式已激活 <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Preview</span></p>
                   <p className="text-xs mt-1">我可以帮您进行能力分析、目标设定、路径规划等学习管理</p>
+                  <p className="text-xs mt-1 text-gray-500">Preview版本：功能持续优化中，基于完整学习数据提供智能建议</p>
                 </>
               ) : (
                 <>
@@ -863,11 +868,22 @@ export const MultiTabChat: React.FC<MultiTabChatProps> = ({
           {!activeSession || activeSession.messages.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <div className="text-4xl mb-2">🧘‍♂️</div>
-              <p>你好！我是悟语，你的AI学习伙伴</p>
-              <p className="text-sm mt-1">问我任何问题，或选中文字进行随意搜~</p>
-              <p className="text-xs text-gray-400 mt-2">
-                选中页面文字会显示"随意搜"按钮，点击即可查询
-              </p>
+              {chatMode === 'agent' ? (
+                <>
+                  <p>当前模式是Agent Preview版本，功能还在升级～可以测试使用</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    我可以帮您进行能力分析、目标设定、路径规划等学习管理
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>你好！我是悟语，你的AI学习伙伴</p>
+                  <p className="text-sm mt-1">问我任何问题，或选中文字进行随意搜~</p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    选中页面文字会显示"随意搜"按钮，点击即可查询
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             activeSession.messages.map((message) => (

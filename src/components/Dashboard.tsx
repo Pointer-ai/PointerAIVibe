@@ -1,7 +1,228 @@
 import React, { useState } from 'react'
 import { getCurrentProfile } from '../utils/profile'
 import { getCurrentAssessment } from '../modules/abilityAssess'
+import { getLearningGoals, getLearningPaths, getCourseUnits } from '../modules/coreData'
 import AppleProfileSwitcher from './AppleProfileSwitcher'
+
+// 简单的雷达图组件
+const AbilityRadarChart: React.FC<{ assessment: any }> = ({ assessment }) => {
+  const dimensions = Object.entries(assessment.dimensions).map(([key, dimension]: [string, any]) => ({
+    name: key === 'programming' ? '编程' :
+          key === 'algorithm' ? '算法' :
+          key === 'project' ? '项目' :
+          key === 'systemDesign' ? '设计' :
+          key === 'communication' ? '协作' : key,
+    score: dimension.score,
+    fullName: key === 'programming' ? '编程基本功' :
+              key === 'algorithm' ? '算法能力' :
+              key === 'project' ? '项目能力' :
+              key === 'systemDesign' ? '系统设计' :
+              key === 'communication' ? '沟通协作' : key
+  }))
+
+  const size = 120
+  const center = size / 2
+  const radius = 40
+
+  // 生成雷达图的点
+  const points = dimensions.map((dim, index) => {
+    const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2
+    const distance = (dim.score / 100) * radius
+    const x = center + Math.cos(angle) * distance
+    const y = center + Math.sin(angle) * distance
+    return { x, y, angle, distance: radius }
+  })
+
+  // 生成网格线
+  const gridPoints = dimensions.map((_, index) => {
+    const angle = (index * 2 * Math.PI) / dimensions.length - Math.PI / 2
+    const x = center + Math.cos(angle) * radius
+    const y = center + Math.sin(angle) * radius
+    return { x, y, angle }
+  })
+
+  const pathData = points.map((point, index) => 
+    `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+  ).join(' ') + ' Z'
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative">
+        <svg width={size} height={size} className="overflow-visible">
+          {/* 网格圆圈 */}
+          {[0.2, 0.4, 0.6, 0.8, 1].map((ratio, i) => (
+            <circle
+              key={i}
+              cx={center}
+              cy={center}
+              r={radius * ratio}
+              fill="none"
+              stroke="rgb(226 232 240)"
+              strokeWidth="1"
+              opacity={0.3}
+            />
+          ))}
+          
+          {/* 网格线 */}
+          {gridPoints.map((point, index) => (
+            <line
+              key={index}
+              x1={center}
+              y1={center}
+              x2={point.x}
+              y2={point.y}
+              stroke="rgb(226 232 240)"
+              strokeWidth="1"
+              opacity={0.3}
+            />
+          ))}
+          
+          {/* 能力区域 */}
+          <path
+            d={pathData}
+            fill="rgba(59 130 246 / 0.2)"
+            stroke="rgb(59 130 246)"
+            strokeWidth="2"
+          />
+          
+          {/* 能力点 */}
+          {points.map((point, index) => (
+            <circle
+              key={index}
+              cx={point.x}
+              cy={point.y}
+              r="3"
+              fill="rgb(59 130 246)"
+            />
+          ))}
+          
+          {/* 标签 */}
+          {gridPoints.map((point, index) => {
+            const labelX = center + Math.cos(point.angle) * (radius + 15)
+            const labelY = center + Math.sin(point.angle) * (radius + 15)
+            return (
+              <text
+                key={index}
+                x={labelX}
+                y={labelY}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="text-xs fill-gray-600"
+                fontSize="10"
+              >
+                {dimensions[index].name}
+              </text>
+            )
+          })}
+        </svg>
+      </div>
+      
+      <div className="flex-1 space-y-2">
+        {dimensions.map((dim, index) => (
+          <div key={index} className="flex items-center justify-between text-sm">
+            <span className="text-gray-600 w-20 truncate" title={dim.fullName}>{dim.fullName}</span>
+            <div className="flex items-center gap-2 flex-1 ml-2">
+              <div className="flex-1 bg-gray-200/50 rounded-full h-2">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-700 ${
+                    dim.score >= 80 ? 'bg-green-400' :
+                    dim.score >= 60 ? 'bg-blue-400' :
+                    dim.score >= 40 ? 'bg-yellow-400' : 'bg-red-400'
+                  }`}
+                  style={{ width: `${dim.score}%` }}
+                />
+              </div>
+              <span className="text-gray-800 font-medium w-8 text-right">{dim.score}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// 学习数据摘要组件
+const LearningSummary: React.FC = () => {
+  const goals = getLearningGoals()
+  const paths = getLearningPaths()
+  const units = getCourseUnits()
+  
+  const activeGoals = goals.filter(g => g.status === 'active')
+  const activePaths = paths.filter(p => p.status === 'active')
+  const completedPaths = paths.filter(p => p.status === 'completed')
+  
+  const totalNodes = activePaths.reduce((sum, path) => sum + path.nodes.length, 0)
+  const completedNodes = activePaths.reduce((sum, path) => 
+    sum + path.nodes.filter(node => node.status === 'completed').length, 0
+  )
+  
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      {/* 学习目标摘要 */}
+      <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-6 bg-blue-500 rounded-lg flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <span className="font-medium text-gray-700">学习目标</span>
+        </div>
+        <div className="text-lg font-bold text-gray-900">{activeGoals.length}</div>
+        <div className="text-sm text-gray-500">
+          {goals.length > activeGoals.length && `共${goals.length}个目标`}
+        </div>
+        {activeGoals.length > 0 && (
+          <div className="mt-2 text-xs text-gray-600 truncate">
+            当前: {activeGoals[0].title}
+          </div>
+        )}
+      </div>
+      
+      {/* 学习路径摘要 */}
+      <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-6 bg-green-500 rounded-lg flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd"/>
+            </svg>
+          </div>
+          <span className="font-medium text-gray-700">学习路径</span>
+        </div>
+        <div className="text-lg font-bold text-gray-900">{activePaths.length}</div>
+        <div className="text-sm text-gray-500">
+          {completedPaths.length > 0 && `已完成${completedPaths.length}条`}
+        </div>
+        {totalNodes > 0 && (
+          <div className="mt-2 text-xs text-gray-600">
+            进度: {completedNodes}/{totalNodes} 节点
+          </div>
+        )}
+      </div>
+      
+      {/* 学习内容摘要 */}
+      <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 border border-white/30">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-6 h-6 bg-purple-500 rounded-lg flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
+            </svg>
+          </div>
+          <span className="font-medium text-gray-700">学习内容</span>
+        </div>
+        <div className="text-lg font-bold text-gray-900">{units.length}</div>
+        <div className="text-sm text-gray-500">
+          课程单元
+        </div>
+        {units.length > 0 && (
+          <div className="mt-2 text-xs text-gray-600">
+            {units.filter(u => u.type === 'theory').length}理论 + {units.filter(u => u.type === 'project').length}项目
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 interface DashboardProps {
   onLogout: () => void
@@ -259,50 +480,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
           
           <div className="space-y-6">
             {currentAssessment ? (
-              <div>
-                <div className="mb-6 p-6 bg-gradient-to-r from-blue-50/50 to-purple-50/50 rounded-2xl border border-blue-100/50">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+              <>
+                {/* 能力评估雷达图 */}
+                <div className="bg-gradient-to-r from-blue-50/50 to-purple-50/50 rounded-2xl border border-blue-100/50 p-6">
+                  <div className="flex items-center gap-2 mb-4">
                     <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                    能力评估已完成
-                  </h4>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">总体评分</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">{currentAssessment.overallScore}</span>
-                      <span className="text-gray-500">/100</span>
+                    <h4 className="text-lg font-semibold text-gray-800">能力评估概览</h4>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-sm text-gray-600">总体评分</span>
+                      <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                        {currentAssessment.overallScore}
+                      </span>
+                      <span className="text-gray-500 text-sm">/100</span>
                     </div>
                   </div>
+                  
+                  <AbilityRadarChart assessment={currentAssessment} />
                 </div>
                 
-                {/* 各维度进度 */}
-                <div className="space-y-4">
-                  {Object.entries(currentAssessment.dimensions).map(([key, dimension]) => (
-                    <div key={key} className="p-4 bg-white/40 backdrop-blur-sm rounded-2xl border border-white/30">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="font-medium text-gray-700">
-                          {key === 'programming' && '编程基本功'}
-                          {key === 'algorithm' && '算法能力'}
-                          {key === 'project' && '项目能力'}
-                          {key === 'systemDesign' && '系统设计'}
-                          {key === 'communication' && '沟通协作'}
-                        </span>
-                        <span className="text-lg font-bold text-gray-800">{dimension.score}</span>
-                      </div>
-                      <div className="w-full bg-gray-200/50 rounded-full h-3 overflow-hidden">
-                        <div 
-                          className={`h-3 rounded-full transition-all duration-700 ease-out ${
-                            dimension.score >= 80 ? 'bg-gradient-to-r from-green-400 to-green-500' :
-                            dimension.score >= 60 ? 'bg-gradient-to-r from-blue-400 to-blue-500' :
-                            dimension.score >= 40 ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' :
-                            'bg-gradient-to-r from-red-400 to-red-500'
-                          } shadow-sm`}
-                          style={{ width: `${dimension.score}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                {/* 学习数据摘要 */}
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                    学习概况
+                  </h4>
+                  <LearningSummary />
                 </div>
-              </div>
+              </>
             ) : (
               <div className="text-center py-12">
                 <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">

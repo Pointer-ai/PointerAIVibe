@@ -315,7 +315,18 @@ function formatQuickActionResult(action: string, result: any): string {
       }
       
     case 'suggest_next':
-      return `🎯 根据您的当前状态，建议：${result.suggestions?.join('，或者') || '继续当前的学习计划'}`
+      const suggestionTexts = (result.suggestions || []).map((suggestion: any) => {
+        if (typeof suggestion === 'string') {
+          return suggestion
+        } else if (suggestion.title) {
+          return suggestion.title
+        } else if (suggestion.description) {
+          return suggestion.description
+        } else {
+          return '继续学习'
+        }
+      })
+      return `🎯 根据您的当前状态，建议：${suggestionTexts.join('，或者') || '继续当前的学习计划'}`
       
     case 'track_progress':
       return `📊 学习进度报告：\n总体进度：${Math.round(result.overallProgress || 0)}%\n活跃路径：${result.activePaths || 0} 个\n${result.insights?.[0] || '继续保持学习！'}`

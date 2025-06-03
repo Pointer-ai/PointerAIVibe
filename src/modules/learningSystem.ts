@@ -792,6 +792,19 @@ export class LearningSystemService {
     
     const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', nextActionParams)
 
+    // 修复: 将建议对象数组转换为字符串数组
+    const nextActionsArray = (nextActionResult.suggestions || []).map((suggestion: any) => {
+      if (typeof suggestion === 'string') {
+        return suggestion
+      } else if (suggestion.title) {
+        return suggestion.title
+      } else if (suggestion.description) {
+        return suggestion.description
+      } else {
+        return '继续学习'
+      }
+    })
+
     // 执行数据完整性检查
     const dataIntegrityIssues = this.checkDataIntegrity()
     const isDataIntegrityOK = dataIntegrityIssues.length === 0
@@ -818,7 +831,7 @@ export class LearningSystemService {
         overallProgress: allNodes.length > 0 ? (completedNodes.length / allNodes.length) * 100 : 0
       },
       recommendations: smartRecommendations.recommendations,
-      nextActions: nextActionResult.suggestions || [],
+      nextActions: nextActionsArray,
       systemHealth: {
         dataIntegrity: isDataIntegrityOK,
         lastSyncTime: new Date().toISOString(),
@@ -1150,7 +1163,19 @@ export class LearningSystemService {
         
       case 'next_action':
         if (result?.suggestions?.length > 0) {
-          return `根据您当前的学习状态，我建议您：${result.suggestions.join('，或者')}。${result.currentStatus ? `您目前有 ${result.currentStatus.activeGoals} 个活跃目标和 ${result.currentStatus.activePaths} 个学习路径。` : ''}`
+          // 修复: 正确处理建议对象数组，提取 title 或 description 来显示
+          const suggestionTexts = result.suggestions.map((suggestion: any) => {
+            if (typeof suggestion === 'string') {
+              return suggestion
+            } else if (suggestion.title) {
+              return suggestion.title
+            } else if (suggestion.description) {
+              return suggestion.description
+            } else {
+              return '继续学习'
+            }
+          })
+          return `根据您当前的学习状态，我建议您：${suggestionTexts.join('，或者')}。${result.currentStatus ? `您目前有 ${result.currentStatus.activeGoals} 个活跃目标和 ${result.currentStatus.activePaths} 个学习路径。` : ''}`
         } else {
           return '让我分析一下您的学习状态，稍等片刻...'
         }

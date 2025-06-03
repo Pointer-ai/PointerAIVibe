@@ -82,6 +82,13 @@ export class PathPlanService {
         context // 传递完整上下文
       })
       
+      log('[PathPlan] AI-driven skill gap analysis result:', {
+        hasAbilityData: result.hasAbilityData,
+        skillGapsCount: result.skillGaps?.length || 0,
+        analysisConfidence: result.analysisConfidence,
+        fallbackUsed: result.fallbackUsed
+      })
+      
       if (!result.hasAbilityData) {
         throw new Error('需要先完成能力评估')
       }
@@ -90,6 +97,7 @@ export class PathPlanService {
       const enhancedGaps = this.enhanceSkillGapAnalysis(result.skillGaps, context)
 
       const analysis: SkillGapAnalysis = {
+        hasAbilityData: context.hasAbilityData,
         currentLevel: this.calculateOverallCurrentLevel(context.abilityProfile),
         targetLevel: this.getTargetLevelFromGoal(context.currentGoal),
         gaps: enhancedGaps,

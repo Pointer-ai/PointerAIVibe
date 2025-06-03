@@ -743,10 +743,18 @@ export const PathPlanView = () => {
                 </div>
               ) : state.skillGapAnalysis ? (
                 <div>
+                  {/* AI分析置信度指示器 */}
+                  <div style={{ marginBottom: '16px', padding: '8px 12px', backgroundColor: state.skillGapAnalysis.fallbackUsed ? '#fef3c7' : '#ecfdf5', borderRadius: '6px', fontSize: '12px' }}>
+                    <span style={{ color: state.skillGapAnalysis.fallbackUsed ? '#92400e' : '#065f46' }}>
+                      {state.skillGapAnalysis.fallbackUsed ? '⚠️ 使用规则分析' : '🤖 AI智能分析'} • 
+                      置信度: {Math.round((state.skillGapAnalysis.analysisConfidence || state.skillGapAnalysis.confidence || 0.8) * 100)}%
+                    </span>
+                  </div>
+
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span>当前水平: {state.skillGapAnalysis.currentLevel}/10</span>
-                      <span>目标水平: {state.skillGapAnalysis.targetLevel}/10</span>
+                      <span>当前水平: {state.skillGapAnalysis.currentLevel || state.skillGapAnalysis.overallAssessment?.currentLevel || 0}/10</span>
+                      <span>目标水平: {state.skillGapAnalysis.targetLevel || state.skillGapAnalysis.overallAssessment?.targetLevel || 8}/10</span>
                     </div>
                     <div style={{
                       width: '100%',
@@ -756,18 +764,39 @@ export const PathPlanView = () => {
                       overflow: 'hidden'
                     }}>
                       <div style={{
-                        width: `${(state.skillGapAnalysis.currentLevel / state.skillGapAnalysis.targetLevel) * 100}%`,
+                        width: `${((state.skillGapAnalysis.currentLevel || state.skillGapAnalysis.overallAssessment?.currentLevel || 0) / (state.skillGapAnalysis.targetLevel || state.skillGapAnalysis.overallAssessment?.targetLevel || 8)) * 100}%`,
                         height: '100%',
                         backgroundColor: '#10b981'
                       }} />
                     </div>
                   </div>
 
+                  {/* 个性化洞察 */}
+                  {state.skillGapAnalysis.overallAssessment?.personalizedInsights && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#7c3aed' }}>
+                        💡 个性化洞察:
+                      </h4>
+                      {state.skillGapAnalysis.overallAssessment.personalizedInsights.slice(0, 2).map((insight, index) => (
+                        <div key={index} style={{
+                          padding: '6px 10px',
+                          backgroundColor: '#f3e8ff',
+                          borderRadius: '4px',
+                          marginBottom: '4px',
+                          fontSize: '12px',
+                          color: '#6b21a8'
+                        }}>
+                          {insight}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div style={{ marginBottom: '16px' }}>
                     <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                       主要技能差距:
                     </h4>
-                    {state.skillGapAnalysis.gaps.slice(0, 3).map((gap, index) => (
+                    {(state.skillGapAnalysis.skillGaps || state.skillGapAnalysis.gaps || []).slice(0, 3).map((gap, index) => (
                       <div key={index} style={{
                         padding: '8px 12px',
                         backgroundColor: '#f9fafb',
@@ -787,10 +816,50 @@ export const PathPlanView = () => {
                         </div>
                         <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
                           差距: {gap.gap} 分
+                          {gap.estimatedHours && ` • 预计: ${gap.estimatedHours}小时`}
+                          {gap.category && ` • ${gap.category}`}
                         </div>
+                        {gap.learningStrategy && (
+                          <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '4px', fontStyle: 'italic' }}>
+                            策略: {gap.learningStrategy}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
+
+                  {/* 个性化建议 */}
+                  {state.skillGapAnalysis.personalizedRecommendations && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#059669' }}>
+                        🎯 个性化建议:
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {state.skillGapAnalysis.personalizedRecommendations.leverageStrengths?.slice(0, 2).map((rec, index) => (
+                          <div key={index} style={{
+                            padding: '6px 8px',
+                            backgroundColor: '#d1fae5',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: '#065f46'
+                          }}>
+                            <strong>优势利用:</strong> {rec}
+                          </div>
+                        ))}
+                        {state.skillGapAnalysis.personalizedRecommendations.addressWeaknesses?.slice(0, 2).map((rec, index) => (
+                          <div key={index} style={{
+                            padding: '6px 8px',
+                            backgroundColor: '#fef3c7',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: '#92400e'
+                          }}>
+                            <strong>薄弱改进:</strong> {rec}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{
                     padding: '12px',
@@ -798,9 +867,15 @@ export const PathPlanView = () => {
                     borderRadius: '6px',
                     fontSize: '13px'
                   }}>
-                    <strong>预计学习时间:</strong> {state.skillGapAnalysis.estimatedTimeWeeks} 周
+                    <strong>预计学习时间:</strong> {state.skillGapAnalysis.estimatedTimeWeeks || state.skillGapAnalysis.summary?.estimatedWeeks || 0} 周
                     <br />
-                    <strong>分析置信度:</strong> {Math.round((state.skillGapAnalysis.confidence || 0.8) * 100)}%
+                    <strong>分析置信度:</strong> {Math.round((state.skillGapAnalysis.analysisConfidence || state.skillGapAnalysis.confidence || 0.8) * 100)}%
+                    {state.skillGapAnalysis.overallAssessment?.readinessScore && (
+                      <>
+                        <br />
+                        <strong>学习准备度:</strong> {state.skillGapAnalysis.overallAssessment.readinessScore}%
+                      </>
+                    )}
                   </div>
 
                   {state.currentStep === 'generation' && (

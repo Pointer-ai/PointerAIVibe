@@ -11,13 +11,74 @@ export interface PathPlanState {
 
 // 技能差距分析
 export interface SkillGapAnalysis {
-  currentLevel: number
-  targetLevel: number
-  gaps: SkillGap[]
-  recommendations: string[]
-  estimatedTimeWeeks: number
+  hasAbilityData: boolean
+  currentLevel?: number
+  targetLevel?: number
+  gaps?: SkillGap[] // 兼容旧格式
+  skillGaps?: SkillGap[] // 新格式
+  recommendations?: string[]
+  estimatedTimeWeeks?: number
   confidence?: number // 新增：分析置信度
+  analysisConfidence?: number // AI分析置信度
   personalizationLevel?: string // 新增：个性化程度
+  fallbackUsed?: boolean // 是否使用了规则分析
+  timestamp?: string
+  contextUsed?: boolean
+  
+  // AI分析新增字段
+  overallAssessment?: {
+    currentLevel: number
+    targetLevel: number
+    gapSeverity: 'low' | 'medium' | 'high'
+    readinessScore: number
+    learningStyle: string
+    personalizedInsights: string[]
+  }
+  
+  personalizedRecommendations?: {
+    leverageStrengths: string[]
+    addressWeaknesses: string[]
+    learningStyle: string[]
+    timeManagement: string[]
+    motivationTips: string[]
+  }
+  
+  riskAssessment?: {
+    challengingAreas: Array<{
+      area: string
+      reason: string
+      mitigation: string
+    }>
+    successFactors: string[]
+    fallbackPlan: string
+  }
+  
+  learningPath?: {
+    phaseStructure: Array<{
+      phase: string
+      duration: string
+      focus: string
+      skills: string[]
+      rationale: string
+    }>
+    criticalMilestones: Array<{
+      milestone: string
+      timeframe: string
+      deliverable: string
+      successCriteria: string
+    }>
+  }
+  
+  summary?: {
+    averageGap: number
+    highPriorityCount: number
+    estimatedWeeks: number
+    totalEstimatedHours: number
+    averageConfidence: number
+  }
+  
+  nextSteps?: string[]
+  confidenceLevel?: number
 }
 
 export interface SkillGap {
@@ -27,6 +88,16 @@ export interface SkillGap {
   gap: number
   priority: 'low' | 'medium' | 'high'
   learningOrder: number
+  
+  // AI分析新增字段
+  category?: string
+  difficulty?: 'easy' | 'medium' | 'hard'
+  prerequisiteSkills?: string[]
+  relatedStrengths?: string[]
+  estimatedHours?: number
+  learningStrategy?: string
+  assessmentCriteria?: string
+  practicalApplication?: string
 }
 
 // 路径生成配置

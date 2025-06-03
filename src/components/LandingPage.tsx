@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { getCurrentProfile } from '../utils/profile'
+import { t } from '../utils/i18n'
 import AppleProfileSwitcher from './AppleProfileSwitcher'
+import LanguageSwitcher from './common/LanguageSwitcher'
 
 interface LandingPageProps {
   onGetStarted: () => void
@@ -54,49 +56,49 @@ const LandingPage: React.FC<LandingPageProps> = ({
     setTimeout(refreshProfile, 0)
   }
 
-  // 滑动数据
+  // 滑动数据 - 使用翻译函数
   const slides = [
     {
       id: 'evolution',
-      title: '随AI进化',
-      subtitle: '自动升级的学习平台',
-      description: '随着大语言模型的不断进化，我们的平台自动获得更强的教学能力。今天学不懂的概念，明天可能就有更好的解释方式。',
+      title: t('landing.slides.evolution.title'),
+      subtitle: t('landing.slides.evolution.subtitle'),
+      description: t('landing.slides.evolution.description'),
       visual: '🧠✨',
       gradient: 'from-purple-500 to-pink-500',
       bgGradient: 'from-purple-500/10 to-pink-500/10'
     },
     {
       id: 'personalized',
-      title: '千人千面',
-      subtitle: '专属定制的学习体验',
-      description: '基于你的简历、目标和学习反馈，AI动态生成完全个性化的学习内容。每个人的学习路径都是独一无二的。',
+      title: t('landing.slides.personalized.title'),
+      subtitle: t('landing.slides.personalized.subtitle'),
+      description: t('landing.slides.personalized.description'),
       visual: '👤🎯',
       gradient: 'from-blue-500 to-purple-500',
       bgGradient: 'from-blue-500/10 to-purple-500/10'
     },
     {
       id: 'dynamic',
-      title: '动态生成',
-      subtitle: '实时创建的学习内容',
-      description: '不是预制的课程，而是根据最新技术趋势和你的实际需求，AI实时生成的新鲜内容。永远保持前沿。',
+      title: t('landing.slides.dynamic.title'),
+      subtitle: t('landing.slides.dynamic.subtitle'),
+      description: t('landing.slides.dynamic.description'),
       visual: '⚡🔮',
       gradient: 'from-green-500 to-teal-500',
       bgGradient: 'from-green-500/10 to-teal-500/10'
     },
     {
       id: 'ai-squared',
-      title: 'AI 平方',
-      subtitle: '连网站都是AI生成的',
-      description: '本网站完全基于AI Coding生成，体验AI²的产品力量。从学习平台到平台本身，全程AI驱动开发。',
+      title: t('landing.slides.aiSquared.title'),
+      subtitle: t('landing.slides.aiSquared.subtitle'),
+      description: t('landing.slides.aiSquared.description'),
       visual: '🤖²',
       gradient: 'from-indigo-500 to-purple-500',
       bgGradient: 'from-indigo-500/10 to-purple-500/10'
     },
     {
       id: 'apikey',
-      title: '一键启动',
-      subtitle: '只需API Key即可开始',
-      description: '无需复杂配置，只要提供大语言模型的API Key，就能立即享受最智能的编程教育体验。',
+      title: t('landing.slides.apikey.title'),
+      subtitle: t('landing.slides.apikey.subtitle'),
+      description: t('landing.slides.apikey.description'),
       visual: '🔑🚀',
       gradient: 'from-orange-500 to-red-500',
       bgGradient: 'from-orange-500/10 to-red-500/10'
@@ -210,32 +212,37 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* 登录/用户信息 */}
-            {isLoggedIn ? (
-              <div className="flex items-center space-x-4">
-                <AppleProfileSwitcher 
-                  onProfileSwitch={handleProfileSwitch}
-                  onLogout={handleLogout}
-                  className=""
-                />
-                {onDashboard && (
-                  <button
-                    onClick={onDashboard}
-                    className="group px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-purple-200/25 hover:scale-105"
-                  >
-                    <span className="group-hover:scale-110 transition-transform duration-300 inline-block">
-                      进入控制台
-                    </span>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={onLogin}
-                className="px-6 py-3 bg-white/50 backdrop-blur-md border border-gray-200/50 rounded-2xl font-semibold text-gray-700 hover:bg-white/70 hover:border-gray-300/50 hover:text-gray-900 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-gray-200/25 hover:scale-105"
-              >
-                登录
-              </button>
-            )}
+            <div className="flex items-center space-x-3">
+              {/* 语言切换器 */}
+              <LanguageSwitcher compact />
+              
+              {isLoggedIn ? (
+                <div className="flex items-center space-x-4">
+                  <AppleProfileSwitcher 
+                    onProfileSwitch={handleProfileSwitch}
+                    onLogout={handleLogout}
+                    className=""
+                  />
+                  {onDashboard && (
+                    <button
+                      onClick={onDashboard}
+                      className="group px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-purple-200/25 hover:scale-105"
+                    >
+                      <span className="group-hover:scale-110 transition-transform duration-300 inline-block">
+                        {t('navigation.dashboard')}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={onLogin}
+                  className="px-6 py-3 bg-white/50 backdrop-blur-md border border-gray-200/50 rounded-2xl font-semibold text-gray-700 hover:bg-white/70 hover:border-gray-300/50 hover:text-gray-900 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-gray-200/25 hover:scale-105"
+                >
+                  {t('landing.login')}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </nav>
@@ -295,7 +302,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                       className="group px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-2xl hover:shadow-purple-200/25"
                     >
                       <span className="group-hover:scale-110 transition-transform duration-300 inline-block">
-                        继续学习
+                        {t('landing.continueLeaning')}
                       </span>
                     </button>
                   ) : (
@@ -304,7 +311,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                       className="group px-8 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl text-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-105 shadow-xl hover:shadow-2xl hover:shadow-purple-200/25"
                     >
                       <span className="group-hover:scale-110 transition-transform duration-300 inline-block">
-                        开始学习之旅
+                        {t('landing.getStarted')}
                       </span>
                     </button>
                   )}
@@ -312,7 +319,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     onClick={() => scrollToSection(`section-${slide.id}`)}
                     className="px-8 py-4 bg-white/50 backdrop-blur-md border border-white/30 rounded-2xl text-lg font-semibold text-gray-700 hover:bg-white/70 hover:border-white/50 hover:text-gray-900 transition-all duration-300 shadow-lg hover:shadow-xl hover:shadow-gray-200/25 hover:scale-105"
                   >
-                    了解更多
+                    {t('landing.learnMore')}
                   </button>
                 </div>
               </div>

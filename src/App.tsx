@@ -14,6 +14,7 @@ import DataInspector from './components/DataInspector'
 import { getCurrentProfileId } from './utils/profile'
 import { TestRandomSearch } from './pages/TestRandomSearch'
 import { GoalSetting } from './components/GoalSetting'
+import { t } from './utils/i18n'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-setting' | 'path-plan' | 'course-content' | 'code-runner' | 'profile-settings' | 'test-random-search' | 'agent-demo' | 'data-inspector'
 
@@ -111,7 +112,7 @@ const App = () => {
           case 'ability-assess':
             return (
               <Layout 
-                title="能力评估" 
+                title={t('navigation.abilityAssess')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -124,7 +125,7 @@ const App = () => {
           case 'profile-settings':
             return (
               <Layout 
-                title="Profile 设置" 
+                title={t('navigation.profileSettings')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -137,7 +138,7 @@ const App = () => {
           case 'code-runner':
             return (
               <Layout 
-                title="代码运行器" 
+                title={t('navigation.codeRunner')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -150,7 +151,7 @@ const App = () => {
           case 'agent-demo':
             return (
               <Layout 
-                title="Agent Demo" 
+                title={t('navigation.agentDemo')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -163,7 +164,7 @@ const App = () => {
           case 'data-inspector':
             return (
               <Layout 
-                title="数据检查器" 
+                title={t('navigation.dataInspector')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}
@@ -176,7 +177,7 @@ const App = () => {
           case 'goal-setting':
             return (
               <Layout 
-                title="目标设定" 
+                title={t('navigation.goalSetting')} 
                 onBack={() => {
                   setSelectedGoalTitle(null)
                   handleBackToDashboard()
@@ -192,7 +193,7 @@ const App = () => {
           case 'path-plan':
             return (
               <Layout 
-                title="路径规划" 
+                title={t('navigation.pathPlan')} 
                 onBack={handleBackToDashboard} 
                 onHome={handleGoHome}
                 onLogout={handleLogout}

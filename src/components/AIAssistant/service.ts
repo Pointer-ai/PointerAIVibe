@@ -1,10 +1,12 @@
 // AI Assistant 服务层
 
+import React from 'react'
+import { getProfileData, setProfileData } from '../../utils/profile'
+import { log, error } from '../../utils/logger'
+import { addActivityRecord } from '../../modules/profileSettings/service'
+import { getLanguageSystemPrompt, addLanguageInstruction, createAssistantLanguagePrompt } from '../../utils/aiLanguageHelper'
 import { getAPIConfig } from '../../modules/profileSettings/service'
 import { AssistantConfig, ChatSession, LearningProgress, ChatMessage } from './types'
-import { log, error } from '../../utils/logger'
-import { getProfileData, setProfileData } from '../../utils/profile'
-import { addActivityRecord } from '../../modules/profileSettings/service'
 
 /**
  * 获取用户完整的学习上下文
@@ -286,6 +288,9 @@ export const getAIResponse = async (message: string, context?: string): Promise<
     throw new Error('AI助手配置不可用')
   }
   
+  // 添加语言指令到消息中
+  const languageAwareMessage = createAssistantLanguagePrompt(message)
+  
   log('[AIAssistant] Starting API call with config:', {
     model: config.model,
     specificModel: config.specificModel,
@@ -301,61 +306,21 @@ export const getAIResponse = async (message: string, context?: string): Promise<
     }
     let body: any = {}
     
-    const systemPrompt = `你是一个专业的AI学习助手 - Agent 模式 (Preview版本)
+    // 使用语言感知的系统提示词
+    const systemPrompt = getLanguageSystemPrompt()
 
-🌟 PREVIEW版本说明：
-• 这是AI Agent模式的预览版本，功能持续优化中
-• 用户的完整学习数据已经作为上下文提供，无需使用工具获取数据
-• 专注于基于现有数据提供智能分析和建议
-
-你的核心职责：
-• 🧠 基于用户上下文提供智能学习建议
-• 🎯 分析用户当前学习状态并给出个性化指导
-• 📈 根据能力评估和学习进度提供优化建议
-• 💡 回答学习相关问题并提供解决方案
-• 🚀 帮助用户制定学习计划和调整学习策略
-
-⚠️ PREVIEW版本限制：
-• 暂不支持数据修改操作（创建、更新、删除）
-• 专注于分析、建议和指导功能
-• 所有数据查询已通过上下文提供，无需额外获取
-
-💬 交互原则：
-1. 直接基于提供的用户上下文回答问题
-2. 提供具体、可行的学习建议
-3. 分析用户的优势和改进空间
-4. 给出个性化的学习路径建议
-5. 在适当时候提醒这是Preview版本
-
-📊 当前用户完整上下文：
-${context ? context : '无'}`
-    
     switch (config.model) {
       case 'openai':
         apiUrl = 'https://api.openai.com/v1/chat/completions'
         headers['Authorization'] = `Bearer ${config.apiKey}`
         body = {
-          model: config.specificModel || 'gpt-3.5-turbo',
+          model: config.specificModel || 'gpt-4o',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: message }
+            { role: 'user', content: languageAwareMessage }
           ],
-          temperature: config.params?.temperature || 0.7,
-          max_tokens: config.params?.maxTokens || 1000
-        }
-        
-        // 添加其他参数（如果存在且有效）
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.top_p = config.params.topP
-        }
-        if (config.params?.presencePenalty !== undefined) {
-          body.presence_penalty = config.params.presencePenalty
-        }
-        if (config.params?.frequencyPenalty !== undefined) {
-          body.frequency_penalty = config.params.frequencyPenalty
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.stop = config.params.stopSequences
+          temperature: config.params?.temperature || 0.3,
+          max_tokens: config.params?.maxTokens || 2000
         }
         break
         
@@ -366,12 +331,10 @@ ${context ? context : '无'}`
         body = {
           model: config.specificModel || 'claude-3-5-sonnet-20241022',
           system: systemPrompt,
-          messages: [{ role: 'user', content: message }],
+          messages: [{ role: 'user', content: languageAwareMessage }],
           max_tokens: config.params?.maxTokens || 2000,
           temperature: config.params?.temperature || 0.3
         }
-        
-        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       case 'qwen':
@@ -383,7 +346,7 @@ ${context ? context : '无'}`
           input: {
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: message }
+              { role: 'user', content: languageAwareMessage }
             ]
           },
           parameters: {
@@ -392,8 +355,6 @@ ${context ? context : '无'}`
             result_format: 'message'
           }
         }
-        
-        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       default:
@@ -479,6 +440,9 @@ export const getAIResponseStream = async (
     throw new Error('AI助手配置不可用')
   }
   
+  // 添加语言指令到消息中
+  const languageAwareMessage = createAssistantLanguagePrompt(message)
+  
   try {
     let apiUrl = ''
     let headers: Record<string, string> = {
@@ -486,62 +450,22 @@ export const getAIResponseStream = async (
     }
     let body: any = {}
     
-    const systemPrompt = `你是一个专业的AI学习助手 - Agent 模式 (Preview版本)
+    // 使用语言感知的系统提示词
+    const systemPrompt = getLanguageSystemPrompt()
 
-🌟 PREVIEW版本说明：
-• 这是AI Agent模式的预览版本，功能持续优化中
-• 用户的完整学习数据已经作为上下文提供，无需使用工具获取数据
-• 专注于基于现有数据提供智能分析和建议
-
-你的核心职责：
-• 🧠 基于用户上下文提供智能学习建议
-• 🎯 分析用户当前学习状态并给出个性化指导
-• 📈 根据能力评估和学习进度提供优化建议
-• 💡 回答学习相关问题并提供解决方案
-• 🚀 帮助用户制定学习计划和调整学习策略
-
-⚠️ PREVIEW版本限制：
-• 暂不支持数据修改操作（创建、更新、删除）
-• 专注于分析、建议和指导功能
-• 所有数据查询已通过上下文提供，无需额外获取
-
-💬 交互原则：
-1. 直接基于提供的用户上下文回答问题
-2. 提供具体、可行的学习建议
-3. 分析用户的优势和改进空间
-4. 给出个性化的学习路径建议
-5. 在适当时候提醒这是Preview版本
-
-📊 当前用户完整上下文：
-${context ? context : '无'}`
-    
     switch (config.model) {
       case 'openai':
         apiUrl = 'https://api.openai.com/v1/chat/completions'
         headers['Authorization'] = `Bearer ${config.apiKey}`
         body = {
-          model: config.specificModel || 'gpt-3.5-turbo',
+          model: config.specificModel || 'gpt-4o',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: message }
+            { role: 'user', content: languageAwareMessage }
           ],
-          temperature: config.params?.temperature || 0.7,
-          max_tokens: config.params?.maxTokens || 1000,
-          stream: true // 启用流式输出
-        }
-        
-        // 添加其他参数（如果存在且有效）
-        if (config.params?.topP !== undefined && config.params.topP > 0) {
-          body.top_p = config.params.topP
-        }
-        if (config.params?.presencePenalty !== undefined) {
-          body.presence_penalty = config.params.presencePenalty
-        }
-        if (config.params?.frequencyPenalty !== undefined) {
-          body.frequency_penalty = config.params.frequencyPenalty
-        }
-        if (config.params?.stopSequences && config.params.stopSequences.length > 0) {
-          body.stop = config.params.stopSequences
+          temperature: config.params?.temperature || 0.3,
+          max_tokens: config.params?.maxTokens || 2000,
+          stream: true
         }
         break
         
@@ -552,12 +476,11 @@ ${context ? context : '无'}`
         body = {
           model: config.specificModel || 'claude-3-5-sonnet-20241022',
           system: systemPrompt,
-          messages: [{ role: 'user', content: message }],
+          messages: [{ role: 'user', content: languageAwareMessage }],
           max_tokens: config.params?.maxTokens || 2000,
-          temperature: config.params?.temperature || 0.3
+          temperature: config.params?.temperature || 0.3,
+          stream: true
         }
-        
-        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       case 'qwen':
@@ -568,7 +491,7 @@ ${context ? context : '无'}`
           input: {
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: message }
+              { role: 'user', content: languageAwareMessage }
             ]
           },
           parameters: {
@@ -577,8 +500,6 @@ ${context ? context : '无'}`
             result_format: 'message'
           }
         }
-        
-        // 不再添加工具定义，改为纯文本对话模式 (Preview版本)
         break
         
       default:

@@ -1,6 +1,8 @@
 import React from 'react'
 import { getCurrentProfile } from '../utils/profile'
+import { t } from '../utils/i18n'
 import AppleProfileSwitcher from './AppleProfileSwitcher'
+import LanguageSwitcher from './common/LanguageSwitcher'
 
 interface LayoutProps {
   title?: string
@@ -41,7 +43,7 @@ const Layout: React.FC<LayoutProps> = ({
                 <button
                   onClick={onHome}
                   className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 transition-all duration-300 mr-6"
-                  title="返回首页"
+                  title={t('navigation.returnHome')}
                 >
                   Pointer.ai
                 </button>
@@ -57,7 +59,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <svg className="h-5 w-5 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  <span className="text-sm font-medium">返回控制台</span>
+                  <span className="text-sm font-medium">{t('navigation.backToConsole')}</span>
                 </button>
               )}
               
@@ -70,6 +72,9 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* 语言切换器 */}
+              <LanguageSwitcher compact />
+              
               {profile && (
                 <AppleProfileSwitcher
                   onProfileSwitch={handleProfileSwitch}

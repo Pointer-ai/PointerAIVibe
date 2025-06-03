@@ -20,6 +20,7 @@ import {
 } from './types'
 import { agentToolExecutor } from '../coreData'
 import { learningSystemService } from '../learningSystem'
+import { getAssessmentPromptPrefix, addLanguageInstruction } from '../../utils/aiLanguageHelper'
 
 /**
  * 清理并修复常见的 JSON 格式错误
@@ -1590,7 +1591,7 @@ export const generateImprovementPlan = async (assessment: AbilityAssessment): Pr
   
   const weakAreas = findWeakAreas(assessment)
   
-  const prompt = `基于以下能力评估结果，生成具体的能力提升计划：
+  const basePrompt = `基于以下能力评估结果，生成具体的能力提升计划：
 
 当前总分：${assessment.overallScore}
 薄弱领域：${weakAreas.map(area => `${area.name}: ${area.score}分`).join(', ')}
@@ -1604,6 +1605,8 @@ ${assessment.report.summary}
 3. 实践项目建议
 4. 进度检查点`
   
+  // 添加语言指令
+  const prompt = addLanguageInstruction(basePrompt)
   const result = await callAI(prompt)
   
   return result

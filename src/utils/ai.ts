@@ -5,6 +5,7 @@
 
 import { getAPIConfig } from '../modules/profileSettings/service'
 import { log, error as logError } from './logger'
+import { getLanguageSystemPrompt, addLanguageInstruction } from './aiLanguageHelper'
 
 // API 响应类型
 interface AIResponse {
@@ -23,6 +24,10 @@ async function callOpenAI(
   model: string,
   params: any
 ): Promise<AIResponse> {
+  // 添加语言指令
+  const languageAwarePrompt = addLanguageInstruction(prompt)
+  const systemPrompt = getLanguageSystemPrompt()
+  
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -34,11 +39,11 @@ async function callOpenAI(
       messages: [
         {
           role: 'system',
-          content: 'You are a professional technical interviewer and career development consultant.'
+          content: systemPrompt
         },
         {
           role: 'user',
-          content: prompt
+          content: languageAwarePrompt
         }
       ],
       temperature: params.temperature || 0.7,
@@ -73,6 +78,10 @@ async function callClaude(
   model: string,
   params: any
 ): Promise<AIResponse> {
+  // 添加语言指令
+  const languageAwarePrompt = addLanguageInstruction(prompt)
+  const systemPrompt = getLanguageSystemPrompt()
+  
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -85,10 +94,10 @@ async function callClaude(
       messages: [
         {
           role: 'user',
-          content: prompt
+          content: languageAwarePrompt
         }
       ],
-      system: params.systemPrompt || 'You are a professional technical interviewer and career development consultant.',
+      system: systemPrompt,
       temperature: params.temperature || 0.7,
       max_tokens: params.maxTokens || 2000,
       top_p: params.topP || 0.9,
@@ -120,6 +129,10 @@ async function callQwen(
   model: string,
   params: any
 ): Promise<AIResponse> {
+  // 添加语言指令
+  const languageAwarePrompt = addLanguageInstruction(prompt)
+  const systemPrompt = getLanguageSystemPrompt()
+  
   const response = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
     method: 'POST',
     headers: {
@@ -132,11 +145,11 @@ async function callQwen(
         messages: [
           {
             role: 'system',
-            content: '你是一位经验丰富的技术面试官和职业发展顾问。'
+            content: systemPrompt
           },
           {
             role: 'user',
-            content: prompt
+            content: languageAwarePrompt
           }
         ]
       },

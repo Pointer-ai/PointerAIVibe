@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { t } from '../utils/i18n'
 import { getCurrentProfile } from '../utils/profile'
 import { getCurrentAssessment } from '../modules/abilityAssess'
 import { getLearningGoals, getLearningPaths, getCourseUnits } from '../modules/coreData'
@@ -7,17 +8,17 @@ import AppleProfileSwitcher from './AppleProfileSwitcher'
 // 简单的雷达图组件
 const AbilityRadarChart: React.FC<{ assessment: any }> = ({ assessment }) => {
   const dimensions = Object.entries(assessment.dimensions).map(([key, dimension]: [string, any]) => ({
-    name: key === 'programming' ? '编程' :
-          key === 'algorithm' ? '算法' :
-          key === 'project' ? '项目' :
-          key === 'systemDesign' ? '设计' :
-          key === 'communication' ? '协作' : key,
+    name: key === 'programming' ? t('abilityAssess.dimensions.programming') :
+          key === 'algorithm' ? t('abilityAssess.dimensions.algorithm') :
+          key === 'project' ? t('abilityAssess.dimensions.project') :
+          key === 'systemDesign' ? t('abilityAssess.dimensions.systemDesign') :
+          key === 'communication' ? t('abilityAssess.dimensions.communication') : key,
     score: dimension.score,
-    fullName: key === 'programming' ? '编程基本功' :
-              key === 'algorithm' ? '算法能力' :
-              key === 'project' ? '项目能力' :
-              key === 'systemDesign' ? '系统设计' :
-              key === 'communication' ? '沟通协作' : key
+    fullName: key === 'programming' ? t('abilityAssess.dimensions.programmingFull') :
+              key === 'algorithm' ? t('abilityAssess.dimensions.algorithmFull') :
+              key === 'project' ? t('abilityAssess.dimensions.projectFull') :
+              key === 'systemDesign' ? t('abilityAssess.dimensions.systemDesignFull') :
+              key === 'communication' ? t('abilityAssess.dimensions.communicationFull') : key
   }))
 
   const size = 120
@@ -166,15 +167,15 @@ const LearningSummary: React.FC = () => {
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
-          <span className="font-medium text-gray-700">学习目标</span>
+          <span className="font-medium text-gray-700">{t('dashboard.learningGoals')}</span>
         </div>
         <div className="text-lg font-bold text-gray-900">{activeGoals.length}</div>
         <div className="text-sm text-gray-500">
-          {goals.length > activeGoals.length && `共${goals.length}个目标`}
+          {goals.length > activeGoals.length && `${t('dashboard.total')}${goals.length}${t('dashboard.goals')}`}
         </div>
         {activeGoals.length > 0 && (
           <div className="mt-2 text-xs text-gray-600 truncate">
-            当前: {activeGoals[0].title}
+            {t('dashboard.current')}: {activeGoals[0].title}
           </div>
         )}
       </div>
@@ -187,20 +188,20 @@ const LearningSummary: React.FC = () => {
               <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd"/>
             </svg>
           </div>
-          <span className="font-medium text-gray-700">学习路径</span>
+          <span className="font-medium text-gray-700">{t('dashboard.learningPaths')}</span>
         </div>
         <div className="text-lg font-bold text-gray-900">{activePaths.length}</div>
         <div className="text-sm text-gray-500">
-          {completedPaths.length > 0 && `已完成${completedPaths.length}条`}
+          {completedPaths.length > 0 && `${t('dashboard.completed')}${completedPaths.length}${t('dashboard.paths')}`}
         </div>
         {totalNodes > 0 && (
           <div className="mt-2 text-xs text-gray-600">
-            进度: {completedNodes}/{totalNodes} 节点
+            {t('dashboard.progress')}: {completedNodes}/{totalNodes} {t('dashboard.nodes')}
           </div>
         )}
       </div>
       
-      {/* 学习内容摘要 */}
+      {/* 课程单元摘要 */}
       <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 border border-white/30">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-6 h-6 bg-purple-500 rounded-lg flex items-center justify-center">
@@ -208,15 +209,15 @@ const LearningSummary: React.FC = () => {
               <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/>
             </svg>
           </div>
-          <span className="font-medium text-gray-700">学习内容</span>
+          <span className="font-medium text-gray-700">{t('dashboard.courseUnits')}</span>
         </div>
         <div className="text-lg font-bold text-gray-900">{units.length}</div>
         <div className="text-sm text-gray-500">
-          课程单元
+          {t('dashboard.availableUnits')}
         </div>
         {units.length > 0 && (
-          <div className="mt-2 text-xs text-gray-600">
-            {units.filter(u => u.type === 'theory').length}理论 + {units.filter(u => u.type === 'project').length}项目
+          <div className="mt-2 text-xs text-gray-600 truncate">
+            {t('dashboard.latest')}: {units[units.length - 1].title}
           </div>
         )}
       </div>
@@ -248,8 +249,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
     {
       id: 'ability',
       view: 'ability-assess' as const,
-      title: '能力评估',
-      description: '通过简历或问卷评估你的编程能力',
+      title: t('navigation.abilityAssess'),
+      description: t('dashboard.abilityAssessDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -258,14 +259,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-purple-500 to-pink-500',
       bgGradient: 'from-purple-500/10 to-pink-500/10',
       iconBg: 'from-purple-500 to-pink-500',
-      status: currentAssessment ? '已完成' : '待评估',
+      status: currentAssessment ? t('common.completed') : t('dashboard.pendingAssessment'),
       available: true
     },
     {
       id: 'goal',
       view: 'goal-setting' as const,
-      title: '目标设定',
-      description: '设定学习目标，智能激活管理',
+      title: t('navigation.goalSetting'),
+      description: t('dashboard.goalSettingDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -274,14 +275,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-blue-500 to-cyan-500',
       bgGradient: 'from-blue-500/10 to-cyan-500/10',
       iconBg: 'from-blue-500 to-cyan-500',
-      status: '可使用',
+      status: t('dashboard.available'),
       available: true
     },
     {
       id: 'path',
       view: 'path-plan' as const,
-      title: '路径规划',
-      description: 'AI智能路径规划与可视化管理',
+      title: t('navigation.pathPlan'),
+      description: t('dashboard.pathPlanDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -290,14 +291,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-green-500 to-teal-500',
       bgGradient: 'from-green-500/10 to-teal-500/10',
       iconBg: 'from-green-500 to-teal-500',
-      status: '可使用',
+      status: t('dashboard.available'),
       available: true
     },
     {
       id: 'course',
       view: 'course-content' as const,
-      title: '课程内容',
-      description: 'AI生成的交互式编程课程',
+      title: t('navigation.courseContent'),
+      description: t('dashboard.courseContentDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -306,14 +307,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-orange-500 to-red-500',
       bgGradient: 'from-orange-500/10 to-red-500/10',
       iconBg: 'from-orange-500 to-red-500',
-      status: '可使用',
+      status: t('dashboard.available'),
       available: true
     },
     {
       id: 'runner',
       view: 'code-runner' as const,
-      title: '代码运行',
-      description: '专业代码编辑器，支持Python/JS/C++',
+      title: t('navigation.codeRunner'),
+      description: t('dashboard.codeRunnerDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 002 2v12a2 2 0 002 2z" />
@@ -322,14 +323,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-indigo-500 to-purple-500',
       bgGradient: 'from-indigo-500/10 to-purple-500/10',
       iconBg: 'from-indigo-500 to-purple-500',
-      status: '已开发',
+      status: t('dashboard.developed'),
       available: true
     },
     {
       id: 'data-inspector',
       view: 'data-inspector' as const,
-      title: '数据检查器',
-      description: '验证AI工具调用和数据存储',
+      title: t('navigation.dataInspector'),
+      description: t('dashboard.dataInspectorDesc'),
       icon: (
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -338,7 +339,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
       color: 'from-amber-500 to-orange-500',
       bgGradient: 'from-amber-500/10 to-orange-500/10',
       iconBg: 'from-amber-500 to-orange-500',
-      status: '调试工具',
+      status: t('dashboard.debugTool'),
       available: true
     }
   ]
@@ -355,7 +356,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
                 <button
                   onClick={onHome}
                   className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-purple-700 transition-all duration-300 cursor-pointer"
-                  title="返回首页"
+                  title={t('navigation.returnHome')}
                 >
                   Pointer.ai
                 </button>
@@ -370,7 +371,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
                 className="group flex items-center gap-2 px-4 py-2 bg-white/50 backdrop-blur-md border border-gray-200/50 rounded-full text-gray-700 hover:text-gray-900 hover:bg-white/70 hover:border-gray-300/50 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/25 hover:scale-105"
               >
                 <span className="text-lg group-hover:scale-110 transition-transform duration-300">⚙️</span>
-                <span className="text-sm font-medium">设置</span>
+                <span className="text-sm font-medium">{t('dashboard.settings')}</span>
               </button>
               
               {/* Profile切换器 */}
@@ -392,15 +393,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
             <span className="text-3xl">{profile.avatar || '👤'}</span>
           </div>
           <h2 className="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent mb-4">
-            欢迎回来，{profile.name}！
+            {t('dashboard.welcomeBack')}{profile.name}！
           </h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            选择一个模块开始你的个性化学习之旅
+            {t('dashboard.selectModule')}
           </p>
           {currentAssessment && (
             <div className="mt-6 inline-flex items-center gap-3 px-6 py-3 bg-white/60 backdrop-blur-md rounded-2xl border border-gray-200/50 shadow-lg">
               <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-gray-700">当前能力评分</span>
+              <span className="text-sm font-medium text-gray-700">{t('dashboard.currentAbilityScore')}</span>
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">{currentAssessment.overallScore}</span>
               <span className="text-gray-500">/100</span>
             </div>
@@ -427,11 +428,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onLogout, onNavigate, onHome }) =
                 {/* Status Badge */}
                 <div className="absolute top-4 right-4">
                   <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md border ${
-                    module.status === '已完成' 
+                    module.status === t('common.completed')
                       ? 'bg-green-100/80 text-green-700 border-green-200/50'
-                      : module.status === '待评估'
+                      : module.status === t('dashboard.pendingAssessment')
                       ? 'bg-blue-100/80 text-blue-700 border-blue-200/50'
-                      : module.status === '待开发' 
+                      : module.status === t('dashboard.inDevelopment')
                       ? 'bg-yellow-100/80 text-yellow-700 border-yellow-200/50'
                       : 'bg-gray-100/80 text-gray-700 border-gray-200/50'
                   }`}>

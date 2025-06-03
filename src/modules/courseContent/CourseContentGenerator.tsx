@@ -5,6 +5,7 @@ import { CourseContentService } from './service'
 import { getCurrentAssessment } from '../abilityAssess/service'
 import { getAIResponse } from '../../components/AIAssistant/service'
 import { log } from '../../utils/logger'
+import { getCourseContentPromptPrefix, addLanguageInstruction } from '../../utils/aiLanguageHelper'
 
 const courseContentService = new CourseContentService()
 
@@ -465,7 +466,7 @@ export const CourseContentGenerator: React.FC = () => {
       project: '实践项目'
     }
 
-    return `# 课程内容生成任务
+    const basePrompt = `# 课程内容生成任务
 
 ## 任务概述
 请为编程学习路径生成一个高质量的${typeMap[type]}内容模块。
@@ -505,7 +506,7 @@ ${context.user ? `
 2. **格式要求**: 使用Markdown格式，结构清晰
 3. **代码语言**: 主要使用${request.language}，代码示例要完整可运行
 4. **内容类型**: ${typeMap[type]}内容
-5. **目标读者**: ${context.user?.level || '中级'}程序员
+5. **目标读者**: ${context.user?.level || '中级'}水平学习者
 6. **阅读时长**: 约${Math.floor(request.estimatedReadingTime / request.contentCount)}分钟
 
 ## 内容结构要求
@@ -545,6 +546,10 @@ ${context.user ? `
 - 内容要与节点技能目标紧密相关
 
 请基于以上要求生成高质量的${typeMap[type]}内容，确保内容丰富实用，代码准确完整。`
+
+    // 添加语言指令和前缀
+    const promptPrefix = getCourseContentPromptPrefix()
+    return addLanguageInstruction(`${promptPrefix}\n\n${basePrompt}`)
   }
 
   // 从AI响应中提取Markdown内容

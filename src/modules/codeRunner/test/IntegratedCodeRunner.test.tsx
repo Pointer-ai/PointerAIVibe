@@ -35,7 +35,12 @@ const mockEditor = {
   getValue: vi.fn(() => 'test code'),
   getModel: vi.fn(() => ({
     onDidChangeContent: vi.fn()
-  }))
+  })),
+  getDomNode: vi.fn(() => ({
+    closest: vi.fn(() => null)
+  })),
+  onDidChangeCursorSelection: vi.fn(),
+  getSelection: vi.fn(() => null)
 }
 
 const mockMonaco = {

@@ -8,7 +8,7 @@ import { learningSystemService } from '../learningSystem'
 import { addActivityRecord } from '../profileSettings/service'
 import { log, error } from '../../utils/logger'
 
-export const AbilityAssessView: React.FC = () => {
+export const AbilityAssessView: React.FC<{ onNavigate?: (view: string, goalTitle?: string) => void }> = ({ onNavigate }) => {
   const [assessment, setAssessment] = useState<AbilityAssessment | null>(null)
   const [improvementPlan, setImprovementPlan] = useState<ImprovementPlan | null>(null)
   const [loading, setLoading] = useState(false)
@@ -35,11 +35,24 @@ export const AbilityAssessView: React.FC = () => {
       setAssessment(currentAssessment)
       
       if (currentAssessment) {
+        // 尝试从缓存恢复提升计划
+        const cachedPlan = abilityService.getCachedImprovementPlan(currentAssessment)
+        if (cachedPlan) {
+          setImprovementPlan(cachedPlan)
+          log('[AbilityAssessView] Cached improvement plan restored')
+        }
+        
         await refreshSystemStatus()
       }
     } catch (err) {
       error('[AbilityAssessView] Failed to refresh data:', err)
     }
+  }
+
+  // 检查是否有缓存的提升计划
+  const hasCachedPlan = (assessment: AbilityAssessment): boolean => {
+    const cachedPlan = abilityService.getCachedImprovementPlan(assessment)
+    return !!cachedPlan
   }
 
   useEffect(() => {
@@ -159,6 +172,12 @@ export const AbilityAssessView: React.FC = () => {
     }
   }
 
+  // 查看目标详情
+  const handleViewGoalDetails = (goalTitle: string) => {
+    // 导航到目标管理页面并选中对应目标
+    onNavigate?.('goal-setting', goalTitle)
+  }
+
   // 开始学习
   const handleStartLearning = (goalTitle: string) => {
     // 导航到学习路径管理页面
@@ -169,6 +188,16 @@ export const AbilityAssessView: React.FC = () => {
   const handleViewProgress = () => {
     // 导航到数据检查器页面
     window.location.href = '#data-inspector'
+  }
+
+  // 查看缓存的提升计划
+  const handleViewCachedPlan = () => {
+    if (assessment) {
+      const cachedPlan = abilityService.getCachedImprovementPlan(assessment)
+      if (cachedPlan) {
+        setImprovementPlan(cachedPlan)
+      }
+    }
   }
 
   return (
@@ -255,8 +284,7 @@ export const AbilityAssessView: React.FC = () => {
           {improvementPlan ? (
             <ImprovementPlanView 
               plan={improvementPlan}
-              onStartLearning={handleStartLearning}
-              onViewProgress={handleViewProgress}
+              onViewGoalDetails={handleViewGoalDetails}
               onRegenerate={handleRegenerateIntelligentPlan}
             />
           ) : (
@@ -265,6 +293,8 @@ export const AbilityAssessView: React.FC = () => {
               assessment={assessment}
               onGenerateImprovement={handleGenerateIntelligentPlan}
               onExport={handleExport}
+              hasCachedPlan={hasCachedPlan(assessment)}
+              onViewCachedPlan={handleViewCachedPlan}
             />
           )}
           
@@ -288,13 +318,13 @@ export const AbilityAssessView: React.FC = () => {
                   </div>
                   <div className="mt-4 flex gap-3">
                     <button
-                      onClick={() => window.location.href = '#goal-setting'}
+                      onClick={() => onNavigate?.('goal-setting')}
                       className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm transition-colors"
                     >
                       设定学习目标
                     </button>
                     <button
-                      onClick={() => window.location.href = '#learning-path'}
+                      onClick={() => onNavigate?.('path-plan')}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm transition-colors"
                     >
                       管理学习路径

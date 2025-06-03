@@ -19,6 +19,7 @@ type AppView = 'landing' | 'profile' | 'dashboard' | 'ability-assess' | 'goal-se
 
 const App = () => {
   const [currentView, setCurrentView] = useState<AppView>('landing')
+  const [selectedGoalTitle, setSelectedGoalTitle] = useState<string | null>(null)
 
   useEffect(() => {
     // 检查是否有当前登录的 profile
@@ -63,7 +64,17 @@ const App = () => {
     }
   }
 
-  const handleNavigate = (view: AppView) => {
+  const handleNavigateFromAssessment = (view: string, goalTitle?: string) => {
+    if (goalTitle) {
+      setSelectedGoalTitle(goalTitle)
+    }
+    setCurrentView(view as AppView)
+  }
+
+  const handleNavigate = (view: AppView, goalTitle?: string) => {
+    if (goalTitle) {
+      setSelectedGoalTitle(goalTitle)
+    }
     setCurrentView(view)
   }
 
@@ -106,7 +117,7 @@ const App = () => {
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <AbilityAssessView />
+                <AbilityAssessView onNavigate={handleNavigateFromAssessment} />
               </Layout>
             )
           
@@ -166,12 +177,15 @@ const App = () => {
             return (
               <Layout 
                 title="目标设定" 
-                onBack={handleBackToDashboard} 
+                onBack={() => {
+                  setSelectedGoalTitle(null)
+                  handleBackToDashboard()
+                }}
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
-                <GoalSetting />
+                <GoalSetting selectedGoalTitle={selectedGoalTitle} onGoalSelect={setSelectedGoalTitle} />
               </Layout>
             )
           

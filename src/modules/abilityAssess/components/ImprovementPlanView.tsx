@@ -4,16 +4,14 @@ import { Calendar, Target, TrendingUp, Clock, Users, BookOpen, CheckCircle, Aler
 
 interface ImprovementPlanViewProps {
   plan: ImprovementPlan
-  onStartLearning?: (goalId: string) => void
-  onViewProgress?: () => void
   onRegenerate?: () => void
+  onViewGoalDetails?: (goalTitle: string) => void
 }
 
 export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
   plan,
-  onStartLearning,
-  onViewProgress,
-  onRegenerate
+  onRegenerate,
+  onViewGoalDetails
 }) => {
   // 计算统计数据
   const totalGoals = plan.generatedGoals.shortTerm.length + plan.generatedGoals.mediumTerm.length
@@ -196,10 +194,10 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
           </div>
         </div>
 
-        {/* 操作按钮 - 高级内容特殊样式 */}
+        {/* 操作按钮 - 只保留查看详情 */}
         <div className="flex gap-2 mt-4">
           <button
-            onClick={() => onStartLearning?.(goal.title)}
+            onClick={() => onViewGoalDetails?.(goal.title)}
             className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 ${
               isAdvanced
                 ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl'
@@ -208,14 +206,7 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
                   : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
           >
-            {isAdvanced ? '🚀 开始高级学习' : '开始学习'}
-          </button>
-          <button className={`px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-            isAdvanced 
-              ? 'border-purple-300 text-purple-700 hover:bg-purple-50' 
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          }`}>
-            查看详情
+            {isAdvanced ? '🎯 查看目标详情' : '查看详情'}
           </button>
         </div>
       </div>
@@ -504,13 +495,6 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
         </div>
         
         <div className="flex flex-wrap justify-center gap-4">
-          <button
-            onClick={onViewProgress}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-          >
-            📊 查看学习进度
-          </button>
-          
           {onRegenerate && (
             <button
               onClick={onRegenerate}
@@ -520,12 +504,18 @@ export const ImprovementPlanView: React.FC<ImprovementPlanViewProps> = ({
             </button>
           )}
           
-          <button className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-md hover:shadow-lg">
-            📥 下载学习计划
+          <button 
+            disabled 
+            className="px-6 py-3 bg-gray-400 text-gray-600 rounded-lg font-medium cursor-not-allowed shadow-md"
+          >
+            📥 下载学习计划 (Coming Soon)
           </button>
           
-          <button className="px-6 py-3 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-md hover:shadow-lg">
-            📤 分享计划
+          <button 
+            disabled 
+            className="px-6 py-3 bg-gray-400 text-gray-600 rounded-lg font-medium cursor-not-allowed shadow-md"
+          >
+            📤 分享计划 (Coming Soon)
           </button>
         </div>
         

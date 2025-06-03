@@ -1314,7 +1314,7 @@ ${scoreLevel >= 80 ? `🚨 **高级开发者最后提醒**: 生成的所有内�
   /**
    * 获取缓存的提升计划
    */
-  private getCachedImprovementPlan(assessment: AbilityAssessment): ImprovementPlan | null {
+  getCachedImprovementPlan(assessment: AbilityAssessment): ImprovementPlan | null {
     const cacheKey = `improvementPlan_${assessment.metadata.assessmentDate}`
     const cached = getProfileData(cacheKey)
     

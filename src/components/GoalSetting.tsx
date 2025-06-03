@@ -31,7 +31,12 @@ interface GoalFormData {
   outcomes: string[]
 }
 
-export const GoalSetting: React.FC = () => {
+interface GoalSettingProps {
+  selectedGoalTitle?: string | null
+  onGoalSelect?: (goalTitle: string | null) => void
+}
+
+export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onGoalSelect }) => {
   const [goals, setGoals] = useState<LearningGoal[]>([])
   const [goalStats, setGoalStats] = useState<any>(null)
   const [activationStats, setActivationStats] = useState<GoalActivationStats | null>(null)
@@ -79,6 +84,18 @@ export const GoalSetting: React.FC = () => {
   useEffect(() => {
     refreshData()
   }, [])
+
+  // 处理外部传入的目标选择
+  useEffect(() => {
+    if (selectedGoalTitle && goals.length > 0) {
+      const targetGoal = goals.find(goal => goal.title === selectedGoalTitle)
+      if (targetGoal) {
+        setSelectedGoal(targetGoal.id)
+        // 清除外部选择状态
+        onGoalSelect?.(null)
+      }
+    }
+  }, [selectedGoalTitle, goals, onGoalSelect])
 
   // 显示消息
   const showMessage = (msg: string, isError = false) => {

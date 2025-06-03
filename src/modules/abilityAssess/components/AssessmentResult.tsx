@@ -12,12 +12,16 @@ interface AssessmentResultProps {
   assessment: AbilityAssessment
   onGenerateImprovement?: () => void
   onExport?: () => void
+  hasCachedPlan?: boolean
+  onViewCachedPlan?: () => void
 }
 
 export const AssessmentResult: React.FC<AssessmentResultProps> = ({ 
   assessment, 
   onGenerateImprovement,
-  onExport 
+  onExport,
+  hasCachedPlan,
+  onViewCachedPlan
 }) => {
   const level = getScoreLevel(assessment.overallScore)
   
@@ -247,39 +251,76 @@ export const AssessmentResult: React.FC<AssessmentResultProps> = ({
 
       {/* 操作按钮区域 */}
       <div className="mt-6 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6">
-        <div className="text-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 下一步行动</h3>
-          <p className="text-gray-600">
-            基于您的能力评估结果，我们可以为您生成个性化的智能提升计划
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          {onGenerateImprovement && (
-            <button
-              onClick={onGenerateImprovement}
-              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-            >
-              🚀 生成智能提升计划
-            </button>
-          )}
-          
-          {onExport && (
-            <button
-              onClick={onExport}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
-            >
-              📄 导出评估报告
-            </button>
-          )}
-        </div>
-        
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-500">
-            智能提升计划将根据您的{assessment.overallScore}分评估结果，
-            为您量身定制短期和中期学习目标
-          </p>
-        </div>
+        {hasCachedPlan ? (
+          // 有缓存计划时显示
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🎯 智能提升计划已生成</h3>
+            <p className="text-gray-600 mb-4">
+              基于您的 {assessment.overallScore} 分评估结果，我们已为您生成了个性化的学习计划
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {onViewCachedPlan && (
+                <button
+                  onClick={onViewCachedPlan}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+                >
+                  🎯 查看智能提升计划
+                </button>
+              )}
+              
+              {onExport && (
+                <button
+                  onClick={onExport}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+                >
+                  📄 导出评估报告
+                </button>
+              )}
+            </div>
+            
+            <div className="mt-4">
+              <p className="text-sm text-gray-500">
+                💡 提示：如果您的技能有所提升或学习偏好发生变化，可以在计划页面重新生成更适合的学习计划
+              </p>
+            </div>
+          </div>
+        ) : (
+          // 没有缓存计划时显示
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">🚀 下一步行动</h3>
+            <p className="text-gray-600 mb-4">
+              基于您的能力评估结果，我们可以为您生成个性化的智能提升计划
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {onGenerateImprovement && (
+                <button
+                  onClick={onGenerateImprovement}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+                >
+                  🚀 生成智能提升计划
+                </button>
+              )}
+              
+              {onExport && (
+                <button
+                  onClick={onExport}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+                >
+                  📄 导出评估报告
+                </button>
+              )}
+            </div>
+            
+            <div className="mt-4">
+              <p className="text-sm text-gray-500">
+                智能提升计划将根据您的{assessment.overallScore}分评估结果，
+                为您量身定制短期和中期学习目标
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -24,7 +24,7 @@ import {
   batchCreateUnitsForNode
 } from './service'
 import { LearningGoal, LearningPath, PathNode, CourseUnit, AgentTool } from './types'
-import { log } from '../../utils/logger'
+import { log, error } from '../../utils/logger'
 import { addActivityRecord } from '../profileSettings/service'
 import { getCurrentAssessment } from '../abilityAssess/service'
 import { setProfileData } from '../../utils/profile'
@@ -1340,25 +1340,237 @@ ${learningHistory}`
   }
 
   /**
-   * 解析AI技能差距分析响应
+   * 解析AI技能差距分析响应（增强版 - 强健JSON解析）
    */
   private parseAISkillGapResponse(response: string): any {
+    log('[AgentTools] Starting AI skill gap response parsing')
+    
     try {
-      // 清理响应中的markdown格式
-      let cleanedResponse = response.trim()
-      cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+      // 使用与目标设定和能力评估相同的强健解析逻辑
+      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/)
+      let rawJson = ''
       
-      const parsed = JSON.parse(cleanedResponse)
-      
-      // 验证必要字段
-      if (!parsed.skillGaps || !Array.isArray(parsed.skillGaps)) {
-        throw new Error('Invalid skillGaps format')
+      if (!jsonMatch) {
+        log('[AgentTools] Standard JSON format not found, trying alternative formats')
+        
+        // 尝试其他格式的 JSON 提取
+        const altJsonMatch = response.match(/```json([\s\S]*?)```/) || 
+                            response.match(/```\s*\{[\s\S]*?\}\s*```/) ||
+                            response.match(/\{[\s\S]*\}/)
+        
+        if (altJsonMatch) {
+          log('[AgentTools] Found JSON in alternative format')
+          rawJson = altJsonMatch[1] || altJsonMatch[0]
+        } else {
+          error('[AgentTools] No valid JSON format found in AI skill gap response')
+          throw new Error('AI响应格式错误 - 未找到有效的JSON格式')
+        }
+      } else {
+        log('[AgentTools] Using standard JSON format')
+        rawJson = jsonMatch[1]
       }
       
-      return parsed
-    } catch (error) {
-      log('[AgentTools] Failed to parse AI skill gap response:', error)
-      throw new Error('AI响应格式无效，无法解析分析结果')
+      // 清理和修复JSON格式
+      const cleanJson = this.cleanupSkillGapJSONString(rawJson.trim())
+      
+      // 解析JSON
+      const parsed = JSON.parse(cleanJson)
+      log('[AgentTools] JSON parsing successful')
+      
+      // 验证和修复数据结构
+      const validated = this.validateAndFixSkillGapResult(parsed)
+      
+      log('[AgentTools] Skill gap response validation successful')
+      return validated
+      
+    } catch (err) {
+      error('[AgentTools] Failed to parse AI skill gap response:', err)
+      
+      // 提供更详细的错误信息和兜底策略
+      if (err instanceof SyntaxError) {
+        log('[AgentTools] JSON syntax error. Providing fallback structure...')
+        
+        // 提供一个最小的可用结构
+        return this.getFallbackSkillGapStructure()
+      }
+      
+      throw new Error('AI响应格式无效，无法解析分析结果: ' + (err instanceof Error ? err.message : '未知错误'))
+    }
+  }
+
+  /**
+   * 清理并修复技能差距分析的JSON格式错误
+   */
+  private cleanupSkillGapJSONString(jsonStr: string): string {
+    let cleaned = jsonStr.trim()
+    
+    // 移除可能的 markdown 代码块标记
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+    
+    // 修复常见的不完整布尔值
+    cleaned = cleaned.replace(/"hasAbilityData":\s*tru$/g, '"hasAbilityData": true')
+    cleaned = cleaned.replace(/"hasAbilityData":\s*fals$/g, '"hasAbilityData": false')
+    cleaned = cleaned.replace(/"contextUsed":\s*tru$/g, '"contextUsed": true')
+    cleaned = cleaned.replace(/"contextUsed":\s*fals$/g, '"contextUsed": false')
+    
+    // 修复其他常见的不完整值
+    cleaned = cleaned.replace(/:\s*fals$/g, ': false')
+    cleaned = cleaned.replace(/:\s*tru$/g, ': true')
+    cleaned = cleaned.replace(/:\s*nul$/g, ': null')
+    
+    // 确保字符串末尾有正确的闭合括号
+    const openBraces = (cleaned.match(/\{/g) || []).length
+    const closeBraces = (cleaned.match(/\}/g) || []).length
+    const openBrackets = (cleaned.match(/\[/g) || []).length
+    const closeBrackets = (cleaned.match(/\]/g) || []).length
+    
+    if (openBraces > closeBraces) {
+      // 检查是否是在skillGaps数组中断
+      if (cleaned.includes('"skillGaps"') && !cleaned.includes(']')) {
+        const skillGapsMatch = cleaned.match(/"skillGaps":\s*\[[^\]]*$/)
+        if (skillGapsMatch) {
+          log('[AgentTools] Detected incomplete skillGaps array, attempting to close')
+          cleaned = cleaned.replace(/,?\s*$/, ']')
+        }
+      }
+      
+      // 添加缺少的闭合括号
+      cleaned += '}'.repeat(openBraces - closeBraces)
+    }
+    
+    if (openBrackets > closeBrackets) {
+      cleaned += ']'.repeat(openBrackets - closeBrackets)
+    }
+    
+    // 尝试修复缺少的逗号（更保守的方法）
+    cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"')
+    cleaned = cleaned.replace(/\}\s*\n\s*"/g, '},\n"')
+    cleaned = cleaned.replace(/\]\s*\n\s*"/g, '],\n"')
+    
+    // 修复技能差距数组中的常见格式问题
+    cleaned = cleaned.replace(/\}\s*{/g, '}, {')
+    
+    return cleaned
+  }
+
+  /**
+   * 验证和修复技能差距分析结果
+   */
+  private validateAndFixSkillGapResult(parsed: any): any {
+    const validated = {
+      hasAbilityData: true,
+      contextUsed: true,
+      timestamp: new Date().toISOString(),
+      analysisConfidence: 0.85,
+      ...parsed
+    }
+    
+    // 确保skillGaps字段存在且为数组
+    if (!validated.skillGaps || !Array.isArray(validated.skillGaps)) {
+      log('[AgentTools] Invalid or missing skillGaps, providing default structure')
+      validated.skillGaps = []
+    }
+    
+    // 验证和修正每个技能差距条目
+    validated.skillGaps = validated.skillGaps.map((gap: any, index: number) => ({
+      skill: gap.skill || `技能${index + 1}`,
+      category: gap.category || '技术技能',
+      currentLevel: Math.max(0, Math.min(10, gap.currentLevel || 0)),
+      targetLevel: Math.max(0, Math.min(10, gap.targetLevel || 8)),
+      gap: Math.max(0, (gap.targetLevel || 8) - (gap.currentLevel || 0)),
+      priority: ['low', 'medium', 'high'].includes(gap.priority) ? gap.priority : 'medium',
+      difficulty: ['easy', 'medium', 'hard'].includes(gap.difficulty) ? gap.difficulty : 'medium',
+      learningOrder: gap.learningOrder || index + 1,
+      prerequisiteSkills: Array.isArray(gap.prerequisiteSkills) ? gap.prerequisiteSkills : [],
+      relatedStrengths: Array.isArray(gap.relatedStrengths) ? gap.relatedStrengths : [],
+      estimatedHours: Math.max(1, gap.estimatedHours || 10),
+      learningStrategy: gap.learningStrategy || '系统性学习，理论与实践结合',
+      assessmentCriteria: gap.assessmentCriteria || '通过实际项目验证掌握程度',
+      practicalApplication: gap.practicalApplication || '应用于实际工作场景'
+    }))
+    
+    // 确保overallAssessment字段存在
+    if (!validated.overallAssessment) {
+      const avgCurrentLevel = validated.skillGaps.reduce((sum: number, gap: any) => sum + gap.currentLevel, 0) / Math.max(1, validated.skillGaps.length)
+      const avgTargetLevel = validated.skillGaps.reduce((sum: number, gap: any) => sum + gap.targetLevel, 0) / Math.max(1, validated.skillGaps.length)
+      const avgGap = avgTargetLevel - avgCurrentLevel
+      
+      validated.overallAssessment = {
+        currentLevel: avgCurrentLevel,
+        targetLevel: avgTargetLevel,
+        gapSeverity: avgGap > 3 ? 'high' : avgGap > 1 ? 'medium' : 'low',
+        readinessScore: Math.max(20, Math.min(100, (avgCurrentLevel / avgTargetLevel) * 100)),
+        learningStyle: '实践型',
+        personalizedInsights: [
+          '基于您的能力档案分析，制定了个性化学习路径',
+          '建议循序渐进，重点关注优先级高的技能'
+        ]
+      }
+    }
+    
+    // 确保personalizedRecommendations字段存在
+    if (!validated.personalizedRecommendations) {
+      validated.personalizedRecommendations = {
+        leverageStrengths: ['利用现有技能优势，加速新技能学习'],
+        addressWeaknesses: ['针对薄弱环节制定专项提升计划'],
+        learningStyle: ['建议采用项目驱动的学习方式'],
+        timeManagement: ['合理分配学习时间，保持持续性'],
+        motivationTips: ['设置阶段性目标，及时奖励进步']
+      }
+    }
+    
+    // 添加汇总统计
+    if (!validated.summary) {
+      const averageGap = validated.skillGaps.reduce((sum: number, gap: any) => sum + gap.gap, 0) / Math.max(1, validated.skillGaps.length)
+      validated.summary = {
+        averageGap,
+        highPriorityCount: validated.skillGaps.filter((g: any) => g.priority === 'high').length,
+        estimatedWeeks: Math.ceil(averageGap * 2),
+        totalEstimatedHours: validated.skillGaps.reduce((sum: number, gap: any) => sum + gap.estimatedHours, 0),
+        averageConfidence: validated.analysisConfidence || 0.85
+      }
+    }
+    
+    return validated
+  }
+
+  /**
+   * 获取技能差距分析的兜底结构
+   */
+  private getFallbackSkillGapStructure(): any {
+    return {
+      hasAbilityData: false,
+      contextUsed: false,
+      timestamp: new Date().toISOString(),
+      analysisConfidence: 0.5,
+      fallbackUsed: true,
+      skillGaps: [],
+      overallAssessment: {
+        currentLevel: 5,
+        targetLevel: 7,
+        gapSeverity: 'medium',
+        readinessScore: 60,
+        learningStyle: '实践型',
+        personalizedInsights: [
+          '由于解析失败，使用了基础分析结构',
+          '建议重新尝试分析或完善能力评估数据'
+        ]
+      },
+      personalizedRecommendations: {
+        leverageStrengths: ['基于现有能力制定学习计划'],
+        addressWeaknesses: ['识别并改善技能薄弱环节'],
+        learningStyle: ['建议循序渐进的学习方式'],
+        timeManagement: ['制定合理的时间安排'],
+        motivationTips: ['保持学习热情和持续性']
+      },
+      summary: {
+        averageGap: 2,
+        highPriorityCount: 0,
+        estimatedWeeks: 4,
+        totalEstimatedHours: 40,
+        averageConfidence: 0.5
+      },
+      message: '解析失败，已提供基础分析结构。建议重新尝试或检查AI响应格式。'
     }
   }
 

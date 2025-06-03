@@ -1,12 +1,35 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { log } from '../../utils/logger'
 import { PathPlanService } from './service'
 import { PathPlanState, SkillGapAnalysis, PathGenerationConfig } from './types'
 import { getLearningGoals, getLearningPaths, updateLearningGoal, getPathsByGoal, agentToolExecutor } from '../coreData'
 import { getCurrentAssessment } from '../abilityAssess/service'
 import { LearningGoal, LearningPath } from '../coreData/types'
+import { 
+  skillGapAnalysisManager, 
+  AnalysisStatus, 
+  AnalysisListener 
+} from './skillGapAnalysisManager'
 
 const pathPlanService = new PathPlanService()
+
+// 分析状态显示文本映射
+const analysisStatusText = {
+  [AnalysisStatus.IDLE]: '待分析',
+  [AnalysisStatus.ANALYZING]: '分析中...',
+  [AnalysisStatus.COMPLETED]: '分析完成',
+  [AnalysisStatus.FAILED]: '分析失败',
+  [AnalysisStatus.CACHED]: '已缓存'
+}
+
+// 分析状态颜色映射
+const analysisStatusColor = {
+  [AnalysisStatus.IDLE]: '#6b7280',
+  [AnalysisStatus.ANALYZING]: '#3b82f6',
+  [AnalysisStatus.COMPLETED]: '#10b981',
+  [AnalysisStatus.FAILED]: '#dc2626',
+  [AnalysisStatus.CACHED]: '#8b5cf6'
+}
 
 export const PathPlanView = () => {
   log('[pathPlan] View loaded')
@@ -30,6 +53,14 @@ export const PathPlanView = () => {
     includeMilestones: true
   })
   const [message, setMessage] = useState<string>('')
+  
+  // 新增：分析状态管理
+  const [analysisStates, setAnalysisStates] = useState<Map<string, {
+    status: AnalysisStatus
+    progress?: number
+    error?: string
+    result?: SkillGapAnalysis
+  }>>(new Map())
 
   // 刷新数据
   const refreshData = () => {
@@ -43,25 +74,129 @@ export const PathPlanView = () => {
       const goalPaths = getPathsByGoal(state.selectedGoalId)
       setSelectedGoalPaths(goalPaths)
     }
+    
+    // 更新所有目标的分析状态
+    updateAllAnalysisStates(allGoals)
   }
+
+  // 更新所有目标的分析状态
+  const updateAllAnalysisStates = (goalList: LearningGoal[]) => {
+    const newStates = new Map()
+    
+    goalList.forEach(goal => {
+      const status = skillGapAnalysisManager.getAnalysisStatus(goal.id)
+      const result = skillGapAnalysisManager.getAnalysisResult(goal.id)
+      
+      newStates.set(goal.id, {
+        status,
+        result,
+        progress: status === AnalysisStatus.ANALYZING ? 0 : undefined
+      })
+    })
+    
+    setAnalysisStates(newStates)
+  }
+
+  // 分析监听器
+  const analysisListener = useMemo<AnalysisListener>(() => ({
+    onStatusChange: (goalId: string, status: AnalysisStatus, result?: SkillGapAnalysis, error?: string) => {
+      log(`[PathPlan] Analysis status changed for ${goalId}: ${status}`)
+      
+      setAnalysisStates(prev => {
+        const newStates = new Map(prev)
+        newStates.set(goalId, {
+          ...newStates.get(goalId),
+          status,
+          result,
+          error
+        })
+        return newStates
+      })
+      
+      // 如果是当前选中的目标，更新主状态
+      if (goalId === state.selectedGoalId) {
+        if (status === AnalysisStatus.COMPLETED && result) {
+          setState(prev => ({
+            ...prev,
+            skillGapAnalysis: result,
+            currentStep: 'generation',
+            isProcessing: false
+          }))
+          setMessage('✅ 技能差距分析完成！')
+        } else if (status === AnalysisStatus.FAILED) {
+          setState(prev => ({ ...prev, isProcessing: false }))
+          setMessage(`❌ 分析失败: ${error || '未知错误'}`)
+        } else if (status === AnalysisStatus.CACHED && result) {
+          setState(prev => ({
+            ...prev,
+            skillGapAnalysis: result,
+            currentStep: 'generation',
+            isProcessing: false
+          }))
+          setMessage('✅ 使用缓存的分析结果！')
+        }
+      }
+    },
+    
+    onProgressUpdate: (goalId: string, progress: number) => {
+      setAnalysisStates(prev => {
+        const newStates = new Map(prev)
+        const current = newStates.get(goalId)
+        if (current) {
+          newStates.set(goalId, { ...current, progress })
+        }
+        return newStates
+      })
+    },
+    
+    onCacheHit: (goalId: string, analysis: SkillGapAnalysis) => {
+      log(`[PathPlan] Cache hit for goal: ${goalId}`)
+      setMessage(`💾 使用了目标"${goals.find(g => g.id === goalId)?.title}"的缓存分析结果`)
+    }
+  }), [state.selectedGoalId, goals])
 
   useEffect(() => {
     refreshData()
-  }, [])
+    
+    // 注册分析监听器
+    skillGapAnalysisManager.addListener(analysisListener)
+    
+    return () => {
+      // 清理监听器
+      skillGapAnalysisManager.removeListener(analysisListener)
+    }
+  }, [analysisListener])
 
   // 选择目标
   const selectGoal = (goalId: string) => {
+    // 获取选中目标的分析状态
+    const analysisStatus = skillGapAnalysisManager.getAnalysisStatus(goalId)
+    const cachedAnalysis = skillGapAnalysisManager.getAnalysisResult(goalId)
+    
+    // 根据分析状态设置UI状态
+    const isCurrentlyAnalyzing = analysisStatus === AnalysisStatus.ANALYZING
+    
     setState(prev => ({
       ...prev,
       selectedGoalId: goalId,
-      currentStep: 'analysis',
-      skillGapAnalysis: null,
-      generatedPath: null
+      currentStep: cachedAnalysis ? 'generation' : 'analysis',
+      skillGapAnalysis: cachedAnalysis,
+      generatedPath: null,
+      isProcessing: isCurrentlyAnalyzing // 同步分析状态
     }))
     
     // 获取该目标的关联路径
     const goalPaths = getPathsByGoal(goalId)
     setSelectedGoalPaths(goalPaths)
+    
+    // 根据状态设置消息
+    if (cachedAnalysis) {
+      setMessage('💾 加载了缓存的分析结果')
+    } else if (isCurrentlyAnalyzing) {
+      setMessage('🔍 正在分析技能差距...')
+    } else {
+      setMessage('')
+    }
   }
 
   // 路径状态管理函数
@@ -90,27 +225,68 @@ export const PathPlanView = () => {
   // 归档路径
   const archivePath = (pathId: string) => updatePathStatus(pathId, 'archived')
 
-  // 执行技能差距分析
-  const analyzeSkillGap = async () => {
+  // 执行技能差距分析（异步）
+  const handleAnalyzeSkillGap = useCallback(async () => {
     if (!state.selectedGoalId) return
 
     setState(prev => ({ ...prev, isProcessing: true }))
     setMessage('🔍 正在分析技能差距...')
 
     try {
-      const analysis = await pathPlanService.analyzeSkillGap(state.selectedGoalId)
-      setState(prev => ({
-        ...prev,
-        skillGapAnalysis: analysis,
-        currentStep: 'generation',
-        isProcessing: false
-      }))
-      setMessage('✅ 技能差距分析完成！')
+      // 使用异步分析管理器
+      await skillGapAnalysisManager.startAnalysis(state.selectedGoalId, false)
     } catch (error) {
       setState(prev => ({ ...prev, isProcessing: false }))
-      setMessage(`❌ 分析失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      setMessage(`❌ 启动分析失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
-  }
+  }, [state.selectedGoalId])
+
+  // 重新分析（强制刷新）
+  const handleForceAnalyzeSkillGap = useCallback(async () => {
+    if (!state.selectedGoalId) return
+
+    setState(prev => ({ ...prev, isProcessing: true }))
+    setMessage('🔍 正在重新分析技能差距...')
+
+    try {
+      // 使用异步分析管理器，强制刷新
+      await skillGapAnalysisManager.startAnalysis(state.selectedGoalId, true)
+    } catch (error) {
+      setState(prev => ({ ...prev, isProcessing: false }))
+      setMessage(`❌ 启动分析失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }, [state.selectedGoalId])
+
+  // 停止分析
+  const stopAnalysis = useCallback(() => {
+    if (state.selectedGoalId) {
+      skillGapAnalysisManager.stopAnalysis(state.selectedGoalId)
+      setState(prev => ({ ...prev, isProcessing: false }))
+      setMessage('🛑 分析已停止')
+    }
+  }, [state.selectedGoalId])
+
+  // 清除分析缓存
+  const clearAnalysisCache = useCallback((goalId: string) => {
+    skillGapAnalysisManager.clearAnalysisCache(goalId)
+    updateAllAnalysisStates(goals)
+    setMessage('🗑️ 已清除分析缓存')
+  }, [goals])
+
+  // 批量分析所有目标
+  const analyzeAllGoals = useCallback(async () => {
+    const activeGoals = goals.filter(g => g.status === 'active').slice(0, 3) // 限制并发数量
+    
+    setMessage(`🔍 开始批量分析 ${activeGoals.length} 个目标...`)
+    
+    for (const goal of activeGoals) {
+      try {
+        await skillGapAnalysisManager.startAnalysis(goal.id)
+      } catch (error) {
+        log(`[PathPlan] Failed to start analysis for goal ${goal.id}:`, error)
+      }
+    }
+  }, [goals])
 
   // 生成学习路径
   const generatePath = async () => {
@@ -171,6 +347,17 @@ export const PathPlanView = () => {
   // 获取当前评估状态
   const assessment = getCurrentAssessment()
   const selectedGoal = goals.find(g => g.id === state.selectedGoalId)
+  const selectedGoalAnalysisState = state.selectedGoalId ? analysisStates.get(state.selectedGoalId) : null
+
+  // 获取缓存统计
+  const cacheStats = skillGapAnalysisManager.getCacheStats()
+
+  // 动态获取当前选中目标的实时分析状态
+  const currentAnalysisStatus = state.selectedGoalId ? 
+    skillGapAnalysisManager.getAnalysisStatus(state.selectedGoalId) : AnalysisStatus.IDLE
+  
+  // 计算UI应该显示的处理状态
+  const isCurrentlyProcessing = state.isProcessing || currentAnalysisStatus === AnalysisStatus.ANALYZING
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -181,6 +368,37 @@ export const PathPlanView = () => {
         <p style={{ color: '#666', fontSize: '16px' }}>
           基于能力评估的个性化学习路径生成与可视化管理
         </p>
+        
+        {/* 缓存统计信息 */}
+        <div style={{ 
+          fontSize: '12px', 
+          color: '#666', 
+          marginTop: '8px',
+          display: 'flex',
+          gap: '16px'
+        }}>
+          <span>💾 已缓存: {cacheStats.totalCached} 个分析</span>
+          <span>⚡ 活跃分析: {cacheStats.activeAnalyses} 个</span>
+          {cacheStats.totalCached > 0 && (
+            <button
+              onClick={() => {
+                skillGapAnalysisManager.clearAllCache()
+                updateAllAnalysisStates(goals)
+                setMessage('🗑️ 已清除所有分析缓存')
+              }}
+              style={{
+                fontSize: '12px',
+                padding: '2px 6px',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              清除所有缓存
+            </button>
+          )}
+        </div>
       </div>
 
       {message && (
@@ -303,47 +521,156 @@ export const PathPlanView = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {goals.filter(g => g.status !== 'cancelled').map(goal => (
-                  <div
-                    key={goal.id}
-                    onClick={() => selectGoal(goal.id)}
-                    style={{
-                      padding: '16px',
-                      border: `2px solid ${state.selectedGoalId === goal.id ? '#3b82f6' : '#e5e7eb'}`,
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      backgroundColor: state.selectedGoalId === goal.id ? '#eff6ff' : 'white',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                      <div>
-                        <h4 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
-                          {goal.title}
-                        </h4>
-                        <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>
-                          {goal.description}
-                        </p>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#888' }}>
-                          <span>📂 {goal.category}</span>
-                          <span>📊 {goal.targetLevel}</span>
-                          <span>⏱️ {goal.estimatedTimeWeeks}周</span>
+                {goals.filter(g => g.status !== 'cancelled').map(goal => {
+                  const goalAnalysisState = analysisStates.get(goal.id)
+                  const analysisStatus = goalAnalysisState?.status || AnalysisStatus.IDLE
+                  const analysisProgress = goalAnalysisState?.progress
+                  
+                  return (
+                    <div
+                      key={goal.id}
+                      onClick={() => selectGoal(goal.id)}
+                      style={{
+                        padding: '16px',
+                        border: `2px solid ${state.selectedGoalId === goal.id ? '#3b82f6' : '#e5e7eb'}`,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        backgroundColor: state.selectedGoalId === goal.id ? '#eff6ff' : 'white',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
+                            {goal.title}
+                          </h4>
+                          <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>
+                            {goal.description}
+                          </p>
+                          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#888', marginBottom: '8px' }}>
+                            <span>📂 {goal.category}</span>
+                            <span>📊 {goal.targetLevel}</span>
+                            <span>⏱️ {goal.estimatedTimeWeeks}周</span>
+                          </div>
+                          
+                          {/* 分析状态显示 */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              backgroundColor: analysisStatus === AnalysisStatus.COMPLETED || analysisStatus === AnalysisStatus.CACHED ? '#dcfce7' :
+                                             analysisStatus === AnalysisStatus.ANALYZING ? '#dbeafe' :
+                                             analysisStatus === AnalysisStatus.FAILED ? '#fee2e2' : '#f3f4f6',
+                              color: analysisStatus === AnalysisStatus.COMPLETED || analysisStatus === AnalysisStatus.CACHED ? '#166534' :
+                                    analysisStatus === AnalysisStatus.ANALYZING ? '#1e40af' :
+                                    analysisStatus === AnalysisStatus.FAILED ? '#dc2626' : '#6b7280'
+                            }}>
+                              {analysisStatus === AnalysisStatus.ANALYZING ? 
+                                `分析中 ${analysisProgress ? `(${analysisProgress}%)` : ''}` :
+                                analysisStatusText[analysisStatus]
+                              }
+                            </span>
+                            
+                            {/* 分析进度条 */}
+                            {analysisStatus === AnalysisStatus.ANALYZING && typeof analysisProgress === 'number' && (
+                              <div style={{ flex: 1, maxWidth: '60px' }}>
+                                <div style={{
+                                  width: '100%',
+                                  height: '4px',
+                                  backgroundColor: '#e5e7eb',
+                                  borderRadius: '2px',
+                                  overflow: 'hidden'
+                                }}>
+                                  <div style={{
+                                    width: `${analysisProgress}%`,
+                                    height: '100%',
+                                    backgroundColor: '#3b82f6',
+                                    transition: 'width 0.3s ease'
+                                  }} />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* 快速操作按钮 */}
+                            {(analysisStatus === AnalysisStatus.COMPLETED || analysisStatus === AnalysisStatus.CACHED) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  clearAnalysisCache(goal.id)
+                                }}
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 4px',
+                                  backgroundColor: '#f3f4f6',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: '#6b7280'
+                                }}
+                                title="清除缓存"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                            
+                            {analysisStatus === AnalysisStatus.ANALYZING && goal.id === state.selectedGoalId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  stopAnalysis()
+                                }}
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 4px',
+                                  backgroundColor: '#fee2e2',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: '#dc2626'
+                                }}
+                                title="停止分析"
+                              >
+                                🛑
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          backgroundColor: goal.status === 'active' ? '#dcfce7' : '#f3f4f6',
+                          color: goal.status === 'active' ? '#166534' : '#374151'
+                        }}>
+                          {goal.status === 'active' ? '进行中' : 
+                           goal.status === 'paused' ? '已暂停' : 
+                           goal.status === 'completed' ? '已完成' : '草稿'}
                         </div>
                       </div>
-                      <div style={{
-                        padding: '4px 8px',
-                        borderRadius: '12px',
-                        fontSize: '12px',
-                        backgroundColor: goal.status === 'active' ? '#dcfce7' : '#f3f4f6',
-                        color: goal.status === 'active' ? '#166534' : '#374151'
-                      }}>
-                        {goal.status === 'active' ? '进行中' : 
-                         goal.status === 'paused' ? '已暂停' : 
-                         goal.status === 'completed' ? '已完成' : '草稿'}
-                      </div>
                     </div>
+                  )
+                })}
+                
+                {/* 批量分析按钮 */}
+                {goals.filter(g => g.status === 'active').length > 0 && (
+                  <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                    <button
+                      onClick={analyzeAllGoals}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#f3f4f6',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        color: '#374151'
+                      }}
+                    >
+                      🔍 批量分析活跃目标
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -719,21 +1046,41 @@ export const PathPlanView = () => {
                   🔍 技能差距分析
                 </h3>
                 {state.currentStep === 'analysis' && assessment && (
-                  <button
-                    onClick={analyzeSkillGap}
-                    disabled={state.isProcessing}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: state.isProcessing ? '#e5e7eb' : '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '14px',
-                      cursor: state.isProcessing ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {state.isProcessing ? '分析中...' : '开始分析'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={handleAnalyzeSkillGap}
+                      disabled={isCurrentlyProcessing}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: isCurrentlyProcessing ? '#e5e7eb' : '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isCurrentlyProcessing ? '分析中...' : '开始分析'}
+                    </button>
+                    
+                    {/* 停止分析按钮，仅在分析中显示 */}
+                    {currentAnalysisStatus === AnalysisStatus.ANALYZING && (
+                      <button
+                        onClick={stopAnalysis}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#fee2e2',
+                          color: '#dc2626',
+                          border: '1px solid #fca5a5',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🛑 停止
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -743,6 +1090,38 @@ export const PathPlanView = () => {
                 </div>
               ) : state.skillGapAnalysis ? (
                 <div>
+                  {/* 分析结果头部操作区 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#10b981' }}>
+                        ✅ 分析完成
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#666' }}>
+                        {new Date(state.skillGapAnalysis.timestamp || Date.now()).toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    {/* 重新分析按钮 */}
+                    <button
+                      onClick={handleForceAnalyzeSkillGap}
+                      disabled={isCurrentlyProcessing}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: isCurrentlyProcessing ? '#f3f4f6' : '#f59e0b',
+                        color: isCurrentlyProcessing ? '#9ca3af' : 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      🔄 重新分析
+                    </button>
+                  </div>
+
                   {/* AI分析置信度指示器 */}
                   <div style={{ marginBottom: '16px', padding: '8px 12px', backgroundColor: state.skillGapAnalysis.fallbackUsed ? '#fef3c7' : '#ecfdf5', borderRadius: '6px', fontSize: '12px' }}>
                     <span style={{ color: state.skillGapAnalysis.fallbackUsed ? '#92400e' : '#065f46' }}>
@@ -881,20 +1260,20 @@ export const PathPlanView = () => {
                   {state.currentStep === 'generation' && (
                     <button
                       onClick={generatePath}
-                      disabled={state.isProcessing}
+                      disabled={isCurrentlyProcessing}
                       style={{
                         width: '100%',
                         padding: '12px',
-                        backgroundColor: state.isProcessing ? '#e5e7eb' : '#10b981',
+                        backgroundColor: isCurrentlyProcessing ? '#e5e7eb' : '#10b981',
                         color: 'white',
                         border: 'none',
                         borderRadius: '6px',
                         fontSize: '14px',
                         marginTop: '16px',
-                        cursor: state.isProcessing ? 'not-allowed' : 'pointer'
+                        cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
                       }}
                     >
-                      {state.isProcessing ? '生成中...' : '🛤️ 生成学习路径'}
+                      {isCurrentlyProcessing ? '生成中...' : '🛤️ 生成学习路径'}
                     </button>
                   )}
                 </div>
@@ -926,7 +1305,7 @@ export const PathPlanView = () => {
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       onClick={generatePath}
-                      disabled={state.isProcessing}
+                      disabled={isCurrentlyProcessing}
                       style={{
                         padding: '6px 12px',
                         backgroundColor: '#f3f4f6',
@@ -941,14 +1320,15 @@ export const PathPlanView = () => {
                     </button>
                     <button
                       onClick={confirmPath}
+                      disabled={isCurrentlyProcessing}
                       style={{
                         padding: '6px 12px',
-                        backgroundColor: '#10b981',
+                        backgroundColor: isCurrentlyProcessing ? '#e5e7eb' : '#10b981',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
                         fontSize: '12px',
-                        cursor: 'pointer'
+                        cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
                       }}
                     >
                       确认激活

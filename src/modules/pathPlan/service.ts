@@ -94,12 +94,13 @@ export class PathPlanService {
       }
 
       // 基于真实能力数据进行更精确的分析
-      const enhancedGaps = this.enhanceSkillGapAnalysis(result.skillGaps, context)
+      const enhancedGaps = this.enhanceSkillGapAnalysis(result.skillGaps || [], context)
 
       const analysis: SkillGapAnalysis = {
         hasAbilityData: context.hasAbilityData,
         currentLevel: this.calculateOverallCurrentLevel(context.abilityProfile),
         targetLevel: this.getTargetLevelFromGoal(context.currentGoal),
+        skillGaps: enhancedGaps,
         gaps: enhancedGaps,
         recommendations: this.generateContextualRecommendations(enhancedGaps, context),
         estimatedTimeWeeks: this.calculateEnhancedEstimatedTime(enhancedGaps, context),
@@ -112,7 +113,7 @@ export class PathPlanService {
         type: 'enhanced_skill_gap_analyzed',
         details: {
           goalId,
-          gapCount: analysis.gaps.length,
+          gapCount: analysis.skillGaps?.length || 0,
           confidence: analysis.confidence,
           personalizationLevel: analysis.personalizationLevel,
           abilityDataAvailable: context.hasAbilityData,
@@ -449,7 +450,7 @@ export class PathPlanService {
     // 构建更详细的5维度能力分析
     if (ability) {
       const dimensionAnalysis = this.buildDimensionAnalysis(ability)
-      const skillGapsByDimension = this.categorizeSkillGapsByDimension(skillGap.gaps)
+      const skillGapsByDimension = this.categorizeSkillGapsByDimension(skillGap.skillGaps || skillGap.gaps || [])
       const priorityStrategy = this.generatePriorityStrategy(ability, skillGapsByDimension)
 
       contextInfo += `
@@ -494,13 +495,13 @@ ${priorityStrategy}
 ## 🔍 技能差距核心分析
 - **当前水平**: ${skillGap.currentLevel}/10
 - **目标水平**: ${skillGap.targetLevel}/10
-- **主要技能差距**: ${skillGap.gaps.slice(0, 8).map(g => `${g.skill}(差距:${g.gap},优先级:${g.priority})`).join('、')}
+- **主要技能差距**: ${(skillGap.skillGaps || skillGap.gaps || []).slice(0, 8).map(g => `${g.skill}(差距:${g.gap},优先级:${g.priority})`).join('、')}
 - **分析置信度**: ${((skillGap.confidence || 0.8) * 100).toFixed(0)}%
 - **个性化程度**: ${skillGap.personalizationLevel || 'high'}`
 
     const personalizedRecommendations = ability ? 
       this.generatePersonalizedRecommendations(ability, skillGap, context) :
-      skillGap.recommendations
+      skillGap.recommendations || []
 
     return `🎯 **任务**: 为用户创建高度个性化的学习路径
 
@@ -870,7 +871,7 @@ ${ability ? `
       }
     }
 
-    description += `预计${skillGap.estimatedTimeWeeks}周完成，包含${skillGap.gaps.length}个关键技能点的针对性训练。`
+    description += `预计${skillGap.estimatedTimeWeeks}周完成，包含${(skillGap.skillGaps || skillGap.gaps || []).length}个关键技能点的针对性训练。`
 
     return description
   }
@@ -1005,7 +1006,7 @@ ${ability ? `
 技能差距分析：
 - 当前水平：${skillGap.currentLevel}/10
 - 目标水平：${skillGap.targetLevel}/10
-- 主要技能差距：${skillGap.gaps.slice(0, 5).map(g => `${g.skill}(差距:${g.gap})`).join('、')}
+- 主要技能差距：${(skillGap.skillGaps || skillGap.gaps || []).slice(0, 5).map(g => `${g.skill}(差距:${g.gap})`).join('、')}
 
 学习配置：
 - 学习风格：${config.learningStyle}

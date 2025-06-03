@@ -366,7 +366,9 @@ ${context}
       }
       
       // 获取下一步建议
-      const nextAction = await agentToolExecutor.executeTool('suggest_next_action', {})
+      const nextAction = await agentToolExecutor.executeTool('suggest_next_action', {
+        context: { demo: true, source: 'agent_demo' }
+      })
       addOutput(`\n🎯 下一步建议:`)
       nextAction.suggestions?.forEach((suggestion: string, index: number) => {
         addOutput(`   ${index + 1}. ${suggestion}`)
@@ -585,7 +587,9 @@ ${context}
       
       // 5. 获取学习建议
       addOutput(`\n🎯 第5步: 获取智能学习建议`)
-      const nextAction = await agentToolExecutor.executeTool('suggest_next_action', {})
+      const nextAction = await agentToolExecutor.executeTool('suggest_next_action', {
+        context: { demo: true, source: 'agent_demo_pathway' }
+      })
       addOutput(`📋 学习建议:`)
       nextAction.suggestions?.forEach((suggestion: string, index: number) => {
         addOutput(`   ${index + 1}. ${suggestion}`)
@@ -909,7 +913,9 @@ ${context}
 
       // 7. 生成智能建议
       addOutput(`\n🎯 获取下一步智能建议...`)
-      const nextActions = await agentToolExecutor.executeTool('suggest_next_action', {})
+      const nextActions = await agentToolExecutor.executeTool('suggest_next_action', {
+        context: { demo: true, source: 'agent_demo_showcase' }
+      })
       if (nextActions.suggestions) {
         addOutput(`   建议行动:`)
         nextActions.suggestions.forEach((suggestion: string, index: number) => {

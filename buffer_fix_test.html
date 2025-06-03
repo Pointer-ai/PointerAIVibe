@@ -1,0 +1,43 @@
+    <h2>🚀 新增功能亮点</h2>
+
+    <div class="enhancement">
+        <h3>1. 智能缓存系统</h3>
+        <ul>
+            <li><strong>技能分析缓存</strong>：30分钟内复用分析结果，快速响应</li>
+            <li><strong>路径生成缓存</strong>：1小时内复用生成结果，节省等待时间</li>
+            <li><strong>配置哈希</strong>：学习配置改变时自动失效缓存，确保准确性</li>
+            <li><strong>自动清理</strong>：缓存过期自动清理，LRU策略管理存储空间</li>
+        </ul>
+    </div>
+
+    <div class="enhancement">
+        <h3>2. 实时状态追踪</h3>
+        <ul>
+            <li><strong>异步处理</strong>：路径生成不阻塞UI，支持后台运行</li>
+            <li><strong>进度显示</strong>：实时显示生成阶段和完成百分比</li>
+            <li><strong>状态同步</strong>：多个目标的分析和生成状态独立追踪</li>
+            <li><strong>用户控制</strong>：支持随时停止正在进行的生成任务</li>
+        </ul>
+    </div>
+
+    <div class="enhancement">
+        <h3>3. 增强的用户体验</h3>
+        <ul>
+            <li><strong>状态指示器</strong>：目标列表显示分析和生成状态</li>
+            <li><strong>快速操作</strong>：一键清除缓存、停止任务、重新生成</li>
+            <li><strong>缓存统计</strong>：实时显示缓存数量和活跃任务数</li>
+            <li><strong>智能提示</strong>：根据状态显示相应的操作建议</li>
+        </ul>
+    </div>
+
+    <div class="error-box">
+        <h3>🆕 最新修复 (2025-06-03)：</h3>
+        <h4>问题1: Buffer 兼容性错误</h4>
+        <p><strong>错误信息：</strong> ReferenceError: Buffer is not defined</p>
+        <p><strong>修复方案：</strong> 使用浏览器兼容的 btoa() 函数替代 Node.js 的 Buffer</p>
+        
+        <h4>问题2: undefined goalId 错误</h4>
+        <p><strong>错误信息：</strong> Goal with id undefined not found</p>
+        <p><strong>发生位置：</strong> 多个页面调用系统状态时</p>
+        <p><strong>修复方案：</strong> 增强 suggestNextActionTool 方法的参数处理，支持无目标的通用建议</p>
+    </div> 

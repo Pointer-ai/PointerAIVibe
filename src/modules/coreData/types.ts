@@ -55,6 +55,16 @@ export interface PathNode {
   startedAt?: string
   completedAt?: string
   courseUnitIds?: string[]
+  tags?: string[]
+  learningObjectives?: string[]
+  practiceProjects?: {
+    title: string
+    description: string
+    difficulty: 'beginner' | 'intermediate' | 'advanced'
+  }[]
+  personalizedHints?: string[]
+  assessmentCriteria?: string[]
+  order?: number
 }
 
 export interface LearningPath {

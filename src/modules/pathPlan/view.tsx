@@ -10,6 +10,13 @@ import {
   AnalysisStatus, 
   AnalysisListener 
 } from './skillGapAnalysisManager'
+import {
+  pathPlanningManager,
+  PathGenerationStatus,
+  PathGenerationListener,
+  PathGenerationTask,
+  PathCacheItem
+} from './pathPlanningManager'
 
 const pathPlanService = new PathPlanService()
 
@@ -29,6 +36,24 @@ const analysisStatusColor = {
   [AnalysisStatus.COMPLETED]: '#10b981',
   [AnalysisStatus.FAILED]: '#dc2626',
   [AnalysisStatus.CACHED]: '#8b5cf6'
+}
+
+// 路径生成状态显示文本映射
+const generationStatusText = {
+  [PathGenerationStatus.IDLE]: '待生成',
+  [PathGenerationStatus.GENERATING]: '生成中...',
+  [PathGenerationStatus.COMPLETED]: '生成完成',
+  [PathGenerationStatus.FAILED]: '生成失败',
+  [PathGenerationStatus.CACHED]: '已缓存'
+}
+
+// 路径生成状态颜色映射
+const generationStatusColor = {
+  [PathGenerationStatus.IDLE]: '#6b7280',
+  [PathGenerationStatus.GENERATING]: '#3b82f6',
+  [PathGenerationStatus.COMPLETED]: '#10b981',
+  [PathGenerationStatus.FAILED]: '#dc2626',
+  [PathGenerationStatus.CACHED]: '#8b5cf6'
 }
 
 export const PathPlanView = () => {
@@ -62,25 +87,18 @@ export const PathPlanView = () => {
     result?: SkillGapAnalysis
   }>>(new Map())
 
-  // 刷新数据
-  const refreshData = () => {
-    const allGoals = getLearningGoals()
-    const allPaths = getLearningPaths()
-    setGoals(allGoals)
-    setPaths(allPaths)
-    
-    // 更新选中目标的关联路径
-    if (state.selectedGoalId) {
-      const goalPaths = getPathsByGoal(state.selectedGoalId)
-      setSelectedGoalPaths(goalPaths)
-    }
-    
-    // 更新所有目标的分析状态
-    updateAllAnalysisStates(allGoals)
-  }
+  // 新增：路径生成状态管理
+  const [generationStates, setGenerationStates] = useState<Map<string, {
+    status: PathGenerationStatus
+    progress?: number
+    stage?: string
+    error?: string
+    result?: LearningPath
+    configHash?: string
+  }>>(new Map())
 
   // 更新所有目标的分析状态
-  const updateAllAnalysisStates = (goalList: LearningGoal[]) => {
+  const updateAllAnalysisStates = useCallback((goalList: LearningGoal[]) => {
     const newStates = new Map()
     
     goalList.forEach(goal => {
@@ -95,7 +113,47 @@ export const PathPlanView = () => {
     })
     
     setAnalysisStates(newStates)
-  }
+  }, [])
+
+  // 更新所有目标的生成状态
+  const updateAllGenerationStates = useCallback((goalList: LearningGoal[]) => {
+    const newStates = new Map()
+    
+    goalList.forEach(goal => {
+      const status = pathPlanningManager.getGenerationStatus(goal.id, config)
+      const result = pathPlanningManager.getGenerationResult(goal.id, config)
+      
+      newStates.set(goal.id, {
+        status,
+        result,
+        progress: status === PathGenerationStatus.GENERATING ? 0 : undefined
+      })
+    })
+    
+    setGenerationStates(newStates)
+  }, [config]) // 只依赖config，避免频繁重创建
+
+  // 刷新数据
+  const refreshData = useCallback(() => {
+    const allGoals = getLearningGoals()
+    const allPaths = getLearningPaths()
+    setGoals(allGoals)
+    setPaths(allPaths)
+    
+    // 更新选中目标的关联路径
+    setState(prev => {
+      if (prev.selectedGoalId) {
+        const goalPaths = getPathsByGoal(prev.selectedGoalId)
+        setSelectedGoalPaths(goalPaths)
+      }
+      return prev
+    })
+    
+    // 更新所有目标的分析状态
+    updateAllAnalysisStates(allGoals)
+    // 更新所有目标的生成状态
+    updateAllGenerationStates(allGoals)
+  }, [updateAllAnalysisStates, updateAllGenerationStates])
 
   // 分析监听器
   const analysisListener = useMemo<AnalysisListener>(() => ({
@@ -114,28 +172,31 @@ export const PathPlanView = () => {
       })
       
       // 如果是当前选中的目标，更新主状态
-      if (goalId === state.selectedGoalId) {
+      setState(prev => {
+        if (goalId !== prev.selectedGoalId) return prev
+        
         if (status === AnalysisStatus.COMPLETED && result) {
-          setState(prev => ({
-            ...prev,
-            skillGapAnalysis: result,
-            currentStep: 'generation',
-            isProcessing: false
-          }))
           setMessage('✅ 技能差距分析完成！')
-        } else if (status === AnalysisStatus.FAILED) {
-          setState(prev => ({ ...prev, isProcessing: false }))
-          setMessage(`❌ 分析失败: ${error || '未知错误'}`)
-        } else if (status === AnalysisStatus.CACHED && result) {
-          setState(prev => ({
+          return {
             ...prev,
             skillGapAnalysis: result,
             currentStep: 'generation',
             isProcessing: false
-          }))
+          }
+        } else if (status === AnalysisStatus.FAILED) {
+          setMessage(`❌ 分析失败: ${error || '未知错误'}`)
+          return { ...prev, isProcessing: false }
+        } else if (status === AnalysisStatus.CACHED && result) {
           setMessage('✅ 使用缓存的分析结果！')
+          return {
+            ...prev,
+            skillGapAnalysis: result,
+            currentStep: 'generation',
+            isProcessing: false
+          }
         }
-      }
+        return prev
+      })
     },
     
     onProgressUpdate: (goalId: string, progress: number) => {
@@ -151,21 +212,130 @@ export const PathPlanView = () => {
     
     onCacheHit: (goalId: string, analysis: SkillGapAnalysis) => {
       log(`[PathPlan] Cache hit for goal: ${goalId}`)
-      setMessage(`💾 使用了目标"${goals.find(g => g.id === goalId)?.title}"的缓存分析结果`)
+      // 使用函数形式避免闭包问题
+      setGoals(currentGoals => {
+        const goal = currentGoals.find(g => g.id === goalId)
+        setMessage(`💾 使用了目标"${goal?.title}"的缓存分析结果`)
+        return currentGoals
+      })
     }
-  }), [state.selectedGoalId, goals])
+  }), []) // 空依赖数组，避免频繁重创建
+
+  // 路径生成监听器
+  const pathGenerationListener = useMemo<PathGenerationListener>(() => ({
+    onStatusChange: (goalId: string, status: PathGenerationStatus, result?: LearningPath, error?: string) => {
+      log(`[PathPlan] Path generation status changed for ${goalId}: ${status}`)
+      
+      setGenerationStates(prev => {
+        const newStates = new Map(prev)
+        newStates.set(goalId, {
+          ...newStates.get(goalId),
+          status,
+          result,
+          error
+        })
+        return newStates
+      })
+      
+      // 如果是当前选中的目标，更新主状态
+      setState(prev => {
+        if (goalId !== prev.selectedGoalId) return prev
+        
+        if (status === PathGenerationStatus.COMPLETED && result) {
+          setMessage('✅ 学习路径生成完成！')
+          refreshData() // 刷新数据显示新路径
+          return {
+            ...prev,
+            generatedPath: result,
+            currentStep: 'review',
+            isProcessing: false
+          }
+        } else if (status === PathGenerationStatus.FAILED) {
+          setMessage(`❌ 生成失败: ${error || '未知错误'}`)
+          return { ...prev, isProcessing: false }
+        } else if (status === PathGenerationStatus.CACHED && result) {
+          setMessage('✅ 使用缓存的路径结果！')
+          refreshData()
+          return {
+            ...prev,
+            generatedPath: result,
+            currentStep: 'review',
+            isProcessing: false
+          }
+        } else if (status === PathGenerationStatus.GENERATING) {
+          return { ...prev, isProcessing: true }
+        }
+        return prev
+      })
+    },
+    
+    onProgressUpdate: (goalId: string, progress: number, stage?: string) => {
+      setGenerationStates(prev => {
+        const newStates = new Map(prev)
+        const current = newStates.get(goalId)
+        if (current) {
+          newStates.set(goalId, { ...current, progress, stage })
+        }
+        return newStates
+      })
+      
+      // 如果是当前选中的目标，更新消息
+      setState(prev => {
+        if (goalId === prev.selectedGoalId && stage) {
+          setMessage(`🛤️ ${stage} (${progress}%)`)
+        }
+        return prev
+      })
+    },
+    
+    onCacheHit: (goalId: string, path: LearningPath, metadata?: any) => {
+      log(`[PathPlan] Path cache hit for goal: ${goalId}`)
+      setGoals(currentGoals => {
+        const goal = currentGoals.find(g => g.id === goalId)
+        setMessage(`💾 使用了目标"${goal?.title}"的缓存路径${metadata ? ` (${metadata.nodeCount}个节点, ${metadata.totalHours}小时)` : ''}`)
+        return currentGoals
+      })
+    },
+
+    onGenerationStart: (goalId: string, config: PathGenerationConfig) => {
+      setState(prev => {
+        if (goalId === prev.selectedGoalId) {
+          setMessage('🛤️ 开始生成学习路径...')
+        }
+        return prev
+      })
+    },
+
+    onGenerationComplete: (goalId: string, path: LearningPath, timeTaken: number) => {
+      setState(prev => {
+        if (goalId === prev.selectedGoalId) {
+          setMessage(`✅ 路径生成完成！(用时 ${Math.round(timeTaken / 1000)}秒, ${path.nodes.length}个节点)`)
+        }
+        return prev
+      })
+    }
+  }), [refreshData]) // 只依赖refreshData
 
   useEffect(() => {
+    log('[pathPlan] View loaded')
     refreshData()
     
     // 注册分析监听器
     skillGapAnalysisManager.addListener(analysisListener)
+    // 注册路径生成监听器
+    pathPlanningManager.addListener(pathGenerationListener)
     
     return () => {
       // 清理监听器
       skillGapAnalysisManager.removeListener(analysisListener)
+      pathPlanningManager.removeListener(pathGenerationListener)
     }
-  }, [analysisListener])
+  }, []) // 空依赖数组，只在组件挂载时运行一次
+
+  // 当配置变化时，更新生成状态
+  useEffect(() => {
+    updateAllGenerationStates(goals)
+  }, [config, goals, updateAllGenerationStates])
 
   // 选择目标
   const selectGoal = (goalId: string) => {
@@ -296,20 +466,51 @@ export const PathPlanView = () => {
     setMessage('🛤️ 正在生成学习路径...')
 
     try {
-      const path = await pathPlanService.generateLearningPath(state.selectedGoalId, config)
-      setState(prev => ({
-        ...prev,
-        generatedPath: path,
-        currentStep: 'review',
-        isProcessing: false
-      }))
-      setMessage('✅ 学习路径生成完成！')
-      refreshData() // 刷新数据显示新路径
+      // 使用路径规划管理器生成路径
+      await pathPlanningManager.startGeneration(state.selectedGoalId, config)
+      // 状态更新将通过监听器处理
     } catch (error) {
       setState(prev => ({ ...prev, isProcessing: false }))
-      setMessage(`❌ 生成失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      setMessage(`❌ 启动生成失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
+
+  // 重新生成路径（强制刷新）
+  const handleForceGeneratePath = useCallback(async () => {
+    if (!state.selectedGoalId) return
+
+    setState(prev => ({ ...prev, isProcessing: true }))
+    setMessage('🛤️ 正在重新生成学习路径...')
+
+    try {
+      // 使用路径规划管理器强制重新生成路径
+      await pathPlanningManager.startGeneration(state.selectedGoalId, config, true)
+      // 状态更新将通过监听器处理
+    } catch (error) {
+      setState(prev => ({ ...prev, isProcessing: false }))
+      setMessage(`❌ 启动生成失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }, [state.selectedGoalId, config])
+
+  // 停止路径生成
+  const stopPathGeneration = useCallback(() => {
+    if (state.selectedGoalId) {
+      pathPlanningManager.stopGeneration(state.selectedGoalId)
+      setState(prev => ({ ...prev, isProcessing: false }))
+      setMessage('🛑 路径生成已停止')
+    }
+  }, [state.selectedGoalId])
+
+  // 清除路径生成缓存
+  const clearPathGenerationCache = useCallback((goalId: string) => {
+    pathPlanningManager.clearPathCache(goalId, config)
+    updateAllGenerationStates(goals)
+    setMessage('🗑️ 已清除路径生成缓存')
+  }, [config, goals])
+
+  // 获取缓存统计
+  const pathCacheStats = pathPlanningManager.getCacheStats()
+  const cacheStats = skillGapAnalysisManager.getCacheStats()
 
   // 确认并激活路径
   const confirmPath = async () => {
@@ -349,9 +550,6 @@ export const PathPlanView = () => {
   const selectedGoal = goals.find(g => g.id === state.selectedGoalId)
   const selectedGoalAnalysisState = state.selectedGoalId ? analysisStates.get(state.selectedGoalId) : null
 
-  // 获取缓存统计
-  const cacheStats = skillGapAnalysisManager.getCacheStats()
-
   // 动态获取当前选中目标的实时分析状态
   const currentAnalysisStatus = state.selectedGoalId ? 
     skillGapAnalysisManager.getAnalysisStatus(state.selectedGoalId) : AnalysisStatus.IDLE
@@ -377,14 +575,18 @@ export const PathPlanView = () => {
           display: 'flex',
           gap: '16px'
         }}>
-          <span>💾 已缓存: {cacheStats.totalCached} 个分析</span>
+          <span>💾 已缓存分析: {cacheStats.totalCached} 个</span>
           <span>⚡ 活跃分析: {cacheStats.activeAnalyses} 个</span>
-          {cacheStats.totalCached > 0 && (
+          <span>🛤️ 已缓存路径: {pathCacheStats.totalCached} 个</span>
+          <span>🚀 活跃生成: {pathCacheStats.activeGenerations} 个</span>
+          {(cacheStats.totalCached > 0 || pathCacheStats.totalCached > 0) && (
             <button
               onClick={() => {
                 skillGapAnalysisManager.clearAllCache()
+                pathPlanningManager.clearAllCache()
                 updateAllAnalysisStates(goals)
-                setMessage('🗑️ 已清除所有分析缓存')
+                updateAllGenerationStates(goals)
+                setMessage('🗑️ 已清除所有缓存')
               }}
               style={{
                 fontSize: '12px',
@@ -526,6 +728,11 @@ export const PathPlanView = () => {
                   const analysisStatus = goalAnalysisState?.status || AnalysisStatus.IDLE
                   const analysisProgress = goalAnalysisState?.progress
                   
+                  // 获取路径生成状态
+                  const goalGenerationState = generationStates.get(goal.id)
+                  const generationStatus = goalGenerationState?.status || PathGenerationStatus.IDLE
+                  const generationProgress = goalGenerationState?.progress
+                  
                   return (
                     <div
                       key={goal.id}
@@ -554,7 +761,10 @@ export const PathPlanView = () => {
                           </div>
                           
                           {/* 分析状态显示 */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '500', color: '#4b5563' }}>
+                              分析:
+                            </span>
                             <span style={{
                               padding: '2px 6px',
                               borderRadius: '8px',
@@ -574,10 +784,10 @@ export const PathPlanView = () => {
                             
                             {/* 分析进度条 */}
                             {analysisStatus === AnalysisStatus.ANALYZING && typeof analysisProgress === 'number' && (
-                              <div style={{ flex: 1, maxWidth: '60px' }}>
+                              <div style={{ flex: 1, maxWidth: '40px' }}>
                                 <div style={{
                                   width: '100%',
-                                  height: '4px',
+                                  height: '3px',
                                   backgroundColor: '#e5e7eb',
                                   borderRadius: '2px',
                                   overflow: 'hidden'
@@ -591,8 +801,97 @@ export const PathPlanView = () => {
                                 </div>
                               </div>
                             )}
+                          </div>
+                          
+                          {/* 路径生成状态显示 */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '500', color: '#4b5563' }}>
+                              路径:
+                            </span>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              backgroundColor: generationStatus === PathGenerationStatus.COMPLETED || generationStatus === PathGenerationStatus.CACHED ? '#dcfce7' :
+                                             generationStatus === PathGenerationStatus.GENERATING ? '#dbeafe' :
+                                             generationStatus === PathGenerationStatus.FAILED ? '#fee2e2' : '#f3f4f6',
+                              color: generationStatus === PathGenerationStatus.COMPLETED || generationStatus === PathGenerationStatus.CACHED ? '#166534' :
+                                    generationStatus === PathGenerationStatus.GENERATING ? '#1e40af' :
+                                    generationStatus === PathGenerationStatus.FAILED ? '#dc2626' : '#6b7280'
+                            }}>
+                              {generationStatus === PathGenerationStatus.GENERATING ? 
+                                `生成中 ${generationProgress ? `(${generationProgress}%)` : ''}` :
+                                generationStatusText[generationStatus]
+                              }
+                            </span>
+                            
+                            {/* 路径生成进度条 */}
+                            {generationStatus === PathGenerationStatus.GENERATING && typeof generationProgress === 'number' && (
+                              <div style={{ flex: 1, maxWidth: '40px' }}>
+                                <div style={{
+                                  width: '100%',
+                                  height: '3px',
+                                  backgroundColor: '#e5e7eb',
+                                  borderRadius: '2px',
+                                  overflow: 'hidden'
+                                }}>
+                                  <div style={{
+                                    width: `${generationProgress}%`,
+                                    height: '100%',
+                                    backgroundColor: '#10b981',
+                                    transition: 'width 0.3s ease'
+                                  }} />
+                                </div>
+                              </div>
+                            )}
                             
                             {/* 快速操作按钮 */}
+                            {(generationStatus === PathGenerationStatus.COMPLETED || generationStatus === PathGenerationStatus.CACHED) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  clearPathGenerationCache(goal.id)
+                                }}
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 4px',
+                                  backgroundColor: '#f3f4f6',
+                                  border: '1px solid #d1d5db',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: '#6b7280'
+                                }}
+                                title="清除路径缓存"
+                              >
+                                🗑️
+                              </button>
+                            )}
+                            
+                            {generationStatus === PathGenerationStatus.GENERATING && goal.id === state.selectedGoalId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  stopPathGeneration()
+                                }}
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 4px',
+                                  backgroundColor: '#fee2e2',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: '#dc2626'
+                                }}
+                                title="停止生成"
+                              >
+                                🛑
+                              </button>
+                            )}
+                          </div>
+                          
+                          {/* 原有的分析操作按钮 */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* 分析操作按钮 */}
                             {(analysisStatus === AnalysisStatus.COMPLETED || analysisStatus === AnalysisStatus.CACHED) && (
                               <button
                                 onClick={(e) => {
@@ -608,7 +907,7 @@ export const PathPlanView = () => {
                                   cursor: 'pointer',
                                   color: '#6b7280'
                                 }}
-                                title="清除缓存"
+                                title="清除分析缓存"
                               >
                                 🗑️
                               </button>
@@ -877,35 +1176,84 @@ export const PathPlanView = () => {
                           <h5 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                             节点预览 (前3个):
                           </h5>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {path.nodes.slice(0, 3).map((node, index) => (
                               <div key={node.id} style={{
-                                padding: '6px 8px',
+                                padding: '8px 10px',
                                 backgroundColor: 'white',
-                                borderRadius: '4px',
+                                borderRadius: '6px',
                                 fontSize: '12px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
+                                border: '1px solid #e5e7eb'
                               }}>
-                                <span>{index + 1}. {node.title}</span>
-                                <span style={{
-                                  padding: '2px 6px',
-                                  borderRadius: '8px',
-                                  fontSize: '10px',
-                                  backgroundColor: node.status === 'completed' ? '#dcfce7' : 
-                                                  node.status === 'in_progress' ? '#dbeafe' : '#f3f4f6',
-                                  color: node.status === 'completed' ? '#166534' : 
-                                         node.status === 'in_progress' ? '#1e40af' : '#374151'
-                                }}>
-                                  {node.status === 'completed' ? '已完成' : 
-                                   node.status === 'in_progress' ? '进行中' : '未开始'}
-                                </span>
+                                {/* 节点标题和状态 */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '4px' }}>
+                                  <span style={{ fontWeight: '500', flex: 1 }}>
+                                    {index + 1}. {node.title}
+                                  </span>
+                                  <span style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '8px',
+                                    fontSize: '10px',
+                                    backgroundColor: node.status === 'completed' ? '#dcfce7' : 
+                                                    node.status === 'in_progress' ? '#dbeafe' : '#f3f4f6',
+                                    color: node.status === 'completed' ? '#166534' : 
+                                           node.status === 'in_progress' ? '#1e40af' : '#374151'
+                                  }}>
+                                    {node.status === 'completed' ? '已完成' : 
+                                     node.status === 'in_progress' ? '进行中' : '未开始'}
+                                  </span>
+                                </div>
+                                
+                                {/* 节点描述和时间 */}
+                                <div style={{ color: '#666', fontSize: '11px', marginBottom: '4px' }}>
+                                  {node.description?.split('\n')[0] || '暂无描述'} • {node.estimatedHours}h • 难度{node.difficulty}/5
+                                </div>
+                                
+                                {/* 个性化标签 */}
+                                {node.tags && node.tags.length > 0 && (
+                                  <div style={{ marginBottom: '4px' }}>
+                                    {node.tags.slice(0, 3).map((tag: string, tagIndex: number) => (
+                                      <span
+                                        key={tagIndex}
+                                        style={{
+                                          display: 'inline-block',
+                                          padding: '1px 4px',
+                                          backgroundColor: tag === '重点提升' ? '#fecaca' : 
+                                                           tag === '实战项目' ? '#bfdbfe' : '#e5e7eb',
+                                          color: tag === '重点提升' ? '#dc2626' : 
+                                                 tag === '实战项目' ? '#1e40af' : '#374151',
+                                          borderRadius: '8px',
+                                          fontSize: '9px',
+                                          marginRight: '3px',
+                                          marginBottom: '1px'
+                                        }}
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                
+                                {/* 学习目标简要显示 */}
+                                {node.learningObjectives && node.learningObjectives.length > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#6b7280' }}>
+                                    🎯 {node.learningObjectives[0]}
+                                    {node.learningObjectives.length > 1 && ` (+ ${node.learningObjectives.length - 1} 个目标)`}
+                                  </div>
+                                )}
+                                
+                                {/* 实践项目简要显示 */}
+                                {node.practiceProjects && node.practiceProjects.length > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                                    🛠️ {node.practiceProjects[0].title} 
+                                    {node.practiceProjects.length > 1 && ` (+ ${node.practiceProjects.length - 1} 个项目)`}
+                                  </div>
+                                )}
                               </div>
                             ))}
                             {path.nodes.length > 3 && (
                               <div style={{ textAlign: 'center', color: '#888', fontSize: '12px', padding: '4px' }}>
-                                ... 还有 {path.nodes.length - 3} 个节点
+                                ... 还有 {path.nodes.length - 3} 个详细节点
                               </div>
                             )}
                           </div>
@@ -1258,23 +1606,164 @@ export const PathPlanView = () => {
                   </div>
 
                   {state.currentStep === 'generation' && (
-                    <button
-                      onClick={generatePath}
-                      disabled={isCurrentlyProcessing}
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        backgroundColor: isCurrentlyProcessing ? '#e5e7eb' : '#10b981',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '14px',
-                        marginTop: '16px',
-                        cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      {isCurrentlyProcessing ? '生成中...' : '🛤️ 生成学习路径'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+                      {/* 路径生成状态显示 */}
+                      {state.selectedGoalId && (() => {
+                        const currentGenerationState = generationStates.get(state.selectedGoalId)
+                        const currentGenerationStatus = currentGenerationState?.status || PathGenerationStatus.IDLE
+                        const currentGenerationProgress = currentGenerationState?.progress
+                        const currentGenerationStage = currentGenerationState?.stage
+                        
+                        return (
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '8px', 
+                              marginBottom: '8px',
+                              padding: '8px 12px',
+                              backgroundColor: 
+                                currentGenerationStatus === PathGenerationStatus.COMPLETED || currentGenerationStatus === PathGenerationStatus.CACHED ? '#ecfdf5' :
+                                currentGenerationStatus === PathGenerationStatus.GENERATING ? '#eff6ff' :
+                                currentGenerationStatus === PathGenerationStatus.FAILED ? '#fef2f2' : '#f9fafb',
+                              borderRadius: '6px',
+                              border: '1px solid #e5e7eb'
+                            }}>
+                              <span style={{ 
+                                fontSize: '14px', 
+                                fontWeight: 'bold',
+                                color: 
+                                  currentGenerationStatus === PathGenerationStatus.COMPLETED || currentGenerationStatus === PathGenerationStatus.CACHED ? '#059669' :
+                                  currentGenerationStatus === PathGenerationStatus.GENERATING ? '#2563eb' :
+                                  currentGenerationStatus === PathGenerationStatus.FAILED ? '#dc2626' : '#6b7280'
+                              }}>
+                                {currentGenerationStatus === PathGenerationStatus.GENERATING ? 
+                                  `🛤️ 正在生成路径... ${currentGenerationProgress ? `(${currentGenerationProgress}%)` : ''}` :
+                                  currentGenerationStatus === PathGenerationStatus.COMPLETED ? '✅ 路径生成完成' :
+                                  currentGenerationStatus === PathGenerationStatus.CACHED ? '💾 使用缓存路径' :
+                                  currentGenerationStatus === PathGenerationStatus.FAILED ? '❌ 生成失败' :
+                                  '⭕ 准备生成路径'
+                                }
+                              </span>
+                              
+                              {/* 生成进度条 */}
+                              {currentGenerationStatus === PathGenerationStatus.GENERATING && typeof currentGenerationProgress === 'number' && (
+                                <div style={{ flex: 1, maxWidth: '100px' }}>
+                                  <div style={{
+                                    width: '100%',
+                                    height: '6px',
+                                    backgroundColor: '#e5e7eb',
+                                    borderRadius: '3px',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <div style={{
+                                      width: `${currentGenerationProgress}%`,
+                                      height: '100%',
+                                      backgroundColor: '#10b981',
+                                      transition: 'width 0.3s ease'
+                                    }} />
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* 阶段显示 */}
+                              {currentGenerationStage && (
+                                <span style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic' }}>
+                                  {currentGenerationStage}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* 缓存路径信息显示 */}
+                            {(currentGenerationStatus === PathGenerationStatus.CACHED || currentGenerationStatus === PathGenerationStatus.COMPLETED) && 
+                             currentGenerationState?.result && (
+                              <div style={{ 
+                                fontSize: '12px', 
+                                color: '#059669',
+                                backgroundColor: '#ecfdf5',
+                                padding: '6px 10px',
+                                borderRadius: '4px',
+                                marginBottom: '8px'
+                              }}>
+                                📊 已生成路径：{currentGenerationState.result.nodes.length} 个节点，
+                                预计 {currentGenerationState.result.totalEstimatedHours} 小时
+                                {currentGenerationStatus === PathGenerationStatus.CACHED && ' (来自缓存)'}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                      
+                      {/* 按钮组 */}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={generatePath}
+                          disabled={isCurrentlyProcessing}
+                          style={{
+                            flex: 1,
+                            padding: '12px',
+                            backgroundColor: isCurrentlyProcessing ? '#e5e7eb' : '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '14px',
+                            cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {isCurrentlyProcessing ? '生成中...' : '🛤️ 生成学习路径'}
+                        </button>
+                        
+                        {/* 重新生成按钮 */}
+                        {state.selectedGoalId && (() => {
+                          const currentGenerationState = generationStates.get(state.selectedGoalId)
+                          const hasResult = currentGenerationState?.result || 
+                                          currentGenerationState?.status === PathGenerationStatus.COMPLETED ||
+                                          currentGenerationState?.status === PathGenerationStatus.CACHED
+                          
+                          return hasResult ? (
+                            <button
+                              onClick={handleForceGeneratePath}
+                              disabled={isCurrentlyProcessing}
+                              style={{
+                                padding: '12px 16px',
+                                backgroundColor: isCurrentlyProcessing ? '#f3f4f6' : '#f59e0b',
+                                color: isCurrentlyProcessing ? '#9ca3af' : 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                cursor: isCurrentlyProcessing ? 'not-allowed' : 'pointer'
+                              }}
+                              title="强制重新生成，忽略缓存"
+                            >
+                              🔄 重新生成
+                            </button>
+                          ) : null
+                        })()}
+                        
+                        {/* 停止生成按钮 */}
+                        {state.selectedGoalId && (() => {
+                          const currentGenerationState = generationStates.get(state.selectedGoalId)
+                          const isGenerating = currentGenerationState?.status === PathGenerationStatus.GENERATING
+                          
+                          return isGenerating ? (
+                            <button
+                              onClick={stopPathGeneration}
+                              style={{
+                                padding: '12px 16px',
+                                backgroundColor: '#fee2e2',
+                                color: '#dc2626',
+                                border: '1px solid #fca5a5',
+                                borderRadius: '6px',
+                                fontSize: '14px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              🛑 停止生成
+                            </button>
+                          ) : null
+                        })()}
+                      </div>
+                    </div>
                   )}
                 </div>
               ) : state.currentStep !== 'analysis' ? (
@@ -1304,7 +1793,7 @@ export const PathPlanView = () => {
                 {state.currentStep === 'review' && (
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
-                      onClick={generatePath}
+                      onClick={handleForceGeneratePath}
                       disabled={isCurrentlyProcessing}
                       style={{
                         padding: '6px 12px',
@@ -1355,26 +1844,130 @@ export const PathPlanView = () => {
                 <h5 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
                   学习节点预览:
                 </h5>
-                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                   {state.generatedPath.nodes.slice(0, 5).map((node, index) => (
                     <div key={node.id} style={{
-                      padding: '8px 12px',
+                      padding: '12px',
                       backgroundColor: '#f9fafb',
-                      borderRadius: '6px',
-                      marginBottom: '4px',
-                      fontSize: '13px'
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      fontSize: '13px',
+                      border: '1px solid #e5e7eb'
                     }}>
-                      <div style={{ fontWeight: '500' }}>
-                        {index + 1}. {node.title}
+                      {/* 节点标题和基本信息 */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                        <div style={{ fontWeight: '500', flex: 1 }}>
+                          {index + 1}. {node.title}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#666', marginLeft: '8px' }}>
+                          {node.estimatedHours}h • 难度{node.difficulty}/10
+                        </div>
                       </div>
-                      <div style={{ color: '#666', fontSize: '12px', marginTop: '2px' }}>
-                        {node.description} • {node.estimatedHours}h • 难度{node.difficulty}/10
+                      
+                      {/* 节点描述 */}
+                      <div style={{ color: '#666', fontSize: '12px', marginBottom: '8px', lineHeight: '1.4' }}>
+                        {node.description?.split('\n')[0] || '暂无描述'}
                       </div>
+                      
+                      {/* 个性化标签 */}
+                      {node.tags && node.tags.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          {node.tags.map((tag: string, tagIndex: number) => (
+                            <span
+                              key={tagIndex}
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 6px',
+                                backgroundColor: tag === '重点提升' ? '#fecaca' : 
+                                                 tag === '实战项目' ? '#bfdbfe' : '#e5e7eb',
+                                color: tag === '重点提升' ? '#dc2626' : 
+                                       tag === '实战项目' ? '#1e40af' : '#374151',
+                                borderRadius: '12px',
+                                fontSize: '10px',
+                                marginRight: '4px',
+                                marginBottom: '2px'
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* 学习目标 */}
+                      {node.learningObjectives && node.learningObjectives.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: '500', color: '#4b5563', marginBottom: '2px' }}>
+                            🎯 学习目标:
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#6b7280', paddingLeft: '8px' }}>
+                            {node.learningObjectives.slice(0, 2).map((objective: string, objIndex: number) => (
+                              <div key={objIndex}>• {objective}</div>
+                            ))}
+                            {node.learningObjectives.length > 2 && (
+                              <div style={{ color: '#9ca3af' }}>... 还有 {node.learningObjectives.length - 2} 个目标</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 学习资源预览 */}
+                      {node.resources && node.resources.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: '500', color: '#4b5563', marginBottom: '2px' }}>
+                            📚 学习资源:
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#6b7280', paddingLeft: '8px' }}>
+                            {node.resources.slice(0, 2).map((resource: any, resIndex: number) => (
+                              <div key={resIndex}>
+                                • {resource.type === 'video' ? '📹' : 
+                                    resource.type === 'article' ? '📄' : 
+                                    resource.type === 'book' ? '📖' : '💻'} {resource.title}
+                              </div>
+                            ))}
+                            {node.resources.length > 2 && (
+                              <div style={{ color: '#9ca3af' }}>... 还有 {node.resources.length - 2} 个资源</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 实践项目预览 */}
+                      {node.practiceProjects && node.practiceProjects.length > 0 && (
+                        <div style={{ marginBottom: '6px' }}>
+                          <div style={{ fontSize: '11px', fontWeight: '500', color: '#4b5563', marginBottom: '2px' }}>
+                            🛠️ 实践项目:
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#6b7280', paddingLeft: '8px' }}>
+                            {node.practiceProjects.slice(0, 1).map((project: any, projIndex: number) => (
+                              <div key={projIndex}>
+                                • {project.title} ({project.difficulty})
+                              </div>
+                            ))}
+                            {node.practiceProjects.length > 1 && (
+                              <div style={{ color: '#9ca3af' }}>... 还有 {node.practiceProjects.length - 1} 个项目</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 个性化提示预览 */}
+                      {node.personalizedHints && node.personalizedHints.length > 0 && (
+                        <div style={{ marginTop: '8px', padding: '6px', backgroundColor: '#eff6ff', borderRadius: '4px' }}>
+                          <div style={{ fontSize: '10px', fontWeight: '500', color: '#1e40af', marginBottom: '2px' }}>
+                            💡 个性化建议:
+                          </div>
+                          <div style={{ fontSize: '10px', color: '#1e40af' }}>
+                            {node.personalizedHints[0]}
+                            {node.personalizedHints.length > 1 && ' ...'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {state.generatedPath.nodes.length > 5 && (
                     <div style={{ textAlign: 'center', color: '#888', fontSize: '12px', padding: '8px' }}>
-                      ... 还有 {state.generatedPath.nodes.length - 5} 个节点
+                      ... 还有 {state.generatedPath.nodes.length - 5} 个详细节点
                     </div>
                   )}
                 </div>
@@ -1465,10 +2058,22 @@ export const PathPlanView = () => {
             <li><strong>灵活操作：</strong> 激活、暂停、完成、归档不同状态的路径</li>
             <li><strong>多路径支持：</strong> 支持为同一目标创建多条路径，并行或替代学习</li>
             <li><strong>状态管理：</strong> 智能状态转换，保持学习路径的有序管理</li>
+            <li><strong>缓存机制：</strong> 路径生成结果自动缓存1小时，配置变化时自动失效</li>
+            <li><strong>进度追踪：</strong> 实时显示路径生成进度和状态，支持随时停止</li>
+          </ul>
+          
+          <p><strong>💾 智能缓存系统：</strong></p>
+          <ul style={{ paddingLeft: '20px', margin: '8px 0' }}>
+            <li><strong>技能分析缓存：</strong> 30分钟内相同目标的分析结果直接使用缓存</li>
+            <li><strong>路径生成缓存：</strong> 1小时内相同目标和配置的路径直接使用缓存</li>
+            <li><strong>配置感知：</strong> 学习配置改变时自动重新生成，确保路径符合最新需求</li>
+            <li><strong>状态同步：</strong> 实时显示缓存状态、生成进度和活跃任务数量</li>
+            <li><strong>手动管理：</strong> 支持清除单个目标或全部缓存，强制重新分析/生成</li>
           </ul>
           
           <p><strong>💡 提示：</strong> 基于您的能力评估结果，系统会生成更精准的个性化路径。
-          您可以为同一目标创建多条路径进行A/B测试，或在不同时期激活不同的学习策略。</p>
+          智能缓存系统确保快速响应的同时保持数据的准确性。您可以为同一目标创建多条路径进行A/B测试，
+          或在不同时期激活不同的学习策略。配置改变时系统会智能判断是否需要重新生成路径。</p>
         </div>
       </div>
     </div>

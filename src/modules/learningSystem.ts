@@ -785,7 +785,12 @@ export class LearningSystemService {
 
     // 获取推荐和下一步行动
     const smartRecommendations = await this.getSmartLearningRecommendations()
-    const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', {})
+    
+    // 获取当前激活的目标ID，如果有的话
+    const currentActiveGoal = activeGoals.length > 0 ? activeGoals[0] : null
+    const nextActionParams = currentActiveGoal ? { goalId: currentActiveGoal.id } : {}
+    
+    const nextActionResult = await agentToolExecutor.executeTool('suggest_next_action', nextActionParams)
 
     // 执行数据完整性检查
     const dataIntegrityIssues = this.checkDataIntegrity()

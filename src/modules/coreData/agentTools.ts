@@ -3478,13 +3478,95 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
   }
 
   private async suggestNextActionTool(params: any): Promise<any> {
+    // 添加调试日志以跟踪参数
+    log('[AgentTools] suggestNextActionTool called with params:', params)
+    
     const { goalId, context } = params
+    
+    // 如果没有提供goalId，提供通用建议
+    if (!goalId) {
+      log('[AgentTools] No goalId provided, generating general suggestions')
+      const goals = getLearningGoals()
+      const activeGoals = goals.filter(g => g.status === 'active')
+      const ability = getAbilityProfile()
+      
+      const suggestions: Array<{
+        type: string;
+        priority: string;
+        title: string;
+        description: string;
+        estimatedTime: string;
+      }> = []
+      
+      if (!ability) {
+        suggestions.push({
+          type: 'ability_assessment',
+          priority: 'high',
+          title: '完成能力评估',
+          description: '进行能力评估以获得个性化建议',
+          estimatedTime: '15分钟'
+        })
+      }
+      
+      if (goals.length === 0) {
+        suggestions.push({
+          type: 'create_goal',
+          priority: 'high',
+          title: '创建学习目标',
+          description: '设定明确的学习目标来开始学习之旅',
+          estimatedTime: '10分钟'
+        })
+      } else if (activeGoals.length === 0) {
+        suggestions.push({
+          type: 'activate_goal',
+          priority: 'medium',
+          title: '激活学习目标',
+          description: '选择一个目标并开始执行',
+          estimatedTime: '5分钟'
+        })
+      } else {
+        // 有活跃目标时，建议基于第一个活跃目标
+        const firstActiveGoal = activeGoals[0]
+        const paths = getLearningPaths().filter(p => p.goalId === firstActiveGoal.id)
+        
+        if (paths.length === 0) {
+          suggestions.push({
+            type: 'create_path',
+            priority: 'high',
+            title: '创建学习路径',
+            description: `为目标"${firstActiveGoal.title}"创建详细的学习路径`,
+            estimatedTime: '30分钟'
+          })
+        } else {
+          suggestions.push({
+            type: 'continue_learning',
+            priority: 'medium',
+            title: '继续学习',
+            description: `继续执行目标"${firstActiveGoal.title}"的学习路径`,
+            estimatedTime: '1小时'
+          })
+        }
+      }
+      
+      log('[AgentTools] Generated general suggestions:', suggestions.length)
+      return {
+        goalId: null,
+        suggestions,
+        context: context || {},
+        timestamp: new Date().toISOString()
+      }
+    }
+    
+    // 验证goalId是否有效
+    log('[AgentTools] Looking for goal with ID:', goalId)
     const goal = getLearningGoals().find(g => g.id === goalId)
     
     if (!goal) {
+      log('[AgentTools] Goal not found with ID:', goalId)
       throw new Error(`Goal with id ${goalId} not found`)
     }
     
+    log('[AgentTools] Found goal:', goal.title)
     const ability = getAbilityProfile()
     const paths = getLearningPaths().filter(p => p.goalId === goalId)
     
@@ -3527,6 +3609,7 @@ ${targetSkills.map(skill => `- ${skill}`).join('\n')}
       })
     }
     
+    log('[AgentTools] Generated goal-specific suggestions:', suggestions.length)
     return {
       goalId,
       suggestions,

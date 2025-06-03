@@ -147,37 +147,54 @@ export class PathPlanService {
       // 执行增强的技能差距分析
       const skillGapAnalysis = await this.analyzeSkillGap(goalId)
 
-      // 构建增强的路径生成提示词
-      const prompt = this.buildEnhancedPathGenerationPrompt(
-        context, 
-        skillGapAnalysis, 
-        config
-      )
-      
-      // 调用AI生成路径结构
-      const aiResponse = await getAIResponse(prompt)
-      const pathStructure = this.parsePathStructure(aiResponse)
+      // 第一步：使用Agent工具生成详细的节点信息
+      log('[PathPlan] Step 1: Generating detailed path nodes...')
+      const nodeGenerationResult = await agentToolExecutor.executeTool('generate_path_nodes', {
+        goalId,
+        userLevel: context.abilityProfile ? 
+          (context.abilityProfile.overallScore >= 70 ? 'intermediate' : 
+           context.abilityProfile.overallScore >= 40 ? 'beginner' : 'novice') : 'beginner',
+        preferences: {
+          learningStyle: config.learningStyle || 'balanced',
+          pace: config.timePreference || 'moderate',
+          includeProjects: config.includeProjects || true,
+          includeMilestones: config.includeMilestones || true,
+          difficultyProgression: config.difficultyProgression || 'linear'
+        }
+      })
 
-      // 应用个性化调整
-      const personalizedStructure = this.applyPersonalizationToPath(
-        pathStructure, 
-        context, 
+      // 验证节点生成结果
+      if (!nodeGenerationResult.nodes || nodeGenerationResult.nodes.length === 0) {
+        throw new Error('Failed to generate path nodes')
+      }
+
+      log('[PathPlan] Generated', nodeGenerationResult.nodes.length, 'detailed nodes')
+
+      // 第二步：对节点进行个性化增强
+      const enhancedNodes = this.enhanceNodesWithPersonalization(
+        nodeGenerationResult.nodes,
+        context,
         skillGapAnalysis
       )
 
-      // 使用Agent工具创建路径
+      // 第三步：生成依赖关系和里程碑
+      const dependencies = this.generateNodeDependencies(enhancedNodes)
+      const milestones = this.generateMilestones(enhancedNodes, config)
+
+      // 第四步：创建完整的学习路径
       const path = await agentToolExecutor.executeTool('create_learning_path', {
         goalId,
-        title: personalizedStructure.title || `${context.currentGoal.title} - 个性化学习路径`,
-        description: personalizedStructure.description || this.generatePersonalizedDescription(context, skillGapAnalysis),
-        nodes: personalizedStructure.nodes || [],
-        dependencies: personalizedStructure.dependencies || [],
-        milestones: personalizedStructure.milestones || [],
+        title: this.generatePersonalizedPathTitle(context, skillGapAnalysis),
+        description: this.generatePersonalizedDescription(context, skillGapAnalysis),
+        nodes: enhancedNodes,
+        dependencies,
+        milestones,
         metadata: {
           generatedWithContext: true,
           abilityScore: context.abilityProfile?.overallScore,
           confidence: skillGapAnalysis.confidence,
-          personalizationLevel: skillGapAnalysis.personalizationLevel
+          personalizationLevel: skillGapAnalysis.personalizationLevel,
+          nodeGenerationMethod: 'enhanced_ai_with_personalization'
         }
       })
 
@@ -195,11 +212,17 @@ export class PathPlanService {
           contextUsed: {
             hasAbilityData: context.hasAbilityData,
             hasLearningHistory: context.learningHistory.activeGoals > 0
+          },
+          enhancedFeatures: {
+            detailedNodes: true,
+            personalizedContent: true,
+            smartDependencies: true,
+            adaptiveMilestones: true
           }
         }
       })
 
-      log('[PathPlan] Enhanced learning path generated:', path.title)
+      log('[PathPlan] Enhanced learning path generated with detailed nodes:', path.title)
       return path
 
     } catch (error) {
@@ -1057,5 +1080,238 @@ ${ability ? `
 3. 理论与实践结合
 4. 包含阶段性项目
 5. 设置合适的里程碑`
+  }
+
+  /**
+   * 对节点进行个性化增强
+   */
+  private enhanceNodesWithPersonalization(
+    nodes: any[],
+    context: LearningContext,
+    skillGap: SkillGapAnalysis
+  ): any[] {
+    return nodes.map((node, index) => ({
+      ...node,
+      // 确保节点有必要的状态和进度字段
+      id: node.id || `node_${Date.now()}_${index}`,
+      status: 'not_started' as const,
+      progress: 0,
+      courseUnitIds: [],
+      // 添加个性化提示
+      personalizedHints: this.generatePersonalizedHints(node, context),
+      // 根据用户能力调整难度
+      difficulty: this.adjustNodeDifficulty(node, context.abilityProfile),
+      // 根据用户水平调整预估时间
+      estimatedHours: this.adjustEstimatedTime(node, context.abilityProfile),
+      // 添加个性化标签
+      tags: this.generatePersonalizedTags(node, skillGap),
+      // 增强描述
+      description: this.enhanceNodeDescription(node, context, skillGap)
+    }))
+  }
+
+  /**
+   * 生成节点依赖关系
+   */
+  private generateNodeDependencies(nodes: any[]): { from: string; to: string }[] {
+    const dependencies: { from: string; to: string }[] = []
+    
+    // 基于节点顺序生成基础依赖关系
+    for (let i = 1; i < nodes.length; i++) {
+      dependencies.push({
+        from: nodes[i - 1].id,
+        to: nodes[i].id
+      })
+    }
+    
+    // 根据前置条件生成额外依赖关系
+    nodes.forEach(node => {
+      if (node.prerequisites && Array.isArray(node.prerequisites)) {
+        node.prerequisites.forEach((prereq: string) => {
+          const prereqNode = nodes.find(n => 
+            n.title.toLowerCase().includes(prereq.toLowerCase()) ||
+            n.skills?.some((skill: string) => skill.toLowerCase().includes(prereq.toLowerCase()))
+          )
+          if (prereqNode && prereqNode.id !== node.id) {
+            dependencies.push({
+              from: prereqNode.id,
+              to: node.id
+            })
+          }
+        })
+      }
+    })
+    
+    return dependencies
+  }
+
+  /**
+   * 生成学习里程碑
+   */
+  private generateMilestones(nodes: any[], config: PathGenerationConfig): any[] {
+    if (!config.includeMilestones) return []
+    
+    const milestones: any[] = []
+    const nodeCount = nodes.length
+    
+    // 基础里程碑：基础阶段完成
+    const foundationNodesCount = Math.ceil(nodeCount * 0.3)
+    if (foundationNodesCount > 0) {
+      milestones.push({
+        id: `milestone_foundation_${Date.now()}`,
+        title: '基础阶段完成',
+        nodeIds: nodes.slice(0, foundationNodesCount).map(n => n.id),
+        reward: '🎯 基础技能掌握徽章'
+      })
+    }
+    
+    // 进阶里程碑：核心技能掌握
+    const coreNodesCount = Math.ceil(nodeCount * 0.7)
+    if (coreNodesCount > foundationNodesCount) {
+      milestones.push({
+        id: `milestone_core_${Date.now()}`,
+        title: '核心技能掌握',
+        nodeIds: nodes.slice(0, coreNodesCount).map(n => n.id),
+        reward: '🏆 核心技能掌握徽章'
+      })
+    }
+    
+    // 完成里程碑：全部学习完成
+    milestones.push({
+      id: `milestone_completion_${Date.now()}`,
+      title: '学习路径完成',
+      nodeIds: nodes.map(n => n.id),
+      reward: '🎉 学习路径完成徽章'
+    })
+    
+    return milestones
+  }
+
+  /**
+   * 生成个性化路径标题
+   */
+  private generatePersonalizedPathTitle(context: LearningContext, skillGap: SkillGapAnalysis): string {
+    const goal = context.currentGoal
+    const abilityLevel = context.abilityProfile?.overallLevel || '初学者'
+    
+    if (context.abilityProfile) {
+      return `${goal?.title} - ${abilityLevel}定制化学习路径`
+    } else {
+      return `${goal?.title} - 个性化学习路径`
+    }
+  }
+
+  /**
+   * 调整节点难度
+   */
+  private adjustNodeDifficulty(node: any, abilityProfile: any): number {
+    const baseDifficulty = node.difficulty || 5
+    
+    if (!abilityProfile) return baseDifficulty
+    
+    // 根据用户整体能力调整难度
+    const overallScore = abilityProfile.overallScore || 50
+    let adjustmentFactor = 1
+    
+    if (overallScore >= 80) {
+      adjustmentFactor = 1.2 // 高水平用户，提高难度
+    } else if (overallScore >= 60) {
+      adjustmentFactor = 1.0 // 中等水平用户，保持原难度
+    } else {
+      adjustmentFactor = 0.8 // 初级用户，降低难度
+    }
+    
+    return Math.max(1, Math.min(10, Math.round(baseDifficulty * adjustmentFactor)))
+  }
+
+  /**
+   * 调整预估时间
+   */
+  private adjustEstimatedTime(node: any, abilityProfile: any): number {
+    const baseTime = node.estimatedHours || 20
+    
+    if (!abilityProfile) return baseTime
+    
+    // 根据用户学习效率调整时间
+    const overallScore = abilityProfile.overallScore || 50
+    let timeMultiplier = 1
+    
+    if (overallScore >= 80) {
+      timeMultiplier = 0.8 // 高水平用户学习更快
+    } else if (overallScore >= 60) {
+      timeMultiplier = 1.0 // 中等水平用户标准时间
+    } else {
+      timeMultiplier = 1.3 // 初级用户需要更多时间
+    }
+    
+    return Math.round(baseTime * timeMultiplier)
+  }
+
+  /**
+   * 生成个性化标签
+   */
+  private generatePersonalizedTags(node: any, skillGap: SkillGapAnalysis): string[] {
+    const tags: string[] = []
+    
+    // 基于技能差距添加标签
+    if (skillGap.skillGaps) {
+      skillGap.skillGaps.forEach((gap: any) => {
+        if (node.skills?.some((skill: string) => skill.toLowerCase().includes(gap.skill.toLowerCase()))) {
+          if (gap.priority === 'high') {
+            tags.push('重点提升')
+          } else if (gap.priority === 'medium') {
+            tags.push('需要关注')
+          }
+        }
+      })
+    }
+    
+    // 基于节点类型添加标签
+    if (node.type === 'project') {
+      tags.push('实战项目')
+    } else if (node.type === 'theory') {
+      tags.push('理论学习')
+    } else if (node.type === 'practice') {
+      tags.push('动手实践')
+    }
+    
+    return tags
+  }
+
+  /**
+   * 增强节点描述
+   */
+  private enhanceNodeDescription(node: any, context: LearningContext, skillGap: SkillGapAnalysis): string {
+    let enhancedDescription = node.description || ''
+    
+    // 根据用户能力水平添加个性化提示
+    if (context.abilityProfile) {
+      const userLevel = context.abilityProfile.overallLevel || '初学者'
+      enhancedDescription += `\n\n💡 针对${userLevel}水平的学习建议：`
+      
+      if (userLevel === '初学者') {
+        enhancedDescription += '建议仔细阅读基础概念，多做练习巩固理解。'
+      } else if (userLevel === '中级') {
+        enhancedDescription += '可以重点关注实际应用和最佳实践。'
+      } else if (userLevel === '高级') {
+        enhancedDescription += '建议深入了解原理和高级用法，探索创新应用。'
+      }
+    }
+    
+    // 添加相关的技能差距提示
+    if (skillGap.skillGaps) {
+      const relatedGaps = skillGap.skillGaps.filter((gap: any) =>
+        node.skills?.some((skill: string) => skill.toLowerCase().includes(gap.skill.toLowerCase()))
+      )
+      
+      if (relatedGaps.length > 0) {
+        enhancedDescription += '\n\n🎯 本节点将帮助提升：'
+        relatedGaps.forEach((gap: any) => {
+          enhancedDescription += `\n• ${gap.skill} (当前水平: ${gap.currentLevel}, 目标水平: ${gap.targetLevel})`
+        })
+      }
+    }
+    
+    return enhancedDescription
   }
 } 

@@ -19,6 +19,18 @@ import {
 import { LearningGoal } from '../modules/coreData/types'
 import { log } from '../utils/logger'
 import { DeleteConfirmDialog, useToast } from './common'
+import { 
+  GoalSettingService 
+} from '../modules/goalSetting/service'
+import { 
+  NaturalLanguageInput, 
+  ParsedGoalData, 
+  AIGoalParseResult,
+  GoalCreationMode 
+} from '../modules/goalSetting/types'
+
+// 实例化目标设定服务
+const goalSettingService = new GoalSettingService()
 
 interface GoalFormData {
   title: string
@@ -57,6 +69,13 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
     outcomes: []
   })
   const [messageType, setMessageType] = useState<'success' | 'error'>('success')
+  
+  // 添加自然语言模式相关状态
+  const [creationMode, setCreationMode] = useState<GoalCreationMode>('form')
+  const [naturalLanguageInput, setNaturalLanguageInput] = useState('')
+  const [parseResult, setParseResult] = useState<AIGoalParseResult | null>(null)
+  const [selectedGoals, setSelectedGoals] = useState<Set<number>>(new Set())
+  const [isParsingNL, setIsParsingNL] = useState(false)
   
   // 删除确认对话框状态
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -137,10 +156,10 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
         estimatedTimeWeeks: formData.estimatedTimeWeeks,
         requiredSkills: formData.requiredSkills,
         outcomes: formData.outcomes,
-        status: 'active'
+        status: 'paused' // 默认为暂停状态，让用户选择激活
       })
       
-      showSuccess(`目标创建成功: ${newGoal.title}`, '创建成功')
+      showSuccess(`目标创建成功: ${newGoal.title}，已设为暂停状态，可在下方列表中激活`, '创建成功')
       setShowForm(false)
       resetForm()
       await refreshData()
@@ -149,6 +168,101 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
     } finally {
       setLoading(false)
     }
+  }
+
+  // 处理自然语言解析
+  const handleNaturalLanguageParse = async () => {
+    if (!naturalLanguageInput.trim()) {
+      showError('请输入目标描述')
+      return
+    }
+
+    setIsParsingNL(true)
+    try {
+      const input: NaturalLanguageInput = {
+        description: naturalLanguageInput.trim()
+      }
+      
+      const result = await goalSettingService.parseNaturalLanguageGoal(input)
+      setParseResult(result)
+      
+      if (result.success && result.goals.length > 0) {
+        // 默认选中所有解析出的目标
+        setSelectedGoals(new Set(result.goals.map((_, index) => index)))
+        showSuccess(`AI 成功解析出 ${result.goals.length} 个学习目标`, 'AI 解析成功')
+      } else {
+        showError('AI 解析失败，请尝试更具体地描述你的目标', 'AI 解析失败')
+      }
+    } catch (error) {
+      console.error('Natural language parsing failed:', error)
+      setParseResult({
+        success: false,
+        goals: [],
+        originalInput: naturalLanguageInput,
+        parseErrors: ['解析失败，请稍后重试'],
+        suggestions: ['请尝试更具体地描述你的学习目标']
+      })
+      showError('AI 解析失败，请稍后重试', 'AI 解析失败')
+    } finally {
+      setIsParsingNL(false)
+    }
+  }
+
+  // 创建选中的AI生成目标
+  const handleCreateSelectedGoals = async () => {
+    if (!parseResult || !parseResult.success) return
+
+    setLoading(true)
+    try {
+      const selectedGoalsList = Array.from(selectedGoals).map(index => parseResult.goals[index])
+      let successCount = 0
+      
+      for (const goal of selectedGoalsList) {
+        try {
+          await goalSettingService.createGoalFromParsedData(goal)
+          successCount++
+        } catch (error) {
+          console.error('Failed to create goal:', goal.title, error)
+        }
+      }
+      
+      if (successCount > 0) {
+        showSuccess(`成功创建 ${successCount} 个目标，目标已设为暂停状态，可在下方列表中激活`, '创建成功')
+        // 重置状态
+        setParseResult(null)
+        setNaturalLanguageInput('')
+        setSelectedGoals(new Set())
+        setCreationMode('form')
+        setShowForm(false)
+        await refreshData()
+      } else {
+        showError('没有目标创建成功', '创建失败')
+      }
+    } catch (error) {
+      console.error('Goal creation failed:', error)
+      showError('目标创建失败，请稍后重试', '创建失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 切换目标选择状态
+  const toggleGoalSelection = (index: number) => {
+    const newSelected = new Set(selectedGoals)
+    if (newSelected.has(index)) {
+      newSelected.delete(index)
+    } else {
+      newSelected.add(index)
+    }
+    setSelectedGoals(newSelected)
+  }
+
+  // 重置自然语言状态
+  const resetNaturalLanguageState = () => {
+    setNaturalLanguageInput('')
+    setParseResult(null)
+    setSelectedGoals(new Set())
+    setIsParsingNL(false)
   }
 
   // 更新目标
@@ -199,27 +313,21 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
 
   // 高级激活目标
   const handleActivateGoal = async (goalId: string) => {
-    setLoading(true)
-    try {
-      const result = await goalActivationManager.activateGoal(goalId, {
-        reason: 'user_manual_activation'
-      })
-      showActivationResult(result)
+    const result = await goalActivationManager.activateGoal(goalId)
+    showActivationResult(result)
+    if (result.success) {
       await refreshData()
-    } catch (error) {
-      showError(`激活失败: ${error instanceof Error ? error.message : '未知错误'}`)
-    } finally {
-      setLoading(false)
     }
   }
 
-  // 高级暂停目标
   const handlePauseGoal = async (goalId: string) => {
     setLoading(true)
     try {
-      const result = await goalActivationManager.pauseGoal(goalId, 'user_manual_pause')
+      const result = await goalActivationManager.pauseGoal(goalId)
       showActivationResult(result)
-      await refreshData()
+      if (result.success) {
+        await refreshData()
+      }
     } catch (error) {
       showError(`暂停失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -227,29 +335,27 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
     }
   }
 
-  // 高级完成目标
   const handleCompleteGoal = async (goalId: string) => {
-    const achievements = prompt('请输入完成成果（可选，用逗号分隔）:')
-    const achievementList = achievements ? achievements.split(',').map(a => a.trim()).filter(Boolean) : []
-    
     setLoading(true)
     try {
-      const result = await goalActivationManager.completeGoal(goalId, achievementList)
-      showActivationResult(result)
-      await refreshData()
+      const updated = await updateLearningGoal(goalId, { 
+        status: 'completed' 
+      })
+      if (updated) {
+        showSuccess('目标标记为已完成')
+        await refreshData()
+      }
     } catch (error) {
-      showError(`完成操作失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      showError(`完成失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setLoading(false)
     }
   }
 
-  // 取消目标
   const handleCancelGoal = (goalId: string) => {
-    handleUpdateGoal(goalId, { status: 'cancelled' })
+    handleDeleteGoal(goalId, '目标')
   }
 
-  // 重置表单
   const resetForm = () => {
     setFormData({
       title: '',
@@ -263,6 +369,9 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
     })
     setIsEditing(false)
     setSelectedGoal(null)
+    // 重置自然语言相关状态
+    resetNaturalLanguageState()
+    setCreationMode('form')
   }
 
   // 编辑目标
@@ -660,179 +769,420 @@ export const GoalSetting: React.FC<GoalSettingProps> = ({ selectedGoalTitle, onG
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 基本信息 */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">目标标题 *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="输入学习目标标题"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">目标描述</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="详细描述这个学习目标"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">类别</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as LearningGoal['category'] }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          {/* 模式切换 - 仅在新建目标时显示 */}
+          {!isEditing && (
+            <div className="mb-6">
+              <div className="flex justify-center">
+                <div className="bg-gray-100 p-1 rounded-lg flex">
+                  <button
+                    onClick={() => {
+                      setCreationMode('natural_language')
+                      resetNaturalLanguageState()
+                    }}
+                    className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
+                      creationMode === 'natural_language'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
                   >
-                    <option value="frontend">前端开发</option>
-                    <option value="backend">后端开发</option>
-                    <option value="fullstack">全栈开发</option>
-                    <option value="automation">自动化测试</option>
-                    <option value="ai">人工智能</option>
-                    <option value="mobile">移动开发</option>
-                    <option value="game">游戏开发</option>
-                    <option value="data">数据科学</option>
-                    <option value="custom">自定义</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">目标级别</label>
-                  <select
-                    value={formData.targetLevel}
-                    onChange={(e) => setFormData(prev => ({ ...prev, targetLevel: e.target.value as LearningGoal['targetLevel'] }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    🤖 智能自然语言模式
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreationMode('form')
+                      resetNaturalLanguageState()
+                    }}
+                    className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
+                      creationMode === 'form'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
                   >
-                    <option value="beginner">初级</option>
-                    <option value="intermediate">中级</option>
-                    <option value="advanced">高级</option>
-                    <option value="expert">专家</option>
-                  </select>
+                    📋 传统表单模式
+                  </button>
                 </div>
               </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">优先级</label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value={1}>1 - 最低</option>
-                    <option value={2}>2 - 较低</option>
-                    <option value={3}>3 - 普通</option>
-                    <option value={4}>4 - 较高</option>
-                    <option value={5}>5 - 最高</option>
-                  </select>
-                </div>
+          {/* 自然语言模式 */}
+          {!isEditing && creationMode === 'natural_language' && (
+            <div className="space-y-6">
+              <div className="text-center bg-blue-50 rounded-lg p-4">
+                <h4 className="text-lg font-semibold text-blue-900 mb-2">
+                  🎯 描述你想要达成的目标
+                </h4>
+                <p className="text-blue-700 text-sm">
+                  用自然语言描述你的工作需求或想要学习的技能，AI 会帮你生成具体的学习计划
+                </p>
+              </div>
 
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">预计时间（周）</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="52"
-                    value={formData.estimatedTimeWeeks}
-                    onChange={(e) => setFormData(prev => ({ ...prev, estimatedTimeWeeks: parseInt(e.target.value) || 8 }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    描述你的目标或需求
+                  </label>
+                  <textarea
+                    value={naturalLanguageInput}
+                    onChange={(e) => setNaturalLanguageInput(e.target.value)}
+                    placeholder="例如：我想学会用Python自动化处理工作表格，每周需要整理大量的销售数据..."
+                    className="w-full h-32 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    disabled={isParsingNL || loading}
                   />
                 </div>
-              </div>
-            </div>
 
-            {/* 技能和结果 */}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  需要的技能
+                <div className="flex justify-center">
                   <button
-                    type="button"
-                    onClick={addSkill}
-                    className="ml-2 text-blue-600 hover:text-blue-800 text-sm"
+                    onClick={handleNaturalLanguageParse}
+                    disabled={isParsingNL || loading || !naturalLanguageInput.trim()}
+                    className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
-                    + 添加
+                    {isParsingNL ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                        正在解析...
+                      </>
+                    ) : (
+                      <>🧠 AI 解析目标</>
+                    )}
                   </button>
-                </label>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {formData.requiredSkills.map((skill, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                      <span className="text-sm">{skill}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeSkill(skill)}
-                        className="text-red-600 hover:text-red-800 text-sm"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                  {formData.requiredSkills.length === 0 && (
-                    <div className="text-gray-500 text-sm italic p-2">暂无技能要求</div>
-                  )}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  预期学习成果
-                  <button
-                    type="button"
-                    onClick={addOutcome}
-                    className="ml-2 text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    + 添加
-                  </button>
-                </label>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {formData.outcomes.map((outcome, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
-                      <span className="text-sm">{outcome}</span>
+              {/* AI 解析结果 */}
+              {parseResult && (
+                <div className="border-t pt-6">
+                  {parseResult.success && parseResult.goals.length > 0 ? (
+                    <div className="space-y-6">
+                      <div className="text-center">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                          🎯 AI 为你生成了以下学习目标
+                        </h4>
+                        <p className="text-gray-600 text-sm">
+                          请选择你想要创建的目标
+                        </p>
+                      </div>
+
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {parseResult.goals.map((goal, index) => (
+                          <div
+                            key={index}
+                            className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                              selectedGoals.has(index)
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            onClick={() => toggleGoalSelection(index)}
+                          >
+                            <div className="flex items-start space-x-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedGoals.has(index)}
+                                onChange={() => toggleGoalSelection(index)}
+                                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <h5 className="font-medium text-gray-900 mb-1">
+                                  {goal.title}
+                                </h5>
+                                <p className="text-gray-600 text-sm mb-3">
+                                  {goal.description}
+                                </p>
+                                
+                                <div className="flex flex-wrap gap-4 text-xs text-gray-500 mb-3">
+                                  <span className="flex items-center">
+                                    📊 难度: {goal.difficulty}
+                                  </span>
+                                  <span className="flex items-center">
+                                    ⏱️ 预计: {goal.estimatedTimeWeeks} 周
+                                  </span>
+                                  <span className="flex items-center">
+                                    🏷️ 分类: {goal.category}
+                                  </span>
+                                  <span className="flex items-center">
+                                    🎯 置信度: {Math.round(goal.confidence * 100)}%
+                                  </span>
+                                </div>
+
+                                {goal.requiredSkills.length > 0 && (
+                                  <div className="mb-3">
+                                    <span className="text-xs font-medium text-gray-500">需要技能: </span>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {goal.requiredSkills.slice(0, 5).map((skill, skillIndex) => (
+                                        <span
+                                          key={skillIndex}
+                                          className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                                        >
+                                          {skill}
+                                        </span>
+                                      ))}
+                                      {goal.requiredSkills.length > 5 && (
+                                        <span className="text-xs text-gray-500">+{goal.requiredSkills.length - 5}...</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="p-2 bg-gray-50 rounded text-xs text-gray-600">
+                                  <strong>AI 推荐理由:</strong> {goal.reasoning}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {parseResult.suggestions && parseResult.suggestions.length > 0 && (
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <h5 className="font-medium text-blue-900 mb-2">💡 额外建议</h5>
+                          <ul className="space-y-1 text-sm text-blue-800">
+                            {parseResult.suggestions.map((suggestion, index) => (
+                              <li key={index} className="flex items-start">
+                                <span className="mr-2">•</span>
+                                <span>{suggestion}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="flex justify-center space-x-4">
+                        <button
+                          onClick={() => {
+                            setParseResult(null)
+                            setSelectedGoals(new Set())
+                          }}
+                          className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          重新解析
+                        </button>
+                        <button
+                          onClick={handleCreateSelectedGoals}
+                          disabled={selectedGoals.size === 0 || loading}
+                          className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {loading ? '创建中...' : `创建选中的目标 (${selectedGoals.size})`}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-4">
+                      <div className="text-red-600">
+                        <h4 className="font-medium mb-2">❌ 解析失败</h4>
+                        {parseResult.parseErrors && parseResult.parseErrors.length > 0 && (
+                          <div className="text-sm space-y-1">
+                            {parseResult.parseErrors.map((error, index) => (
+                              <p key={index}>{error}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {parseResult.suggestions && parseResult.suggestions.length > 0 && (
+                        <div className="bg-yellow-50 rounded-lg p-4">
+                          <h5 className="font-medium text-yellow-900 mb-2">💡 建议</h5>
+                          <ul className="space-y-1 text-sm text-yellow-800 text-left">
+                            {parseResult.suggestions.map((suggestion, index) => (
+                              <li key={index} className="flex items-start">
+                                <span className="mr-2">•</span>
+                                <span>{suggestion}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                       <button
-                        type="button"
-                        onClick={() => removeOutcome(outcome)}
-                        className="text-red-600 hover:text-red-800 text-sm"
+                        onClick={() => setParseResult(null)}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                       >
-                        ✕
+                        重新尝试
                       </button>
                     </div>
-                  ))}
-                  {formData.outcomes.length === 0 && (
-                    <div className="text-gray-500 text-sm italic p-2">暂无预期成果</div>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* 传统表单模式 */}
+          {(isEditing || creationMode === 'form') && (
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 基本信息 */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">目标标题 *</label>
+                    <input
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="输入学习目标标题"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">目标描述</label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="详细描述这个学习目标"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">类别</label>
+                      <select
+                        value={formData.category}
+                        onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as LearningGoal['category'] }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="frontend">前端开发</option>
+                        <option value="backend">后端开发</option>
+                        <option value="fullstack">全栈开发</option>
+                        <option value="automation">自动化测试</option>
+                        <option value="ai">人工智能</option>
+                        <option value="mobile">移动开发</option>
+                        <option value="game">游戏开发</option>
+                        <option value="data">数据科学</option>
+                        <option value="custom">自定义</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">目标级别</label>
+                      <select
+                        value={formData.targetLevel}
+                        onChange={(e) => setFormData(prev => ({ ...prev, targetLevel: e.target.value as LearningGoal['targetLevel'] }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="beginner">初级</option>
+                        <option value="intermediate">中级</option>
+                        <option value="advanced">高级</option>
+                        <option value="expert">专家</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">优先级</label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) => setFormData(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value={1}>1 - 最低</option>
+                        <option value={2}>2 - 较低</option>
+                        <option value={3}>3 - 普通</option>
+                        <option value={4}>4 - 较高</option>
+                        <option value={5}>5 - 最高</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">预计时间（周）</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="52"
+                        value={formData.estimatedTimeWeeks}
+                        onChange={(e) => setFormData(prev => ({ ...prev, estimatedTimeWeeks: parseInt(e.target.value) || 8 }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 技能和结果 */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      需要的技能
+                      <button
+                        type="button"
+                        onClick={addSkill}
+                        className="ml-2 text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        + 添加
+                      </button>
+                    </label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {formData.requiredSkills.map((skill, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                          <span className="text-sm">{skill}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeSkill(skill)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {formData.requiredSkills.length === 0 && (
+                        <div className="text-gray-500 text-sm italic p-2">暂无技能要求</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      预期学习成果
+                      <button
+                        type="button"
+                        onClick={addOutcome}
+                        className="ml-2 text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        + 添加
+                      </button>
+                    </label>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {formData.outcomes.map((outcome, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded">
+                          <span className="text-sm">{outcome}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeOutcome(outcome)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {formData.outcomes.length === 0 && (
+                        <div className="text-gray-500 text-sm italic p-2">暂无预期成果</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 表单按钮 */}
+              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowForm(false)
+                    resetForm()
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={isEditing ? handleSaveEdit : handleCreateGoal}
+                  disabled={loading || !formData.title.trim()}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isEditing ? '保存修改' : '创建目标'}
+                </button>
               </div>
             </div>
-          </div>
-
-          {/* 表单按钮 */}
-          <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
-            <button
-              onClick={() => {
-                setShowForm(false)
-                resetForm()
-              }}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              取消
-            </button>
-            <button
-              onClick={isEditing ? handleSaveEdit : handleCreateGoal}
-              disabled={loading || !formData.title.trim()}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isEditing ? '保存修改' : '创建目标'}
-            </button>
-          </div>
+          )}
         </div>
       )}
 

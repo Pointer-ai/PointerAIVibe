@@ -4,9 +4,22 @@ import {
   getLearningGoals,
   addCoreEvent
 } from '../coreData'
-import { getAIResponse } from '../../components/AIAssistant/service'
-import { log } from '../../utils/logger'
-import { GoalCategory, GoalQuestionnaire, GoalRecommendation } from './types'
+import { LearningGoal } from '../coreData/types'
+import { callAI } from '../../utils/ai'
+import { log, error } from '../../utils/logger'
+import { 
+  GoalCategory, 
+  GoalQuestionnaire, 
+  GoalRecommendation,
+  NaturalLanguageInput,
+  ParsedGoalData,
+  AIGoalParseResult
+} from './types'
+import { 
+  generateNaturalLanguageGoalPrompt,
+  cleanupGoalJSONString,
+  validateAndFixGoalParseResult
+} from './prompt'
 
 /**
  * 预设的目标类别
@@ -154,6 +167,191 @@ export class GoalSettingService {
   }
 
   /**
+   * 基于自然语言解析生成学习目标
+   */
+  async parseNaturalLanguageGoal(input: NaturalLanguageInput): Promise<AIGoalParseResult> {
+    log('[GoalSetting] Starting natural language goal parsing')
+    
+    try {
+      // 获取用户能力概况作为上下文
+      const userProfile = getAbilityProfile()
+      
+      // 生成AI提示词
+      const prompt = generateNaturalLanguageGoalPrompt(input.description, userProfile)
+      
+      // 调用AI服务
+      const aiResponse = await callAI(prompt)
+      
+      log('[GoalSetting] AI response received, parsing...')
+      
+      // 解析AI响应
+      const parseResult = this.parseAIGoalResponse(aiResponse, input.description)
+      
+      // 记录解析事件
+      addCoreEvent({
+        type: 'natural_language_goal_parsed',
+        details: {
+          originalInput: input.description,
+          parseSuccess: parseResult.success,
+          goalCount: parseResult.goals.length,
+          confidence: parseResult.goals.reduce((sum, goal) => sum + goal.confidence, 0) / parseResult.goals.length
+        }
+      })
+      
+      log('[GoalSetting] Natural language parsing completed successfully')
+      return parseResult
+      
+    } catch (err) {
+      error('[GoalSetting] Failed to parse natural language goal:', err)
+      
+      // 返回失败结果，包含基本的错误处理
+      return {
+        success: false,
+        goals: [],
+        originalInput: input.description,
+        parseErrors: [err instanceof Error ? err.message : '解析失败'],
+        suggestions: [
+          '请尝试更具体地描述你的学习目标',
+          '可以包含想要学习的技术或想要达成的具体效果',
+          '例如："我想学会用Python自动化处理Excel表格"'
+        ]
+      }
+    }
+  }
+
+  /**
+   * 将解析出的目标转换为学习目标
+   */
+  async createGoalFromParsedData(parsedGoal: ParsedGoalData): Promise<void> {
+    try {
+      // 构建学习目标对象 - 默认为paused状态，让用户选择激活
+      const learningGoal: Omit<LearningGoal, 'id' | 'createdAt' | 'updatedAt'> = {
+        title: parsedGoal.title,
+        description: parsedGoal.description,
+        category: parsedGoal.category as any,
+        priority: parsedGoal.priority,
+        targetLevel: this.mapDifficultyToLevel(parsedGoal.difficulty) as any,
+        estimatedTimeWeeks: parsedGoal.estimatedTimeWeeks,
+        requiredSkills: parsedGoal.requiredSkills,
+        outcomes: parsedGoal.outcomes,
+        status: 'paused' // 默认为暂停状态，避免激活限制
+      }
+
+      // 创建学习目标
+      await createLearningGoal(learningGoal)
+      
+      // 记录创建事件，包含AI生成的元数据
+      addCoreEvent({
+        type: 'goal_created_from_natural_language',
+        details: {
+          goalTitle: parsedGoal.title,
+          category: parsedGoal.category,
+          estimatedWeeks: parsedGoal.estimatedTimeWeeks,
+          pathNodeCount: parsedGoal.learningPath.length,
+          aiMetadata: {
+            source: 'natural_language',
+            aiGenerated: true,
+            confidence: parsedGoal.confidence,
+            reasoning: parsedGoal.reasoning,
+            learningPath: parsedGoal.learningPath
+          }
+        }
+      })
+      
+      log('[GoalSetting] Goal created from parsed data:', parsedGoal.title)
+      
+    } catch (err) {
+      error('[GoalSetting] Failed to create goal from parsed data:', err)
+      throw err
+    }
+  }
+
+  /**
+   * 私有方法：解析AI目标响应
+   */
+  private parseAIGoalResponse(aiResponse: string, originalInput: string): AIGoalParseResult {
+    log('[parseAIGoalResponse] Starting goal response parsing')
+    
+    try {
+      // 使用与评测系统相同的强健解析逻辑
+      const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/)
+      let rawJson = ''
+      
+      if (!jsonMatch) {
+        log('[parseAIGoalResponse] Standard JSON format not found, trying alternative formats')
+        
+        // 尝试其他格式的 JSON 提取
+        const altJsonMatch = aiResponse.match(/```json([\s\S]*?)```/) || 
+                            aiResponse.match(/```\s*\{[\s\S]*?\}\s*```/) ||
+                            aiResponse.match(/\{[\s\S]*\}/)
+        
+        if (altJsonMatch) {
+          log('[parseAIGoalResponse] Found JSON in alternative format')
+          rawJson = altJsonMatch[1] || altJsonMatch[0]
+        } else {
+          error('[parseAIGoalResponse] No valid JSON format found in AI response')
+          throw new Error('AI响应格式错误 - 未找到有效的JSON格式')
+        }
+      } else {
+        log('[parseAIGoalResponse] Using standard JSON format')
+        rawJson = jsonMatch[1]
+      }
+      
+      // 清理JSON
+      const cleanJson = cleanupGoalJSONString(rawJson.trim())
+      
+      // 解析JSON
+      const result = JSON.parse(cleanJson)
+      log('[parseAIGoalResponse] JSON parsing successful')
+      
+      // 验证和修复数据结构
+      const validatedResult = validateAndFixGoalParseResult(result)
+      
+      // 确保originalInput字段正确
+      validatedResult.originalInput = originalInput
+      
+      log('[parseAIGoalResponse] Goal response validation successful')
+      
+      return validatedResult
+      
+    } catch (err) {
+      error('[parseAIGoalResponse] Failed to parse AI goal response:', err)
+      
+      // 提供更详细的错误信息和兜底策略
+      if (err instanceof SyntaxError) {
+        log('[parseAIGoalResponse] JSON syntax error. Providing fallback structure...')
+        
+        // 尝试提供一个最小的可用结构
+        return {
+          success: false,
+          goals: [],
+          originalInput,
+          parseErrors: ['JSON格式错误: ' + err.message],
+          suggestions: [
+            '请尝试重新描述你的目标，使用更简单明确的语言',
+            '可以分步骤描述，比如：第一步学什么，第二步做什么',
+            '参考示例：我想学会Python编程，用来自动化处理工作中的数据'
+          ]
+        }
+      }
+      
+      throw new Error('解析AI目标响应失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    }
+  }
+
+  /**
+   * 私有方法：映射难度等级
+   */
+  private mapDifficultyToLevel(difficulty: string): string {
+    const mapping: Record<string, string> = {
+      'beginner': 'beginner',
+      'intermediate': 'intermediate', 
+      'advanced': 'advanced'
+    }
+    return mapping[difficulty] || 'intermediate'
+  }
+
+  /**
    * 基于用户输入生成目标推荐
    */
   async generateGoalRecommendations(
@@ -173,7 +371,7 @@ export class GoalSettingService {
       )
 
       // 调用AI生成推荐
-      const response = await getAIResponse(prompt)
+      const response = await callAI(prompt)
       
       // 解析AI响应
       const recommendations = this.parseRecommendations(response)
@@ -213,7 +411,7 @@ export class GoalSettingService {
         estimatedTimeWeeks: recommendation.estimatedTimeWeeks,
         requiredSkills: recommendation.requiredSkills,
         outcomes: recommendation.outcomes,
-        status: 'active'
+        status: 'paused' // 默认为暂停状态，让用户选择激活
       })
 
       log('[GoalSetting] Goal created:', goal.title)

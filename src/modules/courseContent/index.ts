@@ -1,3 +1,7 @@
 export * from './types'
 export * from './service'
-export { default as CourseContentView } from './view' 
+export { default as CourseContentView } from './view'
+export { CourseContentPage } from './CourseContentPage'
+export { CourseContentGenerator } from './CourseContentGenerator'
+export { CourseContentViewer } from './CourseContentViewer'
+export { CourseContentService } from './service' 

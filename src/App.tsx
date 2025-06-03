@@ -7,7 +7,7 @@ import { AbilityAssessView } from './modules/abilityAssess'
 import { ProfileSettingsView } from './modules/profileSettings'
 import { CodeRunnerView } from './modules/codeRunner'
 import { PathPlanView } from './modules/pathPlan'
-import { CourseContentView } from './modules/courseContent'
+import { CourseContentPage } from './modules/courseContent'
 import { GlobalAIAssistant } from './components/AIAssistant'
 import AgentDemo from './demo/AgentDemo'
 import DataInspector from './components/DataInspector'
@@ -203,17 +203,7 @@ const App = () => {
             )
           
           case 'course-content':
-            return (
-              <Layout 
-                title="课程内容" 
-                onBack={handleBackToDashboard} 
-                onHome={handleGoHome}
-                onLogout={handleLogout}
-                onProfileSwitch={handleProfileSwitch}
-              >
-                <CourseContentView />
-              </Layout>
-            )
+            return <CourseContentPage onBack={handleBackToDashboard} onHome={handleGoHome} />
           
           default:
             return <LandingPage 

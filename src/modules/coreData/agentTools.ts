@@ -1373,6 +1373,8 @@ ${learningHistory}`
       // 清理和修复JSON格式
       const cleanJson = this.cleanupSkillGapJSONString(rawJson.trim())
       
+      log(`[AgentTools] Attempting to parse JSON (length: ${cleanJson.length})`)
+      
       // 解析JSON
       const parsed = JSON.parse(cleanJson)
       log('[AgentTools] JSON parsing successful')
@@ -1388,6 +1390,30 @@ ${learningHistory}`
       
       // 提供更详细的错误信息和兜底策略
       if (err instanceof SyntaxError) {
+        const errorMessage = err.message
+        const match = errorMessage.match(/position (\d+)/)
+        if (match) {
+          const position = parseInt(match[1])
+          const responseLength = response.length
+          log(`[AgentTools] JSON syntax error at position ${position} (response length: ${responseLength})`)
+          
+          // 尝试截断和修复 JSON
+          if (position < responseLength) {
+            try {
+              const truncatedJson = this.attemptJSONRepair(response, position)
+              if (truncatedJson) {
+                log('[AgentTools] Attempting to parse repaired JSON')
+                const parsed = JSON.parse(truncatedJson)
+                const validated = this.validateAndFixSkillGapResult(parsed)
+                log('[AgentTools] Successfully parsed repaired JSON')
+                return validated
+              }
+            } catch (repairErr) {
+              log('[AgentTools] JSON repair attempt failed:', repairErr)
+            }
+          }
+        }
+        
         log('[AgentTools] JSON syntax error. Providing fallback structure...')
         
         // 提供一个最小的可用结构
@@ -1396,6 +1422,147 @@ ${learningHistory}`
       
       throw new Error('AI响应格式无效，无法解析分析结果: ' + (err instanceof Error ? err.message : '未知错误'))
     }
+  }
+
+  /**
+   * 尝试修复损坏的 JSON
+   */
+  private attemptJSONRepair(response: string, errorPosition: number): string | null {
+    try {
+      // 提取可能的 JSON 部分
+      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
+                       response.match(/```json([\s\S]*?)```/) ||
+                       response.match(/\{[\s\S]*/)
+      
+      if (!jsonMatch) return null
+      
+      let jsonStr = jsonMatch[1] || jsonMatch[0]
+      
+      // 如果错误位置在 JSON 字符串范围内，尝试截断并修复
+      if (errorPosition < jsonStr.length) {
+        // 找到最后一个完整的对象或数组结构
+        let truncatedJson = jsonStr.substring(0, errorPosition)
+        
+        // 找到最后一个有效的 JSON 结构
+        const lastValidPosition = this.findLastValidJSONPosition(truncatedJson)
+        if (lastValidPosition > 0) {
+          truncatedJson = truncatedJson.substring(0, lastValidPosition)
+        }
+        
+        // 尝试补全结构
+        const repairedJson = this.completeJSONStructure(truncatedJson)
+        
+        // 清理修复后的 JSON
+        return this.cleanupSkillGapJSONString(repairedJson)
+      }
+      
+      return null
+    } catch (err) {
+      log('[AgentTools] JSON repair failed:', err)
+      return null
+    }
+  }
+
+  /**
+   * 找到最后一个有效的 JSON 位置
+   */
+  private findLastValidJSONPosition(jsonStr: string): number {
+    let braceCount = 0
+    let bracketCount = 0
+    let inString = false
+    let escapeNext = false
+    let lastValidPos = 0
+    
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i]
+      
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+      
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+      
+      if (char === '"' && !escapeNext) {
+        inString = !inString
+        continue
+      }
+      
+      if (inString) continue
+      
+      if (char === '{') {
+        braceCount++
+      } else if (char === '}') {
+        braceCount--
+        if (braceCount === 0 && bracketCount === 0) {
+          lastValidPos = i + 1
+        }
+      } else if (char === '[') {
+        bracketCount++
+      } else if (char === ']') {
+        bracketCount--
+        if (braceCount === 0 && bracketCount === 0) {
+          lastValidPos = i + 1
+        }
+      }
+    }
+    
+    return lastValidPos
+  }
+
+  /**
+   * 尝试补全 JSON 结构
+   */
+  private completeJSONStructure(jsonStr: string): string {
+    let completed = jsonStr.trim()
+    
+    // 计算缺少的括号
+    const openBraces = (completed.match(/\{/g) || []).length
+    const closeBraces = (completed.match(/\}/g) || []).length
+    const openBrackets = (completed.match(/\[/g) || []).length
+    const closeBrackets = (completed.match(/\]/g) || []).length
+    
+    // 检查是否在字符串中
+    let inString = false
+    let escapeNext = false
+    for (let i = completed.length - 1; i >= 0; i--) {
+      const char = completed[i]
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+      if (char === '"' && !escapeNext) {
+        inString = !inString
+        if (inString) break // 如果我们在未闭合的字符串中，先关闭它
+      }
+    }
+    
+    // 如果在未闭合的字符串中，先关闭字符串
+    if (inString) {
+      completed += '"'
+    }
+    
+    // 移除可能的不完整末尾
+    completed = completed.replace(/,\s*$/, '')
+    
+    // 补全数组
+    if (openBrackets > closeBrackets) {
+      completed += ']'.repeat(openBrackets - closeBrackets)
+    }
+    
+    // 补全对象
+    if (openBraces > closeBraces) {
+      completed += '}'.repeat(openBraces - closeBraces)
+    }
+    
+    return completed
   }
 
   /**
@@ -1418,6 +1585,18 @@ ${learningHistory}`
     cleaned = cleaned.replace(/:\s*tru$/g, ': true')
     cleaned = cleaned.replace(/:\s*nul$/g, ': null')
     
+    // 修复不完整的字符串值
+    cleaned = cleaned.replace(/:\s*"([^"]*?)$/gm, ': "$1"')
+    
+    // 修复技能差距数组中的常见格式问题
+    cleaned = cleaned.replace(/\}\s*{/g, '}, {')
+    
+    // 尝试修复缺少的逗号（更保守的方法）
+    cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"')
+    cleaned = cleaned.replace(/\}\s*\n\s*"/g, '},\n"')
+    cleaned = cleaned.replace(/\]\s*\n\s*"/g, '],\n"')
+    cleaned = cleaned.replace(/\d+\s*\n\s*"/g, (match) => match.replace(/(\d+)\s*\n\s*"/, '$1,\n"'))
+    
     // 确保字符串末尾有正确的闭合括号
     const openBraces = (cleaned.match(/\{/g) || []).length
     const closeBraces = (cleaned.match(/\}/g) || []).length
@@ -1426,11 +1605,19 @@ ${learningHistory}`
     
     if (openBraces > closeBraces) {
       // 检查是否是在skillGaps数组中断
-      if (cleaned.includes('"skillGaps"') && !cleaned.includes(']')) {
+      if (cleaned.includes('"skillGaps"') && !cleaned.includes(']}')) {
         const skillGapsMatch = cleaned.match(/"skillGaps":\s*\[[^\]]*$/)
         if (skillGapsMatch) {
           log('[AgentTools] Detected incomplete skillGaps array, attempting to close')
-          cleaned = cleaned.replace(/,?\s*$/, ']')
+          // Check if we're in the middle of an object
+          const lastOpenBrace = cleaned.lastIndexOf('{')
+          const lastCloseBrace = cleaned.lastIndexOf('}')
+          if (lastOpenBrace > lastCloseBrace) {
+            // We're in the middle of an object, close it first
+            cleaned = cleaned.replace(/,?\s*$/, '}]')
+          } else {
+            cleaned = cleaned.replace(/,?\s*$/, ']')
+          }
         }
       }
       
@@ -1441,14 +1628,6 @@ ${learningHistory}`
     if (openBrackets > closeBrackets) {
       cleaned += ']'.repeat(openBrackets - closeBrackets)
     }
-    
-    // 尝试修复缺少的逗号（更保守的方法）
-    cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"')
-    cleaned = cleaned.replace(/\}\s*\n\s*"/g, '},\n"')
-    cleaned = cleaned.replace(/\]\s*\n\s*"/g, '],\n"')
-    
-    // 修复技能差距数组中的常见格式问题
-    cleaned = cleaned.replace(/\}\s*{/g, '}, {')
     
     return cleaned
   }
@@ -1538,27 +1717,40 @@ ${learningHistory}`
    * 获取技能差距分析的兜底结构
    */
   private getFallbackSkillGapStructure(): any {
+    // Check if we have actual ability data to determine hasAbilityData flag
+    const { getAbilityProfile } = require('./service')
+    const { getCurrentAssessment } = require('../abilityAssess/service')
+    
+    const abilityProfile = getAbilityProfile()
+    const assessment = getCurrentAssessment()
+    const hasRealAbilityData = !!(abilityProfile || assessment)
+    
+    log(`[AgentTools] Creating fallback structure with hasAbilityData: ${hasRealAbilityData}`)
+    
     return {
-      hasAbilityData: false,
-      contextUsed: false,
+      hasAbilityData: hasRealAbilityData,
+      contextUsed: hasRealAbilityData,
       timestamp: new Date().toISOString(),
-      analysisConfidence: 0.5,
+      analysisConfidence: hasRealAbilityData ? 0.7 : 0.3, // Higher confidence if we have real data
       fallbackUsed: true,
       skillGaps: [],
       overallAssessment: {
-        currentLevel: 5,
+        currentLevel: hasRealAbilityData ? (assessment?.overallScore || 50) / 10 : 5,
         targetLevel: 7,
         gapSeverity: 'medium',
-        readinessScore: 60,
+        readinessScore: hasRealAbilityData ? Math.max(40, assessment?.overallScore || 60) : 60,
         learningStyle: '实践型',
-        personalizedInsights: [
-          '由于解析失败，使用了基础分析结构',
-          '建议重新尝试分析或完善能力评估数据'
+        personalizedInsights: hasRealAbilityData ? [
+          '基于您已完成的能力评估数据进行分析',
+          'JSON解析失败，使用基础分析结构，建议重新尝试'
+        ] : [
+          '由于JSON解析失败且缺少能力评估数据，使用了基础分析结构',
+          '建议先完成能力评估以获得更准确的分析'
         ]
       },
       personalizedRecommendations: {
-        leverageStrengths: ['基于现有能力制定学习计划'],
-        addressWeaknesses: ['识别并改善技能薄弱环节'],
+        leverageStrengths: hasRealAbilityData ? ['基于现有能力评估制定学习计划'] : ['建议先完成能力评估'],
+        addressWeaknesses: hasRealAbilityData ? ['针对评估结果优化薄弱环节'] : ['完成评估后将提供针对性建议'],
         learningStyle: ['建议循序渐进的学习方式'],
         timeManagement: ['制定合理的时间安排'],
         motivationTips: ['保持学习热情和持续性']
@@ -1567,10 +1759,9 @@ ${learningHistory}`
         averageGap: 2,
         highPriorityCount: 0,
         estimatedWeeks: 4,
-        totalEstimatedHours: 40,
-        averageConfidence: 0.5
-      },
-      message: '解析失败，已提供基础分析结构。建议重新尝试或检查AI响应格式。'
+        totalEstimatedHours: 20,
+        averageConfidence: hasRealAbilityData ? 0.7 : 0.3
+      }
     }
   }
 

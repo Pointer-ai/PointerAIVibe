@@ -89,23 +89,41 @@ export class PathPlanService {
         fallbackUsed: result.fallbackUsed
       })
       
-      if (!result.hasAbilityData) {
+      // 检查实际的上下文数据而不是AI返回的标志
+      // 因为AI解析可能失败但用户确实有能力数据
+      if (!context.hasAbilityData) {
         throw new Error('需要先完成能力评估')
+      }
+
+      // 如果AI分析使用了fallback但用户有能力数据，记录这种情况
+      if (result.fallbackUsed && context.hasAbilityData) {
+        log('[PathPlan] AI analysis used fallback but user has ability data - proceeding with enhanced analysis')
+        
+        // 记录分析问题但继续处理
+        addCoreEvent({
+          type: 'skill_gap_analysis_fallback_used',
+          details: {
+            goalId,
+            reason: 'AI_JSON_parsing_failed',
+            hasRealAbilityData: context.hasAbilityData,
+            fallbackConfidence: result.analysisConfidence
+          }
+        })
       }
 
       // 基于真实能力数据进行更精确的分析
       const enhancedGaps = this.enhanceSkillGapAnalysis(result.skillGaps || [], context)
 
       const analysis: SkillGapAnalysis = {
-        hasAbilityData: context.hasAbilityData,
+        hasAbilityData: context.hasAbilityData, // 使用实际的能力数据状态
         currentLevel: this.calculateOverallCurrentLevel(context.abilityProfile),
         targetLevel: this.getTargetLevelFromGoal(context.currentGoal),
         skillGaps: enhancedGaps,
         gaps: enhancedGaps,
         recommendations: this.generateContextualRecommendations(enhancedGaps, context),
         estimatedTimeWeeks: this.calculateEnhancedEstimatedTime(enhancedGaps, context),
-        confidence: context.abilityProfile?.confidence || 0.8,
-        personalizationLevel: 'high' // 标记为高度个性化
+        confidence: result.fallbackUsed ? Math.max(0.6, context.abilityProfile?.confidence || 0.7) : (context.abilityProfile?.confidence || 0.8),
+        personalizationLevel: result.fallbackUsed ? 'medium' : 'high' // 调整个性化级别
       }
 
       // 记录增强的分析事件
@@ -117,7 +135,8 @@ export class PathPlanService {
           confidence: analysis.confidence,
           personalizationLevel: analysis.personalizationLevel,
           abilityDataAvailable: context.hasAbilityData,
-          estimatedWeeks: analysis.estimatedTimeWeeks
+          estimatedWeeks: analysis.estimatedTimeWeeks,
+          fallbackUsed: result.fallbackUsed
         }
       })
 

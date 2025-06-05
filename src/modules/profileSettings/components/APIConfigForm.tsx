@@ -11,12 +11,27 @@ import { AIModel, AI_MODEL_INFO, PARAM_DEFINITIONS, ModelParams } from '../types
 import { log } from '../../../utils/logger'
 
 export const APIConfigForm: React.FC = () => {
-  const [config, setConfig] = useState(getAPIConfig())
+  const initialConfig = getAPIConfig()
+  
+  // 如果当前配置的是 claude 或 qwen，自动切换到 openai
+  const safeConfig = initialConfig.model === 'claude' || initialConfig.model === 'qwen' 
+    ? {
+        model: 'openai' as AIModel,
+        key: '',
+        specificModel: 'gpt-4o',
+        params: resetParamsToDefault('openai')
+      }
+    : initialConfig
+  
+  const [config, setConfig] = useState(safeConfig)
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
+  // 过滤掉 qwen 和 claude，只显示 openai
+  const availableModels = ['openai'] as AIModel[]
+  
   const supportedModels = getSupportedModels(config.model)
   const supportedParams = getSupportedParams(config.model)
 
@@ -186,13 +201,13 @@ export const APIConfigForm: React.FC = () => {
         </p>
       </div>
 
-      {/* 服务商选择 */}
+      {/* 服务商选择 - 只显示 OpenAI */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          选择 AI 服务商
+          AI 服务商
         </label>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {(Object.keys(AI_MODEL_INFO) as AIModel[]).map((model) => {
+        <div className="grid grid-cols-1 gap-4">
+          {availableModels.map((model) => {
             const info = AI_MODEL_INFO[model]
             return (
               <button
@@ -212,6 +227,13 @@ export const APIConfigForm: React.FC = () => {
               </button>
             )
           })}
+        </div>
+        
+        {/* 暂时不可用的服务提示 */}
+        <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="text-sm text-gray-600">
+            <span className="font-medium">注意：</span> Claude 和通义千问服务暂时不可用，正在进行测试
+          </div>
         </div>
       </div>
 
@@ -364,6 +386,7 @@ export const APIConfigForm: React.FC = () => {
           <li>请妥善保管你的 API Key，避免泄露</li>
           <li>使用 AI 服务可能产生费用，请查看相应平台的计费规则</li>
           <li>不同模型的参数范围和效果可能有所差异</li>
+          <li>Claude 和通义千问服务暂时不可用，正在进行测试</li>
         </ul>
       </div>
     </div>

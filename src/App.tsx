@@ -18,7 +18,7 @@ import { CourseContentPage } from './refactor/pages/CourseContent'
 import { PathActivationDebugPage } from './refactor/pages/PathActivationDebug'
 
 // CodeRunner重构版本 (使用refactor目录下的)
-import { IntegratedCodeRunner } from './refactor/components/features/CodeRunner'
+import { IntegratedCodeRunner, RuntimeProvider } from './refactor/components/features/CodeRunner'
 
 type AppView = 'landing' | 'profile' | 'dashboard' | 'profile-settings' |
   'refactor-assessment' | 'refactor-goal-management' | 'refactor-path-planning' | 
@@ -178,15 +178,17 @@ const App = () => {
 
           case 'refactor-code-runner':
             return (
-              <Layout 
-                title="💻 代码运行" 
-                onBack={handleBackToDashboard} 
+              <Layout
+                title="💻 代码运行"
+                onBack={handleBackToDashboard}
                 onHome={handleGoHome}
                 onLogout={handleLogout}
                 onProfileSwitch={handleProfileSwitch}
               >
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                  <IntegratedCodeRunner language="python" />
+                  <RuntimeProvider>
+                    <IntegratedCodeRunner language="python" />
+                  </RuntimeProvider>
                 </div>
               </Layout>
             )

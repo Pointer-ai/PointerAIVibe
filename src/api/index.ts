@@ -40,32 +40,28 @@
  */
 
 // 导出API实例
-export { learningApi } from './learningApi'
+// 默认导出使用新版 Learning API v2
+export { learningApiV2 as learningApi } from './learningApi_v2'
 export { simpleApi } from './simpleApi'
 
 // 导出核心类型
-export type { APIResponse } from './learningApi'
-export type { 
-  LearningSystemStatus, 
-  AgentInteraction,
-  GoalCategory, 
-  GoalRecommendation,
-  SkillGapAnalysis, 
-  PathGenerationConfig,
-  ContentGenerationConfig, 
-  Exercise, 
-  ProjectTemplate,
-  LearningGoal, 
-  LearningPath, 
+export type { APIResponse } from './learningApi_v2'
+export type {
+  SystemStatus,
+  LearningGoal,
+  LearningPath,
   CourseUnit,
-  AbilityAssessment, 
-  AssessmentInput,
-  GoalFormData,
-  PathProgressStats,
-  AbilitySummary,
-  ActivationResult,
-  GoalActivationStats
-} from './learningApi'
+  AbilityProfile,
+  CreateGoalData,
+  CreatePathData,
+  SyncResult,
+  Profile,
+  CreateProfileInput,
+  UpdateProfileInput,
+  UpdateSettingsInput,
+  ProfileStats,
+  ProfileSettings
+} from './learningApi_v2'
 
 /**
  * API使用工具函数
